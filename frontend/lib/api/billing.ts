@@ -2,7 +2,7 @@
  * Billing API client for payment processing and account management
  */
 
-import { api } from "./client"
+import { api } from "./client";
 import type {
   BillingAccount,
   Invoice,
@@ -21,7 +21,7 @@ import type {
   PromoCodeValidateResponse,
   PromoCodeRedeemRequest,
   PromoCodeRedeemResponse,
-} from "./types"
+} from "./types";
 
 // ============================================================================
 // Stripe Configuration
@@ -31,7 +31,7 @@ import type {
  * Get Stripe configuration (publishable key) for frontend
  */
 export async function getStripeConfig(): Promise<StripeConfig> {
-  return api.get<StripeConfig>("/api/v1/billing/config")
+  return api.get<StripeConfig>("/api/v1/billing/config");
 }
 
 // ============================================================================
@@ -41,8 +41,10 @@ export async function getStripeConfig(): Promise<StripeConfig> {
 /**
  * Get or create billing account for an organization
  */
-export async function getBillingAccount(organizationId: string): Promise<BillingAccount> {
-  return api.get<BillingAccount>(`/api/v1/billing/account/${organizationId}`)
+export async function getBillingAccount(
+  organizationId: string,
+): Promise<BillingAccount> {
+  return api.get<BillingAccount>(`/api/v1/billing/account/${organizationId}`);
 }
 
 // ============================================================================
@@ -54,19 +56,23 @@ export async function getBillingAccount(organizationId: string): Promise<Billing
  */
 export async function attachPaymentMethod(
   organizationId: string,
-  request: PaymentMethodRequest
+  request: PaymentMethodRequest,
 ): Promise<PaymentMethod> {
   return api.post<PaymentMethod>(
     `/api/v1/billing/account/${organizationId}/payment-method`,
-    request
-  )
+    request,
+  );
 }
 
 /**
  * List all payment methods for the billing account
  */
-export async function listPaymentMethods(organizationId: string): Promise<PaymentMethod[]> {
-  return api.get<PaymentMethod[]>(`/api/v1/billing/account/${organizationId}/payment-methods`)
+export async function listPaymentMethods(
+  organizationId: string,
+): Promise<PaymentMethod[]> {
+  return api.get<PaymentMethod[]>(
+    `/api/v1/billing/account/${organizationId}/payment-methods`,
+  );
 }
 
 /**
@@ -74,11 +80,11 @@ export async function listPaymentMethods(organizationId: string): Promise<Paymen
  */
 export async function removePaymentMethod(
   organizationId: string,
-  paymentMethodId: string
+  paymentMethodId: string,
 ): Promise<{ status: string; message: string }> {
   return api.delete<{ status: string; message: string }>(
-    `/api/v1/billing/account/${organizationId}/payment-methods/${paymentMethodId}`
-  )
+    `/api/v1/billing/account/${organizationId}/payment-methods/${paymentMethodId}`,
+  );
 }
 
 // ============================================================================
@@ -90,12 +96,12 @@ export async function removePaymentMethod(
  */
 export async function createCreditCheckout(
   organizationId: string,
-  request: CreditPurchaseRequest
+  request: CreditPurchaseRequest,
 ): Promise<CheckoutResponse> {
   return api.post<CheckoutResponse>(
     `/api/v1/billing/account/${organizationId}/credits/checkout`,
-    request
-  )
+    request,
+  );
 }
 
 // ============================================================================
@@ -105,8 +111,12 @@ export async function createCreditCheckout(
 /**
  * Create a Stripe Customer Portal session
  */
-export async function createCustomerPortal(organizationId: string): Promise<PortalResponse> {
-  return api.post<PortalResponse>(`/api/v1/billing/account/${organizationId}/portal`)
+export async function createCustomerPortal(
+  organizationId: string,
+): Promise<PortalResponse> {
+  return api.post<PortalResponse>(
+    `/api/v1/billing/account/${organizationId}/portal`,
+  );
 }
 
 // ============================================================================
@@ -118,21 +128,21 @@ export async function createCustomerPortal(organizationId: string): Promise<Port
  */
 export async function listInvoices(
   organizationId: string,
-  options?: { status?: string; limit?: number }
+  options?: { status?: string; limit?: number },
 ): Promise<Invoice[]> {
-  let endpoint = `/api/v1/billing/account/${organizationId}/invoices`
-  const params = new URLSearchParams()
-  if (options?.status) params.append("status", options.status)
-  if (options?.limit) params.append("limit", options.limit.toString())
-  if (params.toString()) endpoint += `?${params.toString()}`
-  return api.get<Invoice[]>(endpoint)
+  let endpoint = `/api/v1/billing/account/${organizationId}/invoices`;
+  const params = new URLSearchParams();
+  if (options?.status) params.append("status", options.status);
+  if (options?.limit) params.append("limit", options.limit.toString());
+  if (params.toString()) endpoint += `?${params.toString()}`;
+  return api.get<Invoice[]>(endpoint);
 }
 
 /**
  * Get a specific invoice by ID
  */
 export async function getInvoice(invoiceId: string): Promise<Invoice> {
-  return api.get<Invoice>(`/api/v1/billing/invoices/${invoiceId}`)
+  return api.get<Invoice>(`/api/v1/billing/invoices/${invoiceId}`);
 }
 
 /**
@@ -140,19 +150,23 @@ export async function getInvoice(invoiceId: string): Promise<Invoice> {
  */
 export async function payInvoice(
   invoiceId: string,
-  paymentMethodId?: string
+  paymentMethodId?: string,
 ): Promise<Payment> {
   return api.post<Payment>(
     `/api/v1/billing/invoices/${invoiceId}/pay`,
-    paymentMethodId ? { payment_method_id: paymentMethodId } : undefined
-  )
+    paymentMethodId ? { payment_method_id: paymentMethodId } : undefined,
+  );
 }
 
 /**
  * Generate an invoice for unbilled usage
  */
-export async function generateInvoice(organizationId: string): Promise<Invoice | null> {
-  return api.post<Invoice | null>(`/api/v1/billing/account/${organizationId}/invoices/generate`)
+export async function generateInvoice(
+  organizationId: string,
+): Promise<Invoice | null> {
+  return api.post<Invoice | null>(
+    `/api/v1/billing/account/${organizationId}/invoices/generate`,
+  );
 }
 
 /**
@@ -160,14 +174,14 @@ export async function generateInvoice(organizationId: string): Promise<Invoice |
  */
 export async function listStripeInvoices(
   organizationId: string,
-  options?: { status?: string; limit?: number }
+  options?: { status?: string; limit?: number },
 ): Promise<StripeInvoice[]> {
-  let endpoint = `/api/v1/billing/account/${organizationId}/stripe-invoices`
-  const params = new URLSearchParams()
-  if (options?.status) params.append("status", options.status)
-  if (options?.limit) params.append("limit", options.limit.toString())
-  if (params.toString()) endpoint += `?${params.toString()}`
-  return api.get<StripeInvoice[]>(endpoint)
+  let endpoint = `/api/v1/billing/account/${organizationId}/stripe-invoices`;
+  const params = new URLSearchParams();
+  if (options?.status) params.append("status", options.status);
+  if (options?.limit) params.append("limit", options.limit.toString());
+  if (params.toString()) endpoint += `?${params.toString()}`;
+  return api.get<StripeInvoice[]>(endpoint);
 }
 
 // ============================================================================
@@ -179,34 +193,38 @@ export async function listStripeInvoices(
  */
 export async function getUsage(
   organizationId: string,
-  options?: { billed?: boolean }
+  options?: { billed?: boolean },
 ): Promise<UsageRecord[]> {
-  let endpoint = `/api/v1/billing/account/${organizationId}/usage`
+  let endpoint = `/api/v1/billing/account/${organizationId}/usage`;
   if (options?.billed !== undefined) {
-    endpoint += `?billed=${options.billed}`
+    endpoint += `?billed=${options.billed}`;
   }
-  return api.get<UsageRecord[]>(endpoint)
+  return api.get<UsageRecord[]>(endpoint);
 }
 
 /**
  * Usage summary for workflow execution limits
  */
 export interface UsageSummary {
-  subscription_tier: string | null
-  workflows_used: number
-  workflows_limit: number
-  free_workflows_remaining: number
-  credit_balance: number
-  can_execute: boolean
-  reason: string
+  subscription_tier: string | null;
+  workflows_used: number;
+  workflows_limit: number;
+  free_workflows_remaining: number;
+  credit_balance: number;
+  can_execute: boolean;
+  reason: string;
 }
 
 /**
  * Get usage summary for an organization
  * Includes subscription tier, workflow limits, and execution availability
  */
-export async function getUsageSummary(organizationId: string): Promise<UsageSummary> {
-  return api.get<UsageSummary>(`/api/v1/billing/account/${organizationId}/usage-summary`)
+export async function getUsageSummary(
+  organizationId: string,
+): Promise<UsageSummary> {
+  return api.get<UsageSummary>(
+    `/api/v1/billing/account/${organizationId}/usage-summary`,
+  );
 }
 
 /**
@@ -214,11 +232,11 @@ export async function getUsageSummary(organizationId: string): Promise<UsageSumm
  * Returns whether execution is allowed and the reason
  */
 export async function checkWorkflowExecution(
-  organizationId: string
+  organizationId: string,
 ): Promise<{ can_execute: boolean; reason: string }> {
   return api.post<{ can_execute: boolean; reason: string }>(
-    `/api/v1/billing/account/${organizationId}/check-execution`
-  )
+    `/api/v1/billing/account/${organizationId}/check-execution`,
+  );
 }
 
 // ============================================================================
@@ -228,8 +246,12 @@ export async function checkWorkflowExecution(
 /**
  * Get the active subscription for an organization
  */
-export async function getSubscription(organizationId: string): Promise<Subscription | null> {
-  return api.get<Subscription | null>(`/api/v1/billing/account/${organizationId}/subscription`)
+export async function getSubscription(
+  organizationId: string,
+): Promise<Subscription | null> {
+  return api.get<Subscription | null>(
+    `/api/v1/billing/account/${organizationId}/subscription`,
+  );
 }
 
 /**
@@ -238,22 +260,22 @@ export async function getSubscription(organizationId: string): Promise<Subscript
  */
 export async function cancelSubscription(
   organizationId: string,
-  atPeriodEnd: boolean = true
+  atPeriodEnd: boolean = true,
 ): Promise<{ status: string; message: string }> {
   return api.post<{ status: string; message: string }>(
-    `/api/v1/billing/account/${organizationId}/subscription/cancel?at_period_end=${atPeriodEnd}`
-  )
+    `/api/v1/billing/account/${organizationId}/subscription/cancel?at_period_end=${atPeriodEnd}`,
+  );
 }
 
 /**
  * Reactivate a canceled subscription
  */
 export async function reactivateSubscription(
-  organizationId: string
+  organizationId: string,
 ): Promise<{ status: string; message: string }> {
   return api.post<{ status: string; message: string }>(
-    `/api/v1/billing/account/${organizationId}/subscription/reactivate`
-  )
+    `/api/v1/billing/account/${organizationId}/subscription/reactivate`,
+  );
 }
 
 /**
@@ -261,31 +283,31 @@ export async function reactivateSubscription(
  */
 export async function createLifetimeCheckout(
   organizationId: string,
-  request?: LifetimePurchaseRequest
+  request?: LifetimePurchaseRequest,
 ): Promise<CheckoutResponse> {
   return api.post<CheckoutResponse>(
     `/api/v1/billing/account/${organizationId}/lifetime/checkout`,
-    request
-  )
+    request,
+  );
 }
 
 /**
  * Create a checkout session for subscription (Pro or Team)
  */
 export interface SubscriptionCheckoutRequest {
-  tier: "pro" | "team"
-  success_url?: string
-  cancel_url?: string
+  tier: "pro" | "team";
+  success_url?: string;
+  cancel_url?: string;
 }
 
 export async function createSubscriptionCheckout(
   organizationId: string,
-  request: SubscriptionCheckoutRequest
+  request: SubscriptionCheckoutRequest,
 ): Promise<CheckoutResponse> {
   return api.post<CheckoutResponse>(
     `/api/v1/billing/account/${organizationId}/subscription/checkout`,
-    request
-  )
+    request,
+  );
 }
 
 // ============================================================================
@@ -296,9 +318,12 @@ export async function createSubscriptionCheckout(
  * Validate a promo code without redeeming it
  */
 export async function validatePromoCode(
-  request: PromoCodeValidateRequest
+  request: PromoCodeValidateRequest,
 ): Promise<PromoCodeValidateResponse> {
-  return api.post<PromoCodeValidateResponse>("/api/v1/billing/promo-codes/validate", request)
+  return api.post<PromoCodeValidateResponse>(
+    "/api/v1/billing/promo-codes/validate",
+    request,
+  );
 }
 
 /**
@@ -307,10 +332,10 @@ export async function validatePromoCode(
  */
 export async function redeemPromoCode(
   organizationId: string,
-  request: PromoCodeRedeemRequest
+  request: PromoCodeRedeemRequest,
 ): Promise<PromoCodeRedeemResponse> {
   return api.post<PromoCodeRedeemResponse>(
     `/api/v1/billing/account/${organizationId}/promo-codes/redeem`,
-    request
-  )
+    request,
+  );
 }

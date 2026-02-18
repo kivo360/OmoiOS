@@ -1,155 +1,172 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
-import { toast } from "sonner"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Search, Filter, ArrowUpDown, Plus, AlertCircle, Check } from "lucide-react"
-import { TaskCard, type TaskStatus } from "@/components/custom/TaskCard"
-import { TimeGroupHeader } from "@/components/custom"
-import { useSandboxTasks, useFailTask } from "@/hooks/useTasks"
+} from "@/components/ui/dropdown-menu";
+import {
+  Search,
+  Filter,
+  ArrowUpDown,
+  Plus,
+  AlertCircle,
+  Check,
+} from "lucide-react";
+import { TaskCard, type TaskStatus } from "@/components/custom/TaskCard";
+import { TimeGroupHeader } from "@/components/custom";
+import { useSandboxTasks, useFailTask } from "@/hooks/useTasks";
 
-type SortOption = "status" | "newest" | "oldest" | "name"
+type SortOption = "status" | "newest" | "oldest" | "name";
 
 function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-  
-  if (diffMins < 60) return `${diffMins}m`
-  if (diffHours < 24) return `${diffHours}h`
-  if (diffDays < 7) return `${diffDays}d`
-  return `${Math.floor(diffDays / 7)}w`
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24) return `${diffHours}h`;
+  if (diffDays < 7) return `${diffDays}d`;
+  return `${Math.floor(diffDays / 7)}w`;
 }
 
 function normalizeStatus(status: string): TaskStatus {
-  const lower = status.toLowerCase()
+  const lower = status.toLowerCase();
   switch (lower) {
     case "pending":
-      return "pending"
+      return "pending";
     case "assigned":
-      return "assigned"
+      return "assigned";
     case "running":
     case "active":
-      return "running"
+      return "running";
     case "completed":
     case "done":
     case "success":
-      return "completed"
+      return "completed";
     case "failed":
     case "error":
     case "cancelled":
-      return "failed"
+      return "failed";
     case "pending_validation":
-      return "pending_validation"
+      return "pending_validation";
     case "validating":
-      return "validating"
+      return "validating";
     default:
-      return "pending"
+      return "pending";
   }
 }
 
 interface TasksPanelProps {
-  pathname?: string
+  pathname?: string;
 }
 
 export function TasksPanel({ pathname }: TasksPanelProps) {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [sortOption, setSortOption] = useState<SortOption>("status")
-  const { data: tasks, isLoading, error } = useSandboxTasks({ limit: 50 })
-  const failTaskMutation = useFailTask()
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("status");
+  const { data: tasks, isLoading, error } = useSandboxTasks({ limit: 50 });
+  const failTaskMutation = useFailTask();
 
   const handleMarkFailed = (taskId: string) => {
     failTaskMutation.mutate(
       { taskId, reason: "marked_failed_by_user" },
       {
         onSuccess: () => {
-          toast.success("Task marked as failed")
+          toast.success("Task marked as failed");
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Failed to mark task as failed")
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to mark task as failed",
+          );
         },
-      }
-    )
-  }
+      },
+    );
+  };
 
   // Extract sandboxId from pathname like /sandbox/[sandboxId]
   const selectedSandboxId = useMemo(() => {
-    if (!pathname) return null
-    const match = pathname.match(/^\/sandbox\/([^/]+)/)
-    return match ? match[1] : null
-  }, [pathname])
+    if (!pathname) return null;
+    const match = pathname.match(/^\/sandbox\/([^/]+)/);
+    return match ? match[1] : null;
+  }, [pathname]);
 
   const filteredTasks = useMemo(() => {
-    if (!tasks) return []
+    if (!tasks) return [];
 
     // First filter by search query
     let filtered = tasks.filter((task) => {
-      const searchLower = searchQuery.toLowerCase()
+      const searchLower = searchQuery.toLowerCase();
       return (
         (task.title?.toLowerCase().includes(searchLower) ?? false) ||
         task.task_type.toLowerCase().includes(searchLower) ||
         task.id.toLowerCase().includes(searchLower)
-      )
-    })
+      );
+    });
 
     // Then sort based on sortOption (only for non-status sorting)
     if (sortOption !== "status") {
       filtered = [...filtered].sort((a, b) => {
         switch (sortOption) {
           case "newest":
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            return (
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime()
+            );
           case "oldest":
-            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            return (
+              new Date(a.created_at).getTime() -
+              new Date(b.created_at).getTime()
+            );
           case "name":
-            return (a.title || "").localeCompare(b.title || "")
+            return (a.title || "").localeCompare(b.title || "");
           default:
-            return 0
+            return 0;
         }
-      })
+      });
     }
 
-    return filtered
-  }, [tasks, searchQuery, sortOption])
+    return filtered;
+  }, [tasks, searchQuery, sortOption]);
 
   // Group tasks by status
   const runningTasks = filteredTasks.filter((t) => {
-    const status = normalizeStatus(t.status)
-    return status === "running" || status === "assigned"
-  })
-  
-  const completedTasks = filteredTasks.filter((t) => 
-    normalizeStatus(t.status) === "completed"
-  )
-  
-  const failedTasks = filteredTasks.filter((t) => 
-    normalizeStatus(t.status) === "failed"
-  )
-  
-  const pendingTasks = filteredTasks.filter((t) =>
-    normalizeStatus(t.status) === "pending"
-  )
+    const status = normalizeStatus(t.status);
+    return status === "running" || status === "assigned";
+  });
 
-  const pendingValidationTasks = filteredTasks.filter((t) =>
-    normalizeStatus(t.status) === "pending_validation"
-  )
+  const completedTasks = filteredTasks.filter(
+    (t) => normalizeStatus(t.status) === "completed",
+  );
 
-  const validatingTasks = filteredTasks.filter((t) =>
-    normalizeStatus(t.status) === "validating"
-  )
+  const failedTasks = filteredTasks.filter(
+    (t) => normalizeStatus(t.status) === "failed",
+  );
+
+  const pendingTasks = filteredTasks.filter(
+    (t) => normalizeStatus(t.status) === "pending",
+  );
+
+  const pendingValidationTasks = filteredTasks.filter(
+    (t) => normalizeStatus(t.status) === "pending_validation",
+  );
+
+  const validatingTasks = filteredTasks.filter(
+    (t) => normalizeStatus(t.status) === "validating",
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -179,11 +196,22 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuRadioGroup value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
-                <DropdownMenuRadioItem value="status">By Status</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="newest">Newest First</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="oldest">Oldest First</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="name">By Name</DropdownMenuRadioItem>
+              <DropdownMenuRadioGroup
+                value={sortOption}
+                onValueChange={(v) => setSortOption(v as SortOption)}
+              >
+                <DropdownMenuRadioItem value="status">
+                  By Status
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="newest">
+                  Newest First
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="oldest">
+                  Oldest First
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="name">
+                  By Name
+                </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -227,7 +255,11 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                       title={task.title}
                       taskType={task.task_type}
                       status={normalizeStatus(task.status)}
-                      timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      timeAgo={
+                        task.started_at
+                          ? formatTimeAgo(task.started_at)
+                          : formatTimeAgo(task.created_at)
+                      }
                       isSelected={task.sandbox_id === selectedSandboxId}
                       onMarkFailed={handleMarkFailed}
                     />
@@ -246,7 +278,11 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                       title={task.title}
                       taskType={task.task_type}
                       status={normalizeStatus(task.status)}
-                      timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      timeAgo={
+                        task.started_at
+                          ? formatTimeAgo(task.started_at)
+                          : formatTimeAgo(task.created_at)
+                      }
                       isSelected={task.sandbox_id === selectedSandboxId}
                     />
                   ))}
@@ -264,7 +300,11 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                       title={task.title}
                       taskType={task.task_type}
                       status={normalizeStatus(task.status)}
-                      timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      timeAgo={
+                        task.started_at
+                          ? formatTimeAgo(task.started_at)
+                          : formatTimeAgo(task.created_at)
+                      }
                       isSelected={task.sandbox_id === selectedSandboxId}
                     />
                   ))}
@@ -301,7 +341,11 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                       title={task.title}
                       taskType={task.task_type}
                       status={normalizeStatus(task.status)}
-                      timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      timeAgo={
+                        task.started_at
+                          ? formatTimeAgo(task.started_at)
+                          : formatTimeAgo(task.created_at)
+                      }
                       isSelected={task.sandbox_id === selectedSandboxId}
                     />
                   ))}
@@ -319,7 +363,11 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                       title={task.title}
                       taskType={task.task_type}
                       status={normalizeStatus(task.status)}
-                      timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      timeAgo={
+                        task.started_at
+                          ? formatTimeAgo(task.started_at)
+                          : formatTimeAgo(task.created_at)
+                      }
                       isSelected={task.sandbox_id === selectedSandboxId}
                     />
                   ))}
@@ -337,9 +385,18 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                   title={task.title}
                   taskType={task.task_type}
                   status={normalizeStatus(task.status)}
-                  timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                  timeAgo={
+                    task.started_at
+                      ? formatTimeAgo(task.started_at)
+                      : formatTimeAgo(task.created_at)
+                  }
                   isSelected={task.sandbox_id === selectedSandboxId}
-                  onMarkFailed={normalizeStatus(task.status) === "running" || normalizeStatus(task.status) === "pending" ? handleMarkFailed : undefined}
+                  onMarkFailed={
+                    normalizeStatus(task.status) === "running" ||
+                    normalizeStatus(task.status) === "pending"
+                      ? handleMarkFailed
+                      : undefined
+                  }
                   compact={false}
                 />
               ))}
@@ -348,5 +405,5 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
         </div>
       </ScrollArea>
     </div>
-  )
+  );
 }

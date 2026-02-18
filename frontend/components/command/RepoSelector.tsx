@@ -1,24 +1,24 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   FolderGit2,
   GitBranch,
@@ -28,32 +28,32 @@ import {
   Check,
   Lock,
   Globe,
-} from "lucide-react"
-import { useGitHubRepos, useGitHubBranches } from "@/hooks/useGitHubRepos"
-import { useIsProviderConnected } from "@/hooks/useOAuth"
+} from "lucide-react";
+import { useGitHubRepos, useGitHubBranches } from "@/hooks/useGitHubRepos";
+import { useIsProviderConnected } from "@/hooks/useOAuth";
 
 export interface Project {
-  id: string
-  name: string
-  repo?: string
-  ticketCount: number
+  id: string;
+  name: string;
+  repo?: string;
+  ticketCount: number;
 }
 
 export interface Repository {
-  fullName: string
-  isPrivate: boolean
+  fullName: string;
+  isPrivate: boolean;
 }
 
 interface RepoSelectorProps {
-  projects?: Project[]
-  repositories?: Repository[]
-  selectedProject?: Project | null
-  selectedRepo?: string | null
-  selectedBranch?: string
-  onProjectSelect?: (project: Project) => void
-  onRepoSelect?: (repo: string) => void
-  onBranchChange?: (branch: string) => void
-  className?: string
+  projects?: Project[];
+  repositories?: Repository[];
+  selectedProject?: Project | null;
+  selectedRepo?: string | null;
+  selectedBranch?: string;
+  onProjectSelect?: (project: Project) => void;
+  onRepoSelect?: (repo: string) => void;
+  onBranchChange?: (branch: string) => void;
+  className?: string;
 }
 
 export function RepoSelector({
@@ -67,65 +67,76 @@ export function RepoSelector({
   onBranchChange,
   className,
 }: RepoSelectorProps) {
-  const [open, setOpen] = useState(false)
-  const [branchOpen, setBranchOpen] = useState(false)
-  const [connectDialogOpen, setConnectDialogOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [branchSearchQuery, setBranchSearchQuery] = useState("")
-  const [connectSearchQuery, setConnectSearchQuery] = useState("")
-  
+  const [open, setOpen] = useState(false);
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [branchSearchQuery, setBranchSearchQuery] = useState("");
+  const [connectSearchQuery, setConnectSearchQuery] = useState("");
+
   // Check GitHub connection status
-  const { isConnected: isGitHubConnected, isLoading: isCheckingConnection } = useIsProviderConnected("github")
-  
+  const { isConnected: isGitHubConnected, isLoading: isCheckingConnection } =
+    useIsProviderConnected("github");
+
   // Parse owner/repo from selectedRepo (format: "owner/repo")
-  const repoFullName = selectedProject?.repo || selectedRepo
-  const [repoOwner, repoName] = repoFullName?.split("/") ?? [null, null]
-  
+  const repoFullName = selectedProject?.repo || selectedRepo;
+  const [repoOwner, repoName] = repoFullName?.split("/") ?? [null, null];
+
   // Fetch all GitHub repositories for the connect dialog (only if connected)
-  const { data: allRepos, isLoading: reposLoading, error: reposError } = useGitHubRepos(
-    { 
+  const {
+    data: allRepos,
+    isLoading: reposLoading,
+    error: reposError,
+  } = useGitHubRepos(
+    {
       sort: "updated",
-      per_page: 100 
+      per_page: 100,
     },
-    isGitHubConnected && !isCheckingConnection // Only fetch if GitHub is connected
-  )
-  
+    isGitHubConnected && !isCheckingConnection, // Only fetch if GitHub is connected
+  );
+
   // Fetch branches for the selected repository
   const { data: branches, isLoading: branchesLoading } = useGitHubBranches(
     repoOwner ?? "",
     repoName ?? "",
-  )
-  
-  // Filter branches based on search
-  const filteredBranches = branches?.filter((b) =>
-    b.name.toLowerCase().includes(branchSearchQuery.toLowerCase())
-  ) ?? []
+  );
 
-  const displayName = selectedProject?.repo || selectedRepo || "Select repository"
+  // Filter branches based on search
+  const filteredBranches =
+    branches?.filter((b) =>
+      b.name.toLowerCase().includes(branchSearchQuery.toLowerCase()),
+    ) ?? [];
+
+  const displayName =
+    selectedProject?.repo || selectedRepo || "Select repository";
 
   const filteredProjects = projects.filter(
     (p) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.repo?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
-  )
+      (p.repo?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false),
+  );
 
   const filteredRepos = repositories.filter((r) =>
-    r.fullName.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-  
+    r.fullName.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
   // Filter all GitHub repos for the connect dialog
-  const filteredAllRepos = allRepos?.filter((r) =>
-    r.full_name.toLowerCase().includes(connectSearchQuery.toLowerCase())
-  ) || []
-  
+  const filteredAllRepos =
+    allRepos?.filter((r) =>
+      r.full_name.toLowerCase().includes(connectSearchQuery.toLowerCase()),
+    ) || [];
+
   // Get repos that aren't already in the repositories list
   const availableToConnect = filteredAllRepos.filter(
-    (r) => !repositories.some((existing) => existing.fullName === r.full_name)
-  )
+    (r) => !repositories.some((existing) => existing.fullName === r.full_name),
+  );
 
   // Debug logging (only in development, after all variables are defined)
   useEffect(() => {
-    if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+    if (
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV === "development"
+    ) {
       console.log("RepoSelector Debug:", {
         isGitHubConnected,
         isCheckingConnection,
@@ -135,10 +146,19 @@ export function RepoSelector({
         repositoriesCount: repositories.length,
         filteredAllReposCount: filteredAllRepos.length,
         availableToConnectCount: availableToConnect.length,
-        repositoriesList: repositories.map(r => r.fullName),
-      })
+        repositoriesList: repositories.map((r) => r.fullName),
+      });
     }
-  }, [isGitHubConnected, isCheckingConnection, reposLoading, reposError, allRepos, repositories, filteredAllRepos, availableToConnect])
+  }, [
+    isGitHubConnected,
+    isCheckingConnection,
+    reposLoading,
+    reposError,
+    allRepos,
+    repositories,
+    filteredAllRepos,
+    availableToConnect,
+  ]);
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
@@ -179,12 +199,12 @@ export function RepoSelector({
                     <button
                       key={project.id}
                       onClick={() => {
-                        onProjectSelect?.(project)
-                        setOpen(false)
+                        onProjectSelect?.(project);
+                        setOpen(false);
                       }}
                       className={cn(
                         "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent",
-                        selectedProject?.id === project.id && "bg-accent"
+                        selectedProject?.id === project.id && "bg-accent",
                       )}
                     >
                       <FolderGit2 className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -220,19 +240,22 @@ export function RepoSelector({
                     <button
                       key={repo.fullName}
                       onClick={() => {
-                        onRepoSelect?.(repo.fullName)
-                        setOpen(false)
+                        onRepoSelect?.(repo.fullName);
+                        setOpen(false);
                       }}
                       className={cn(
                         "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent",
-                        selectedRepo === repo.fullName && "bg-accent"
+                        selectedRepo === repo.fullName && "bg-accent",
                       )}
                     >
                       <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm">{repo.fullName}</p>
                       </div>
-                      <Badge variant="outline" className="shrink-0 gap-1 text-xs">
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 gap-1 text-xs"
+                      >
                         {repo.isPrivate ? (
                           <>
                             <Lock className="h-3 w-3" /> Private
@@ -255,8 +278,8 @@ export function RepoSelector({
             <div className="px-2 pb-2">
               <button
                 onClick={() => {
-                  setOpen(false)
-                  setConnectDialogOpen(true)
+                  setOpen(false);
+                  setConnectDialogOpen(true);
                 }}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent"
               >
@@ -310,7 +333,9 @@ export function RepoSelector({
               </div>
             ) : filteredBranches.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                {branchSearchQuery ? "No branches match your search" : "No branches found"}
+                {branchSearchQuery
+                  ? "No branches match your search"
+                  : "No branches found"}
               </div>
             ) : (
               <div className="px-2 pb-2">
@@ -318,13 +343,13 @@ export function RepoSelector({
                   <button
                     key={branch.name}
                     onClick={() => {
-                      onBranchChange?.(branch.name)
-                      setBranchOpen(false)
-                      setBranchSearchQuery("")
+                      onBranchChange?.(branch.name);
+                      setBranchOpen(false);
+                      setBranchSearchQuery("");
                     }}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent",
-                      selectedBranch === branch.name && "bg-accent"
+                      selectedBranch === branch.name && "bg-accent",
                     )}
                   >
                     <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -349,13 +374,13 @@ export function RepoSelector({
               Select a repository from your GitHub account to connect
             </DialogDescription>
           </DialogHeader>
-          
+
           {!isGitHubConnected ? (
             <div className="py-8 text-center">
               <p className="text-sm text-muted-foreground mb-4">
                 Please connect your GitHub account first to view repositories.
               </p>
-              <Button onClick={() => window.location.href = "/settings"}>
+              <Button onClick={() => (window.location.href = "/settings")}>
                 Go to Settings
               </Button>
             </div>
@@ -370,7 +395,7 @@ export function RepoSelector({
                   className="h-9 pl-8"
                 />
               </div>
-              
+
               <ScrollArea className="h-[400px]">
                 {reposLoading || isCheckingConnection ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">
@@ -378,23 +403,28 @@ export function RepoSelector({
                   </div>
                 ) : reposError ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">
-                    <p className="text-destructive mb-2">Failed to load repositories</p>
+                    <p className="text-destructive mb-2">
+                      Failed to load repositories
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {(reposError as any)?.message || "Please try again or reconnect your GitHub account"}
+                      {(reposError as any)?.message ||
+                        "Please try again or reconnect your GitHub account"}
                     </p>
                   </div>
                 ) : !allRepos || allRepos.length === 0 ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">
                     <p>No repositories found in your GitHub account</p>
-                    <p className="text-xs mt-2">Make sure you have repositories on GitHub</p>
+                    <p className="text-xs mt-2">
+                      Make sure you have repositories on GitHub
+                    </p>
                   </div>
                 ) : availableToConnect.length === 0 ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">
                     {connectSearchQuery
                       ? "No repositories match your search"
                       : filteredAllRepos.length === 0
-                      ? "No repositories match your search"
-                      : `All ${filteredAllRepos.length} repository${filteredAllRepos.length === 1 ? '' : 'ies'} are already connected`}
+                        ? "No repositories match your search"
+                        : `All ${filteredAllRepos.length} repository${filteredAllRepos.length === 1 ? "" : "ies"} are already connected`}
                   </div>
                 ) : (
                   <div className="space-y-1">
@@ -402,8 +432,8 @@ export function RepoSelector({
                       <button
                         key={repo.id}
                         onClick={() => {
-                          onRepoSelect?.(repo.full_name)
-                          setConnectDialogOpen(false)
+                          onRepoSelect?.(repo.full_name);
+                          setConnectDialogOpen(false);
                         }}
                         className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left hover:bg-accent"
                       >
@@ -418,7 +448,10 @@ export function RepoSelector({
                             </p>
                           )}
                         </div>
-                        <Badge variant="outline" className="shrink-0 gap-1 text-xs">
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 gap-1 text-xs"
+                        >
                           {repo.private ? (
                             <>
                               <Lock className="h-3 w-3" /> Private
@@ -439,5 +472,5 @@ export function RepoSelector({
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

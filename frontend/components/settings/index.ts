@@ -1,1 +1,1 @@
-export { ConnectedAccounts } from "./ConnectedAccounts"
+export { ConnectedAccounts } from "./ConnectedAccounts";

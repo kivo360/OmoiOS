@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
-import { Check, Zap } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { motion } from "framer-motion";
+import { Check, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardHeader,
@@ -11,18 +11,18 @@ import {
   CardFooter,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 interface PricingTier {
-  name: string
-  price: number | string
-  period: string
-  description: string
-  features: string[]
-  cta: string
-  popular?: boolean
-  href: string
+  name: string;
+  price: number | string;
+  period: string;
+  description: string;
+  features: string[];
+  cta: string;
+  popular?: boolean;
+  href: string;
 }
 
 const pricingTiers: PricingTier[] = [
@@ -75,11 +75,11 @@ const pricingTiers: PricingTier[] = [
     cta: "Get Team",
     href: "/register?plan=team",
   },
-]
+];
 
 interface PricingSectionProps {
-  className?: string
-  id?: string
+  className?: string;
+  id?: string;
 }
 
 export function PricingSection({ className, id }: PricingSectionProps) {
@@ -116,7 +116,7 @@ export function PricingSection({ className, id }: PricingSectionProps) {
                   "relative flex h-full flex-col border-landing-border bg-white transition-all duration-300",
                   tier.popular
                     ? "border-landing-accent shadow-lg ring-2 ring-landing-accent/20"
-                    : "hover:shadow-md"
+                    : "hover:shadow-md",
                 )}
               >
                 {/* Popular Badge */}
@@ -142,9 +142,13 @@ export function PricingSection({ className, id }: PricingSectionProps) {
                   {/* Price */}
                   <div className="mb-6">
                     <span className="text-4xl font-bold text-landing-text">
-                      {typeof tier.price === "number" ? `$${tier.price}` : tier.price}
+                      {typeof tier.price === "number"
+                        ? `$${tier.price}`
+                        : tier.price}
                     </span>
-                    <span className="text-landing-text-muted">{tier.period}</span>
+                    <span className="text-landing-text-muted">
+                      {tier.period}
+                    </span>
                   </div>
 
                   {/* Features */}
@@ -152,7 +156,9 @@ export function PricingSection({ className, id }: PricingSectionProps) {
                     {tier.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-3">
                         <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-landing-accent" />
-                        <span className="text-sm text-landing-text">{feature}</span>
+                        <span className="text-sm text-landing-text">
+                          {feature}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -164,7 +170,7 @@ export function PricingSection({ className, id }: PricingSectionProps) {
                       "w-full",
                       tier.popular
                         ? "bg-landing-accent text-white hover:bg-landing-accent/90"
-                        : "border-landing-border bg-white text-landing-text hover:bg-landing-bg-muted"
+                        : "border-landing-border bg-white text-landing-text hover:bg-landing-bg-muted",
                     )}
                     variant={tier.popular ? "default" : "outline"}
                     asChild
@@ -184,9 +190,12 @@ export function PricingSection({ className, id }: PricingSectionProps) {
           viewport={{ once: true }}
           className="mx-auto mt-12 max-w-2xl rounded-lg border border-landing-border bg-white p-6 text-center"
         >
-          <h3 className="text-xl font-semibold text-landing-text">Enterprise</h3>
+          <h3 className="text-xl font-semibold text-landing-text">
+            Enterprise
+          </h3>
           <p className="mt-2 text-landing-text-muted">
-            Unlimited agents, dedicated support, custom SLAs, and on-premise deployment options.
+            Unlimited agents, dedicated support, custom SLAs, and on-premise
+            deployment options.
           </p>
           <p className="mt-4 text-2xl font-bold text-landing-text">
             Custom Pricing
@@ -200,5 +209,5 @@ export function PricingSection({ className, id }: PricingSectionProps) {
         </motion.div>
       </div>
     </section>
-  )
+  );
 }

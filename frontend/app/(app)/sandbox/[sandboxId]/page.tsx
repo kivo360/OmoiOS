@@ -1,14 +1,20 @@
-"use client"
+"use client";
 
-import { use, useState, useRef, useEffect, useMemo, useCallback } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { use, useState, useRef, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   ArrowLeft,
   Terminal,
@@ -23,112 +29,148 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-} from "lucide-react"
-import { useSandboxMonitor, useSandboxTask } from "@/hooks/useSandbox"
-import { usePreview } from "@/hooks/usePreview"
-import { EventRenderer } from "@/components/sandbox"
-import { PreviewPanel } from "@/components/preview/PreviewPanel"
-import { Markdown } from "@/components/ui/markdown"
-import { useInfiniteScrollTop } from "@/hooks/useInfiniteScrollTop"
+} from "lucide-react";
+import { useSandboxMonitor, useSandboxTask } from "@/hooks/useSandbox";
+import { usePreview } from "@/hooks/usePreview";
+import { EventRenderer } from "@/components/sandbox";
+import { PreviewPanel } from "@/components/preview/PreviewPanel";
+import { Markdown } from "@/components/ui/markdown";
+import { useInfiniteScrollTop } from "@/hooks/useInfiniteScrollTop";
 
 interface SandboxDetailPageProps {
-  params: Promise<{ sandboxId: string }>
+  params: Promise<{ sandboxId: string }>;
 }
 
 // Status badge configuration
-const statusConfig: Record<string, { icon: typeof Loader2; color: string; iconClass: string; label: string }> = {
+const statusConfig: Record<
+  string,
+  { icon: typeof Loader2; color: string; iconClass: string; label: string }
+> = {
   pending: { icon: Clock, color: "secondary", iconClass: "", label: "Pending" },
-  in_progress: { icon: PlayCircle, color: "warning", iconClass: "", label: "Running" },
-  running: { icon: Loader2, color: "warning", iconClass: "animate-spin", label: "Running" },
-  completed: { icon: CheckCircle, color: "success", iconClass: "", label: "Completed" },
-  failed: { icon: XCircle, color: "destructive", iconClass: "", label: "Failed" },
-  cancelled: { icon: XCircle, color: "secondary", iconClass: "", label: "Cancelled" },
-}
+  in_progress: {
+    icon: PlayCircle,
+    color: "warning",
+    iconClass: "",
+    label: "Running",
+  },
+  running: {
+    icon: Loader2,
+    color: "warning",
+    iconClass: "animate-spin",
+    label: "Running",
+  },
+  completed: {
+    icon: CheckCircle,
+    color: "success",
+    iconClass: "",
+    label: "Completed",
+  },
+  failed: {
+    icon: XCircle,
+    color: "destructive",
+    iconClass: "",
+    label: "Failed",
+  },
+  cancelled: {
+    icon: XCircle,
+    color: "secondary",
+    iconClass: "",
+    label: "Cancelled",
+  },
+};
 
 // Event types to filter out
-const HIDDEN_EVENT_TYPES = [
-  "agent.heartbeat",
-  "SANDBOX_HEARTBEAT",
-]
+const HIDDEN_EVENT_TYPES = ["agent.heartbeat", "SANDBOX_HEARTBEAT"];
 
 // Normalize content for comparison (remove whitespace differences)
 function normalizeContent(content: string): string {
-  return content.replace(/\s+/g, "").toLowerCase()
+  return content.replace(/\s+/g, "").toLowerCase();
 }
 
 // Helper to generate a content-based key for file operations
-function getFileContentKey(event: { event_type: string; event_data: unknown }): string | null {
-  const data = event.event_data as Record<string, unknown>
+function getFileContentKey(event: {
+  event_type: string;
+  event_data: unknown;
+}): string | null {
+  const data = event.event_data as Record<string, unknown>;
 
   // For tool_completed events with Write/Edit
   if (event.event_type === "agent.tool_completed") {
-    const tool = data?.tool as string
-    const toolInput = data?.tool_input as Record<string, unknown> | undefined
+    const tool = data?.tool as string;
+    const toolInput = data?.tool_input as Record<string, unknown> | undefined;
 
     if (tool === "Write") {
-      const filePath = toolInput?.filePath || toolInput?.file_path || ""
-      const content = (toolInput?.content as string) || ""
+      const filePath = toolInput?.filePath || toolInput?.file_path || "";
+      const content = (toolInput?.content as string) || "";
       // Include normalized content in key to differentiate different writes to same file
-      return `file:${filePath}:${normalizeContent(content).slice(0, 100)}`
+      return `file:${filePath}:${normalizeContent(content).slice(0, 100)}`;
     }
 
     if (tool === "Edit") {
-      const filePath = toolInput?.filePath || toolInput?.file_path || ""
-      const oldString = (toolInput?.oldString as string) || ""
-      const newString = (toolInput?.newString as string) || ""
+      const filePath = toolInput?.filePath || toolInput?.file_path || "";
+      const oldString = (toolInput?.oldString as string) || "";
+      const newString = (toolInput?.newString as string) || "";
       // Include both old and new content to differentiate different edits
-      return `file:${filePath}:${normalizeContent(oldString).slice(0, 50)}:${normalizeContent(newString).slice(0, 50)}`
+      return `file:${filePath}:${normalizeContent(oldString).slice(0, 50)}:${normalizeContent(newString).slice(0, 50)}`;
     }
   }
 
   // For file_edited events
   if (event.event_type === "agent.file_edited") {
-    const filePath = data?.file_path as string || ""
-    const diff = (data?.diff_preview as string) || (data?.full_diff as string) || ""
-    return `file:${filePath}:${normalizeContent(diff).slice(0, 100)}`
+    const filePath = (data?.file_path as string) || "";
+    const diff =
+      (data?.diff_preview as string) || (data?.full_diff as string) || "";
+    return `file:${filePath}:${normalizeContent(diff).slice(0, 100)}`;
   }
 
-  return null
+  return null;
 }
 
 // Helper to generate a tool use key for deduplication
-function getToolUseKey(event: { event_type: string; event_data: unknown }): string | null {
-  const data = event.event_data as Record<string, unknown>
-  const tool = data?.tool as string
-  const toolInput = data?.tool_input || data?.input
+function getToolUseKey(event: {
+  event_type: string;
+  event_data: unknown;
+}): string | null {
+  const data = event.event_data as Record<string, unknown>;
+  const tool = data?.tool as string;
+  const toolInput = data?.tool_input || data?.input;
 
-  if (!tool) return null
+  if (!tool) return null;
 
   // Create a key from tool name and input
   // For Write/Edit, use the file path
   if (tool === "Write" || tool === "Edit" || tool === "Read") {
-    const input = toolInput as Record<string, unknown> | undefined
-    const filePath = input?.filePath || input?.file_path || ""
-    return `${tool}:${filePath}`
+    const input = toolInput as Record<string, unknown> | undefined;
+    const filePath = input?.filePath || input?.file_path || "";
+    return `${tool}:${filePath}`;
   }
 
   // For Bash, use the command
   if (tool === "Bash") {
-    const input = toolInput as Record<string, unknown> | undefined
-    const command = input?.command || ""
-    return `${tool}:${command}`
+    const input = toolInput as Record<string, unknown> | undefined;
+    const command = input?.command || "";
+    return `${tool}:${command}`;
   }
 
   // For other tools, use tool name and stringified input
-  return `${tool}:${JSON.stringify(toolInput || {})}`
+  return `${tool}:${JSON.stringify(toolInput || {})}`;
 }
 
 export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
-  const { sandboxId } = use(params)
-  const [messageInput, setMessageInput] = useState("")
-  const [activeTab, setActiveTab] = useState("events")
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const { sandboxId } = use(params);
+  const [messageInput, setMessageInput] = useState("");
+  const [activeTab, setActiveTab] = useState("events");
+  const scrollRef = useRef<HTMLDivElement>(null);
   // Track the previous event count to detect new realtime events vs loaded historical events
-  const prevEventCountRef = useRef<number>(0)
-  const isLoadingMoreRef = useRef<boolean>(false)
+  const prevEventCountRef = useRef<number>(0);
+  const isLoadingMoreRef = useRef<boolean>(false);
 
   // Fetch task info for this sandbox
-  const { data: task, isLoading: isLoadingTask, error: taskError } = useSandboxTask(sandboxId)
+  const {
+    data: task,
+    isLoading: isLoadingTask,
+    error: taskError,
+  } = useSandboxTask(sandboxId);
 
   // Monitor sandbox events
   const {
@@ -142,7 +184,7 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
     hasMore,
     isLoadingMore,
     loadMoreEvents,
-  } = useSandboxMonitor(sandboxId)
+  } = useSandboxMonitor(sandboxId);
 
   // Preview session
   const {
@@ -152,84 +194,86 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
     isStopping: isStoppingPreview,
     refresh: refreshPreview,
     justBecameReady: previewJustBecameReady,
-  } = usePreview(sandboxId)
+  } = usePreview(sandboxId);
 
   // Auto-switch to Preview tab when it becomes ready
   useEffect(() => {
     if (previewJustBecameReady) {
-      setActiveTab("preview")
+      setActiveTab("preview");
     }
-  }, [previewJustBecameReady])
+  }, [previewJustBecameReady]);
 
   // Track loading state for scroll position preservation
   useEffect(() => {
-    isLoadingMoreRef.current = isLoadingMore
-  }, [isLoadingMore])
+    isLoadingMoreRef.current = isLoadingMore;
+  }, [isLoadingMore]);
 
   // Filter and sort events, deduplicating redundant events
   const visibleEvents = useMemo(() => {
     // Collect all tool_completed content keys for deduplication
-    const completedToolKeys = new Set<string>()
-    const completedFileContentKeys = new Set<string>()
+    const completedToolKeys = new Set<string>();
+    const completedFileContentKeys = new Set<string>();
     // Collect subagent prompts to filter out duplicate user messages
-    const subagentPrompts = new Set<string>()
+    const subagentPrompts = new Set<string>();
 
     // First pass: collect keys from tool_completed events and subagent prompts
     for (const event of events) {
       if (event.event_type === "agent.tool_completed") {
-        const toolKey = getToolUseKey(event)
+        const toolKey = getToolUseKey(event);
         if (toolKey) {
-          completedToolKeys.add(toolKey)
+          completedToolKeys.add(toolKey);
         }
 
         // Track file content keys
-        const contentKey = getFileContentKey(event)
-        if (contentKey) completedFileContentKeys.add(contentKey)
+        const contentKey = getFileContentKey(event);
+        if (contentKey) completedFileContentKeys.add(contentKey);
       }
 
       // Track subagent prompts to filter out duplicate user messages
       if (event.event_type === "agent.subagent_invoked") {
-        const data = event.event_data as Record<string, unknown>
-        const toolInput = (data.tool_input || {}) as Record<string, unknown>
-        const prompt = (data.subagent_prompt || toolInput.prompt) as string | undefined
-        if (prompt) subagentPrompts.add(prompt)
+        const data = event.event_data as Record<string, unknown>;
+        const toolInput = (data.tool_input || {}) as Record<string, unknown>;
+        const prompt = (data.subagent_prompt || toolInput.prompt) as
+          | string
+          | undefined;
+        if (prompt) subagentPrompts.add(prompt);
       }
     }
 
     // Track which content keys we've already rendered
-    const renderedContentKeys = new Set<string>()
+    const renderedContentKeys = new Set<string>();
 
     // Filter out events
     return events
       .filter((e) => {
         // Skip hidden event types
-        if (HIDDEN_EVENT_TYPES.includes(e.event_type)) return false
+        if (HIDDEN_EVENT_TYPES.includes(e.event_type)) return false;
 
         // Skip user messages that are subagent prompts (already shown in SubagentCard)
         if (e.event_type === "agent.user_message") {
-          const data = e.event_data as Record<string, unknown>
-          const content = (data.content || data.message) as string | undefined
-          if (content && subagentPrompts.has(content)) return false
+          const data = e.event_data as Record<string, unknown>;
+          const content = (data.content || data.message) as string | undefined;
+          if (content && subagentPrompts.has(content)) return false;
         }
 
         // Skip tool_use events if there's a corresponding tool_completed
         if (e.event_type === "agent.tool_use") {
-          const key = getToolUseKey(e)
-          if (key && completedToolKeys.has(key)) return false
+          const key = getToolUseKey(e);
+          if (key && completedToolKeys.has(key)) return false;
         }
 
         // Skip file_edited events if we have a tool_completed with the same content
         if (e.event_type === "agent.file_edited") {
-          const contentKey = getFileContentKey(e)
+          const contentKey = getFileContentKey(e);
           if (contentKey) {
             // Check if any tool_completed has similar content
             for (const completedKey of completedFileContentKeys) {
               // Extract file path from both keys and compare
-              const fileEditPath = contentKey.split(":")[1]
-              const completedPath = completedKey.split(":")[1]
+              const fileEditPath = contentKey.split(":")[1];
+              const completedPath = completedKey.split(":")[1];
               if (fileEditPath === completedPath) {
                 // Same file - skip file_edited in favor of tool_completed
-                return false
+                return false;
               }
             }
           }
@@ -237,36 +281,35 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
 
         // For tool_completed with Write/Edit, dedupe exact same content
         if (e.event_type === "agent.tool_completed") {
-          const data = e.event_data as Record<string, unknown>
-          const tool = data?.tool as string
+          const data = e.event_data as Record<string, unknown>;
+          const tool = data?.tool as string;
           if (tool === "Write" || tool === "Edit") {
-            const contentKey = getFileContentKey(e)
+            const contentKey = getFileContentKey(e);
             if (contentKey) {
-              if (renderedContentKeys.has(contentKey)) return false
-              renderedContentKeys.add(contentKey)
+              if (renderedContentKeys.has(contentKey)) return false;
+              renderedContentKeys.add(contentKey);
             }
           }
         }
 
-        return true
+        return true;
       })
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-  }, [events])
+      .sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+  }, [events]);
 
   // Infinite scroll hook for loading older events
-  const {
-    sentinelRef,
-    viewportRef,
-    isInCooldown,
-    restoreScrollPosition,
-  } = useInfiniteScrollTop({
-    hasMore,
-    isLoading: isLoadingMore,
-    onLoadMore: loadMoreEvents,
-    cooldownMs: 2000, // 2 second cooldown between loads
-    enabled: !isLoadingHistory, // Disable during initial load
-    rootMargin: "200px", // Start loading when within 200px of sentinel
-  })
+  const { sentinelRef, viewportRef, isInCooldown, restoreScrollPosition } =
+    useInfiniteScrollTop({
+      hasMore,
+      isLoading: isLoadingMore,
+      onLoadMore: loadMoreEvents,
+      cooldownMs: 2000, // 2 second cooldown between loads
+      enabled: !isLoadingHistory, // Disable during initial load
+      rootMargin: "200px", // Start loading when within 200px of sentinel
+    });
 
   // Restore scroll position after loading older events
   useEffect(() => {
@@ -275,15 +318,15 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
     if (!isLoadingMore && isLoadingMoreRef.current) {
       // Small delay to let DOM update
       requestAnimationFrame(() => {
-        restoreScrollPosition()
-      })
+        restoreScrollPosition();
+      });
     }
-  }, [isLoadingMore, restoreScrollPosition])
+  }, [isLoadingMore, restoreScrollPosition]);
 
   // Auto-scroll to bottom ONLY for new realtime events
   // Not when loading older historical events
   useEffect(() => {
-    const currentCount = visibleEvents.length
+    const currentCount = visibleEvents.length;
 
     // Only auto-scroll if:
     // 1. New events were added (count increased)
@@ -296,32 +339,32 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
     ) {
       // Check if we're near the bottom before auto-scrolling
       // This prevents jumping when user is reading older events
-      const { scrollTop, scrollHeight, clientHeight } = viewportRef.current
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
+      const { scrollTop, scrollHeight, clientHeight } = viewportRef.current;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 200;
 
       if (isNearBottom || prevEventCountRef.current === 0) {
-        viewportRef.current.scrollTop = viewportRef.current.scrollHeight
+        viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
       }
     }
 
-    prevEventCountRef.current = currentCount
-  }, [visibleEvents.length, isLoadingMore, viewportRef])
+    prevEventCountRef.current = currentCount;
+  }, [visibleEvents.length, isLoadingMore, viewportRef]);
 
   // Handle sending a message
   const handleSendMessage = async () => {
-    if (!messageInput.trim() || isSendingMessage) return
+    if (!messageInput.trim() || isSendingMessage) return;
 
-    await sendMessage(messageInput.trim())
-    setMessageInput("")
-  }
+    await sendMessage(messageInput.trim());
+    setMessageInput("");
+  };
 
   // Handle enter key
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
+      e.preventDefault();
+      handleSendMessage();
     }
-  }
+  };
 
   // Loading state
   if (isLoadingTask) {
@@ -338,7 +381,7 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
           <Skeleton className="h-[400px] w-full" />
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -354,12 +397,12 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
           <Link href="/command">Back to Command</Link>
         </Button>
       </div>
-    )
+    );
   }
 
-  const status = task?.status || "pending"
-  const config = statusConfig[status] || statusConfig.pending
-  const StatusIcon = config.icon
+  const status = task?.status || "pending";
+  const config = statusConfig[status] || statusConfig.pending;
+  const StatusIcon = config.icon;
 
   return (
     <div className="flex h-[calc(100vh-48px)] flex-col">
@@ -377,7 +420,15 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
             <div className="mt-2 flex items-center gap-3">
               <Bot className="h-6 w-6" />
               <h1 className="text-xl font-bold">{task?.title || "Sandbox"}</h1>
-              <Badge variant={config.color as "default" | "destructive" | "secondary" | "outline"}>
+              <Badge
+                variant={
+                  config.color as
+                    | "default"
+                    | "destructive"
+                    | "secondary"
+                    | "outline"
+                }
+              >
                 <StatusIcon className={`mr-1 h-3 w-3 ${config.iconClass}`} />
                 {config.label}
               </Badge>
@@ -417,7 +468,11 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
       <div className="flex flex-1 overflow-hidden">
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="flex-1 flex flex-col overflow-hidden"
+          >
             <div className="border-b border-border px-4">
               <TabsList className="h-10">
                 <TabsTrigger value="events">Events</TabsTrigger>
@@ -425,7 +480,8 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                   <TabsTrigger value="preview" className="gap-1.5">
                     {preview?.status === "ready" ? (
                       <span className="h-2 w-2 rounded-full bg-green-500" />
-                    ) : (preview?.status === "pending" || preview?.status === "starting") ? (
+                    ) : preview?.status === "pending" ||
+                      preview?.status === "starting" ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : null}
                     Preview
@@ -435,9 +491,16 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
               </TabsList>
             </div>
 
-            <TabsContent value="events" className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-hidden">
+            <TabsContent
+              value="events"
+              className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-hidden"
+            >
               {/* Events scroll area */}
-              <ScrollArea className="flex-1" ref={scrollRef} viewportRef={viewportRef}>
+              <ScrollArea
+                className="flex-1"
+                ref={scrollRef}
+                viewportRef={viewportRef}
+              >
                 <div className="p-4 space-y-3">
                   {/* Sentinel element for infinite scroll - triggers load when visible */}
                   <div ref={sentinelRef} className="h-1" aria-hidden="true" />
@@ -453,7 +516,9 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                   {/* Show indicator when there are more events but not loading */}
                   {hasMore && !isLoadingMore && !isInCooldown && (
                     <div className="flex items-center justify-center py-1 text-muted-foreground">
-                      <span className="text-xs">Scroll up for older events</span>
+                      <span className="text-xs">
+                        Scroll up for older events
+                      </span>
                     </div>
                   )}
 
@@ -465,7 +530,9 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                     <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                       <Terminal className="h-12 w-12 mb-4 opacity-50" />
                       <p>No events yet</p>
-                      <p className="text-sm">Events will appear here as the agent works</p>
+                      <p className="text-sm">
+                        Events will appear here as the agent works
+                      </p>
                     </div>
                   ) : (
                     visibleEvents.map((event) => (
@@ -503,7 +570,10 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
             </TabsContent>
 
             {hasPreview && preview && (
-              <TabsContent value="preview" className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-hidden">
+              <TabsContent
+                value="preview"
+                className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-hidden"
+              >
                 <PreviewPanel
                   preview={preview}
                   onStop={stopPreview}
@@ -513,43 +583,73 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
               </TabsContent>
             )}
 
-            <TabsContent value="details" className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-auto">
+            <TabsContent
+              value="details"
+              className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-auto"
+            >
               <div className="p-4 space-y-4">
                 <Card>
                   <CardHeader>
                     <CardTitle>Task Information</CardTitle>
-                    <CardDescription>Details about the task associated with this sandbox</CardDescription>
+                    <CardDescription>
+                      Details about the task associated with this sandbox
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Task ID</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Task ID
+                        </p>
                         <p className="text-sm font-mono">{task?.id || "N/A"}</p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Sandbox ID</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Sandbox ID
+                        </p>
                         <p className="text-sm font-mono">{sandboxId}</p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Status</p>
-                        <Badge variant={config.color as "default" | "destructive" | "secondary" | "outline"} className="mt-1">
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Status
+                        </p>
+                        <Badge
+                          variant={
+                            config.color as
+                              | "default"
+                              | "destructive"
+                              | "secondary"
+                              | "outline"
+                          }
+                          className="mt-1"
+                        >
                           {task?.status || "Unknown"}
                         </Badge>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Priority</p>
-                        <p className="text-sm capitalize">{task?.priority || "Normal"}</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Priority
+                        </p>
+                        <p className="text-sm capitalize">
+                          {task?.priority || "Normal"}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Task Type</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Task Type
+                        </p>
                         <p className="text-sm">{task?.task_type || "N/A"}</p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Phase</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Phase
+                        </p>
                         <p className="text-sm">{task?.phase_id || "N/A"}</p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Created</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Created
+                        </p>
                         <p className="text-sm">
                           {task?.created_at
                             ? new Date(task.created_at).toLocaleString()
@@ -557,7 +657,9 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                         </p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Started</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Started
+                        </p>
                         <p className="text-sm">
                           {task?.started_at
                             ? new Date(task.started_at).toLocaleString()
@@ -566,7 +668,9 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                       </div>
                       {task?.completed_at && (
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Completed</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Completed
+                          </p>
                           <p className="text-sm">
                             {new Date(task.completed_at).toLocaleString()}
                           </p>
@@ -576,9 +680,14 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                         <div className="md:col-span-2">
                           {/* Only show label if description doesn't start with its own heading */}
                           {!/^#/.test(task.description.trim()) && (
-                            <p className="text-sm font-medium text-muted-foreground mb-2">Description</p>
+                            <p className="text-sm font-medium text-muted-foreground mb-2">
+                              Description
+                            </p>
                           )}
-                          <Markdown content={task.description} className="text-sm" />
+                          <Markdown
+                            content={task.description}
+                            className="text-sm"
+                          />
                         </div>
                       )}
                     </div>
@@ -588,24 +697,42 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                 <Card>
                   <CardHeader>
                     <CardTitle>Event Summary</CardTitle>
-                    <CardDescription>Overview of events in this sandbox</CardDescription>
+                    <CardDescription>
+                      Overview of events in this sandbox
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-4 md:grid-cols-3">
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Total Events</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Total Events
+                        </p>
                         <p className="text-2xl font-bold">{events.length}</p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Tool Uses</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Tool Uses
+                        </p>
                         <p className="text-2xl font-bold">
-                          {events.filter((e) => e.event_type === "agent.tool_use" || e.event_type === "agent.tool_completed").length}
+                          {
+                            events.filter(
+                              (e) =>
+                                e.event_type === "agent.tool_use" ||
+                                e.event_type === "agent.tool_completed",
+                            ).length
+                          }
                         </p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">File Edits</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          File Edits
+                        </p>
                         <p className="text-2xl font-bold">
-                          {events.filter((e) => e.event_type === "agent.file_edited").length}
+                          {
+                            events.filter(
+                              (e) => e.event_type === "agent.file_edited",
+                            ).length
+                          }
                         </p>
                       </div>
                     </div>
@@ -617,5 +744,5 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }

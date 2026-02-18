@@ -1,115 +1,120 @@
-"use client"
+"use client";
 
-import { useEffect, useState, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { useQueryClient } from "@tanstack/react-query"
-import { CardTitle, CardDescription } from "@/components/ui/card"
-import { Loader2, CheckCircle2, XCircle } from "lucide-react"
-import { useAuth } from "@/hooks/useAuth"
-import { setTokens, clearTokens } from "@/lib/api/client"
-import { getCurrentUser } from "@/lib/api/auth"
-import { fetchOnboardingStatus, setOnboardingCookie } from "@/lib/onboarding/sync"
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { CardTitle, CardDescription } from "@/components/ui/card";
+import { Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { setTokens, clearTokens } from "@/lib/api/client";
+import { getCurrentUser } from "@/lib/api/auth";
+import {
+  fetchOnboardingStatus,
+  setOnboardingCookie,
+} from "@/lib/onboarding/sync";
 
-type CallbackStatus = "loading" | "success" | "error"
+type CallbackStatus = "loading" | "success" | "error";
 
 function CallbackContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { login } = useAuth()
-  const queryClient = useQueryClient()
-  const [status, setStatus] = useState<CallbackStatus>("loading")
-  const [errorMessage, setErrorMessage] = useState<string>("")
-  const [provider, setProvider] = useState<string>("")
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { login } = useAuth();
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState<CallbackStatus>("loading");
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [provider, setProvider] = useState<string>("");
 
   useEffect(() => {
     const handleCallback = async () => {
       // Check if this is a "connect" callback (linking GitHub to existing user)
-      const isConnect = searchParams.get("connect") === "true"
-      const connected = searchParams.get("connected") === "true"
-      const username = searchParams.get("username")
-      const providerName = searchParams.get("provider")
+      const isConnect = searchParams.get("connect") === "true";
+      const connected = searchParams.get("connected") === "true";
+      const username = searchParams.get("username");
+      const providerName = searchParams.get("provider");
 
       if (providerName) {
-        setProvider(providerName)
+        setProvider(providerName);
       }
 
       // Check for error from OAuth provider
-      const error = searchParams.get("error")
+      const error = searchParams.get("error");
       if (error) {
-        setStatus("error")
-        setErrorMessage(error.replace(/_/g, " "))
-        const redirectPath = isConnect ? "/onboarding?step=github&error=connect_failed" : `/login?error=${error}`
-        setTimeout(() => router.push(redirectPath), 3000)
-        return
+        setStatus("error");
+        setErrorMessage(error.replace(/_/g, " "));
+        const redirectPath = isConnect
+          ? "/onboarding?step=github&error=connect_failed"
+          : `/login?error=${error}`;
+        setTimeout(() => router.push(redirectPath), 3000);
+        return;
       }
 
       // Handle "connect" flow (linking GitHub to existing account during onboarding)
       if (isConnect && connected) {
         // GitHub was successfully connected to the current user
         // Invalidate queries to refresh connection status
-        queryClient.invalidateQueries({ queryKey: ["oauth", "connected"] })
-        queryClient.invalidateQueries({ queryKey: ["github-repos"] })
+        queryClient.invalidateQueries({ queryKey: ["oauth", "connected"] });
+        queryClient.invalidateQueries({ queryKey: ["github-repos"] });
 
-        setStatus("success")
+        setStatus("success");
 
         // Redirect back to onboarding repo selection step
         const redirectUrl = username
           ? `/onboarding?step=repo&github_connected=true&github_username=${username}`
-          : "/onboarding?step=repo&github_connected=true"
-        setTimeout(() => router.push(redirectUrl), 1500)
-        return
+          : "/onboarding?step=repo&github_connected=true";
+        setTimeout(() => router.push(redirectUrl), 1500);
+        return;
       }
 
       // Regular OAuth login flow
       // Get tokens from URL
-      const accessToken = searchParams.get("access_token")
-      const refreshToken = searchParams.get("refresh_token")
+      const accessToken = searchParams.get("access_token");
+      const refreshToken = searchParams.get("refresh_token");
 
       if (!accessToken || !refreshToken) {
-        setStatus("error")
-        setErrorMessage("No authentication tokens received")
-        setTimeout(() => router.push("/login?error=no_tokens"), 3000)
-        return
+        setStatus("error");
+        setErrorMessage("No authentication tokens received");
+        setTimeout(() => router.push("/login?error=no_tokens"), 3000);
+        return;
       }
 
       try {
         // Store tokens
-        setTokens(accessToken, refreshToken)
+        setTokens(accessToken, refreshToken);
 
         // Fetch user info
-        const user = await getCurrentUser()
+        const user = await getCurrentUser();
 
         // Update auth context
-        login(user)
+        login(user);
 
         // Invalidate OAuth-related queries to refresh connection status
-        queryClient.invalidateQueries({ queryKey: ["oauth", "connected"] })
-        queryClient.invalidateQueries({ queryKey: ["github-repos"] })
+        queryClient.invalidateQueries({ queryKey: ["oauth", "connected"] });
+        queryClient.invalidateQueries({ queryKey: ["github-repos"] });
 
-        setStatus("success")
+        setStatus("success");
 
         // Check onboarding status and set cookie before redirect
         // This ensures proxy.ts has the cookie for edge redirects
         try {
-          const onboardingStatus = await fetchOnboardingStatus()
-          setOnboardingCookie(onboardingStatus.is_completed)
+          const onboardingStatus = await fetchOnboardingStatus();
+          setOnboardingCookie(onboardingStatus.is_completed);
         } catch {
           // If onboarding check fails, don't block login
         }
 
         // Redirect to main app after brief success display
-        setTimeout(() => router.push("/command"), 1500)
+        setTimeout(() => router.push("/command"), 1500);
       } catch (err) {
-        console.error("OAuth callback error:", err)
-        setStatus("error")
-        setErrorMessage("Failed to complete authentication")
-        clearTokens()
-        setTimeout(() => router.push("/login?error=auth_failed"), 3000)
+        console.error("OAuth callback error:", err);
+        setStatus("error");
+        setErrorMessage("Failed to complete authentication");
+        clearTokens();
+        setTimeout(() => router.push("/login?error=auth_failed"), 3000);
       }
-    }
+    };
 
-    handleCallback()
-  }, [searchParams, router, login, queryClient])
+    handleCallback();
+  }, [searchParams, router, login, queryClient]);
 
   return (
     <div className="space-y-6">
@@ -166,7 +171,7 @@ function CallbackContent() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
 export default function OAuthCallbackPage() {
@@ -187,5 +192,5 @@ export default function OAuthCallbackPage() {
     >
       <CallbackContent />
     </Suspense>
-  )
+  );
 }

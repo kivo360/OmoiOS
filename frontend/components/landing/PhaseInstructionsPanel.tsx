@@ -1,23 +1,23 @@
-"use client"
+"use client";
 
-import { motion, AnimatePresence } from "framer-motion"
-import { FileText } from "lucide-react"
-import { AnimatedCheckbox } from "./AnimatedCheckbox"
-import { cn } from "@/lib/utils"
+import { motion, AnimatePresence } from "framer-motion";
+import { FileText } from "lucide-react";
+import { AnimatedCheckbox } from "./AnimatedCheckbox";
+import { cn } from "@/lib/utils";
 
 export interface DoneCriterion {
-  label: string
-  completed: boolean
-  animationDelay: number
+  label: string;
+  completed: boolean;
+  animationDelay: number;
 }
 
 interface PhaseInstructionsPanelProps {
-  phaseName: string
-  phaseEmoji: string
-  instructions: string[]
-  doneCriteria: DoneCriterion[]
-  isActive: boolean
-  className?: string
+  phaseName: string;
+  phaseEmoji: string;
+  instructions: string[];
+  doneCriteria: DoneCriterion[];
+  isActive: boolean;
+  className?: string;
 }
 
 export function PhaseInstructionsPanel({
@@ -34,7 +34,7 @@ export function PhaseInstructionsPanel({
         <motion.div
           className={cn(
             "rounded-lg border border-border bg-card p-4",
-            className
+            className,
           )}
           initial={{ opacity: 0, y: -20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -98,7 +98,7 @@ export function PhaseInstructionsPanel({
         </motion.div>
       )}
     </AnimatePresence>
-  )
+  );
 }
 
 // Typewriter effect for instructions
@@ -106,8 +106,8 @@ function TypewriterInstruction({
   text,
   delay = 0,
 }: {
-  text: string
-  delay?: number
+  text: string;
+  delay?: number;
 }) {
   return (
     <motion.span
@@ -117,5 +117,5 @@ function TypewriterInstruction({
     >
       {text}
     </motion.span>
-  )
+  );
 }

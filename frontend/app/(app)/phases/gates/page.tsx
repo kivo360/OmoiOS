@@ -1,22 +1,28 @@
-"use client"
+"use client";
 
-import { useMemo, useState } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +30,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   ArrowLeft,
   Search,
@@ -40,48 +46,50 @@ import {
   X,
   Eye,
   Info,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { useTickets } from "@/hooks/useTickets"
-import { useValidateGate } from "@/hooks/usePhases"
-import { getPhaseById } from "@/lib/phases-config"
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useTickets } from "@/hooks/useTickets";
+import { useValidateGate } from "@/hooks/usePhases";
+import { getPhaseById } from "@/lib/phases-config";
 
 // Type for approval items derived from tickets
 interface ApprovalItem {
-  id: string
-  ticketId: string
-  ticketTitle: string
-  currentPhase: string
-  requestedPhase: string
-  status: string
-  priority: string
-  createdAt: string | null
+  id: string;
+  ticketId: string;
+  ticketTitle: string;
+  currentPhase: string;
+  requestedPhase: string;
+  status: string;
+  priority: string;
+  createdAt: string | null;
 }
 
 export default function PhaseGatesPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [filterStatus, setFilterStatus] = useState("all")
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
-  const [rejectComment, setRejectComment] = useState("")
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
 
   // Fetch tickets that could need gate validation
-  const { data: ticketsData, isLoading } = useTickets()
-  const validateGateMutation = useValidateGate()
+  const { data: ticketsData, isLoading } = useTickets();
+  const validateGateMutation = useValidateGate();
 
   // Build list of tickets that are in intermediate phases (not done/blocked)
   const pendingApprovals = useMemo(() => {
-    if (!ticketsData?.tickets) return []
-    
+    if (!ticketsData?.tickets) return [];
+
     return ticketsData.tickets
       .filter((ticket) => {
         // Only show tickets that could transition
-        const phase = getPhaseById(ticket.phase_id)
-        return phase && !phase.isTerminal && ticket.phase_id !== "PHASE_BLOCKED"
+        const phase = getPhaseById(ticket.phase_id);
+        return (
+          phase && !phase.isTerminal && ticket.phase_id !== "PHASE_BLOCKED"
+        );
       })
       .map((ticket): ApprovalItem => {
-        const phase = getPhaseById(ticket.phase_id)
-        const nextPhase = phase?.transitions[0] || "PHASE_DONE"
-        
+        const phase = getPhaseById(ticket.phase_id);
+        const nextPhase = phase?.transitions[0] || "PHASE_DONE";
+
         return {
           id: ticket.id,
           ticketId: ticket.id.slice(0, 8).toUpperCase(),
@@ -91,53 +99,58 @@ export default function PhaseGatesPage() {
           status: ticket.status,
           priority: ticket.priority,
           createdAt: ticket.created_at,
-        }
-      })
-  }, [ticketsData])
+        };
+      });
+  }, [ticketsData]);
 
   const filteredApprovals = pendingApprovals.filter((approval) => {
-    const matchesSearch = approval.ticketTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      approval.ticketId.toLowerCase().includes(searchQuery.toLowerCase())
-    
-    if (filterStatus === "all") return matchesSearch
-    if (filterStatus === "in_progress") return matchesSearch && approval.status === "in_progress"
-    if (filterStatus === "pending") return matchesSearch && approval.status === "pending"
-    return matchesSearch
-  })
+    const matchesSearch =
+      approval.ticketTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      approval.ticketId.toLowerCase().includes(searchQuery.toLowerCase());
 
-  const selectedApproval = pendingApprovals.find((a) => a.id === selectedTicketId)
+    if (filterStatus === "all") return matchesSearch;
+    if (filterStatus === "in_progress")
+      return matchesSearch && approval.status === "in_progress";
+    if (filterStatus === "pending")
+      return matchesSearch && approval.status === "pending";
+    return matchesSearch;
+  });
+
+  const selectedApproval = pendingApprovals.find(
+    (a) => a.id === selectedTicketId,
+  );
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "completed":
       case "passed":
-        return <CheckCircle2 className="h-4 w-4 text-green-500" />
+        return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       case "failed":
       case "blocked":
-        return <XCircle className="h-4 w-4 text-red-500" />
+        return <XCircle className="h-4 w-4 text-red-500" />;
       case "in_progress":
-        return <Clock className="h-4 w-4 text-blue-500" />
+        return <Clock className="h-4 w-4 text-blue-500" />;
       default:
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />
+        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
     }
-  }
+  };
 
   const formatTimeAgo = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "N/A"
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const minutes = Math.floor(diff / (1000 * 60))
-    if (minutes < 60) return `${minutes}m ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
+    if (!dateStr) return "N/A";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / (1000 * 60));
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
 
   const handleValidateGate = (ticketId: string, phaseId: string) => {
-    validateGateMutation.mutate({ ticketId, phaseId })
-  }
+    validateGateMutation.mutate({ ticketId, phaseId });
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -170,9 +183,13 @@ export default function PhaseGatesPage() {
                 {isLoading ? (
                   <Skeleton className="h-8 w-12" />
                 ) : (
-                  <p className="text-2xl font-bold">{pendingApprovals.length}</p>
+                  <p className="text-2xl font-bold">
+                    {pendingApprovals.length}
+                  </p>
                 )}
-                <p className="text-sm text-muted-foreground">Tickets in Workflow</p>
+                <p className="text-sm text-muted-foreground">
+                  Tickets in Workflow
+                </p>
               </div>
             </div>
           </CardContent>
@@ -188,7 +205,10 @@ export default function PhaseGatesPage() {
                   <Skeleton className="h-8 w-12" />
                 ) : (
                   <p className="text-2xl font-bold">
-                    {pendingApprovals.filter(a => a.status === "in_progress").length}
+                    {
+                      pendingApprovals.filter((a) => a.status === "in_progress")
+                        .length
+                    }
                   </p>
                 )}
                 <p className="text-sm text-muted-foreground">In Progress</p>
@@ -207,7 +227,10 @@ export default function PhaseGatesPage() {
                   <Skeleton className="h-8 w-12" />
                 ) : (
                   <p className="text-2xl font-bold">
-                    {pendingApprovals.filter(a => a.status === "pending").length}
+                    {
+                      pendingApprovals.filter((a) => a.status === "pending")
+                        .length
+                    }
                   </p>
                 )}
                 <p className="text-sm text-muted-foreground">Pending</p>
@@ -281,7 +304,7 @@ export default function PhaseGatesPage() {
                       approval.status === "in_progress" && "bg-blue-500",
                       approval.status === "completed" && "bg-green-500",
                       approval.status === "blocked" && "bg-red-500",
-                      approval.status === "pending" && "bg-yellow-500"
+                      approval.status === "pending" && "bg-yellow-500",
                     )}
                   />
                   <CardHeader className="pb-3">
@@ -291,7 +314,9 @@ export default function PhaseGatesPage() {
                           <Badge variant="outline" className="font-mono">
                             {approval.ticketId}
                           </Badge>
-                          <CardTitle className="text-base">{approval.ticketTitle}</CardTitle>
+                          <CardTitle className="text-base">
+                            {approval.ticketTitle}
+                          </CardTitle>
                         </div>
                         <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
@@ -305,8 +330,11 @@ export default function PhaseGatesPage() {
                       </div>
                       <Badge
                         variant={
-                          approval.status === "in_progress" ? "default" :
-                          approval.status === "completed" ? "secondary" : "outline"
+                          approval.status === "in_progress"
+                            ? "default"
+                            : approval.status === "completed"
+                              ? "secondary"
+                              : "outline"
                         }
                       >
                         {approval.status}
@@ -327,20 +355,18 @@ export default function PhaseGatesPage() {
 
                     {/* Actions */}
                     <div className="flex items-center justify-end gap-2 pt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        asChild
-                      >
+                      <Button variant="outline" size="sm" asChild>
                         <Link href={`/board/${approval.id}/${approval.id}`}>
                           <Eye className="mr-2 h-4 w-4" />
                           View Ticket
                         </Link>
                       </Button>
-                      <Button 
+                      <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleValidateGate(approval.id, approval.currentPhase)}
+                        onClick={() =>
+                          handleValidateGate(approval.id, approval.currentPhase)
+                        }
                         disabled={validateGateMutation.isPending}
                       >
                         <Check className="mr-2 h-4 w-4" />
@@ -360,7 +386,9 @@ export default function PhaseGatesPage() {
                 <CheckCircle2 className="mx-auto h-12 w-12 text-muted-foreground/50" />
                 <h3 className="mt-4 font-semibold">No tickets in workflow</h3>
                 <p className="text-sm text-muted-foreground">
-                  {searchQuery ? "Try adjusting your search criteria" : "All tickets have been processed"}
+                  {searchQuery
+                    ? "Try adjusting your search criteria"
+                    : "All tickets have been processed"}
                 </p>
               </CardContent>
             </Card>
@@ -372,7 +400,9 @@ export default function PhaseGatesPage() {
           <Card>
             <CardHeader>
               <CardTitle>About Phase Gates</CardTitle>
-              <CardDescription>Understanding the phase gate validation system</CardDescription>
+              <CardDescription>
+                Understanding the phase gate validation system
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-lg bg-muted p-4 space-y-3">
@@ -381,13 +411,14 @@ export default function PhaseGatesPage() {
                   <div>
                     <p className="font-medium">What are Phase Gates?</p>
                     <p className="text-sm text-muted-foreground">
-                      Phase gates are checkpoints between workflow phases that validate 
-                      whether tickets meet the required criteria before advancing.
+                      Phase gates are checkpoints between workflow phases that
+                      validate whether tickets meet the required criteria before
+                      advancing.
                     </p>
                   </div>
                 </div>
               </div>
-              
+
               <div className="space-y-3">
                 <p className="font-medium">Gate Validation Checks:</p>
                 <ul className="space-y-2 text-sm">
@@ -416,9 +447,15 @@ export default function PhaseGatesPage() {
                 <p className="font-medium">How to Use:</p>
                 <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
                   <li>Browse tickets currently in the workflow</li>
-                  <li>Click &quot;Validate Gate&quot; to check if a ticket can advance</li>
+                  <li>
+                    Click &quot;Validate Gate&quot; to check if a ticket can
+                    advance
+                  </li>
                   <li>Review any blocking reasons if validation fails</li>
-                  <li>Ticket phases are updated via the board or ticket detail pages</li>
+                  <li>
+                    Ticket phases are updated via the board or ticket detail
+                    pages
+                  </li>
                 </ol>
               </div>
             </CardContent>
@@ -427,7 +464,10 @@ export default function PhaseGatesPage() {
       </Tabs>
 
       {/* Review Dialog */}
-      <Dialog open={!!selectedTicketId} onOpenChange={() => setSelectedTicketId(null)}>
+      <Dialog
+        open={!!selectedTicketId}
+        onOpenChange={() => setSelectedTicketId(null)}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Validate Phase Gate</DialogTitle>
@@ -447,24 +487,23 @@ export default function PhaseGatesPage() {
                     {selectedApproval.requestedPhase.replace("PHASE_", "")}
                   </Badge>
                 </div>
-                <Badge variant="outline">
-                  {selectedApproval.status}
-                </Badge>
+                <Badge variant="outline">{selectedApproval.status}</Badge>
               </div>
 
               <Separator />
 
               <div className="rounded-lg bg-muted p-4">
                 <p className="text-sm">
-                  Click &quot;Validate Gate&quot; to check if this ticket meets all the 
-                  requirements to transition from{" "}
+                  Click &quot;Validate Gate&quot; to check if this ticket meets
+                  all the requirements to transition from{" "}
                   <span className="font-mono font-medium">
                     {selectedApproval.currentPhase.replace("PHASE_", "")}
-                  </span>
-                  {" "}to{" "}
+                  </span>{" "}
+                  to{" "}
                   <span className="font-mono font-medium">
                     {selectedApproval.requestedPhase.replace("PHASE_", "")}
-                  </span>.
+                  </span>
+                  .
                 </p>
               </div>
 
@@ -478,19 +517,21 @@ export default function PhaseGatesPage() {
                       <XCircle className="h-5 w-5 text-red-500" />
                     )}
                     <span>
-                      {validateGateMutation.data.requirements_met 
-                        ? "All requirements met - ready to advance" 
+                      {validateGateMutation.data.requirements_met
+                        ? "All requirements met - ready to advance"
                         : "Some requirements not met"}
                     </span>
                   </div>
                   {validateGateMutation.data.blocking_reasons?.length > 0 && (
                     <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                      {validateGateMutation.data.blocking_reasons.map((reason: string, i: number) => (
-                        <li key={i} className="flex items-center gap-2">
-                          <XCircle className="h-3 w-3 text-red-500" />
-                          {reason}
-                        </li>
-                      ))}
+                      {validateGateMutation.data.blocking_reasons.map(
+                        (reason: string, i: number) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <XCircle className="h-3 w-3 text-red-500" />
+                            {reason}
+                          </li>
+                        ),
+                      )}
                     </ul>
                   )}
                 </div>
@@ -501,8 +542,14 @@ export default function PhaseGatesPage() {
             <Button variant="outline" onClick={() => setSelectedTicketId(null)}>
               Close
             </Button>
-            <Button 
-              onClick={() => selectedApproval && handleValidateGate(selectedApproval.id, selectedApproval.currentPhase)}
+            <Button
+              onClick={() =>
+                selectedApproval &&
+                handleValidateGate(
+                  selectedApproval.id,
+                  selectedApproval.currentPhase,
+                )
+              }
               disabled={validateGateMutation.isPending}
             >
               <Check className="mr-2 h-4 w-4" />
@@ -512,5 +559,5 @@ export default function PhaseGatesPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

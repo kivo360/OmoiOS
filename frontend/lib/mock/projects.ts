@@ -1,13 +1,13 @@
 export interface MockProject {
-  id: string
-  name: string
-  description?: string
-  repo: string
-  ticketCount: number
-  activeAgents: number
-  lastActivity: Date
-  status: "active" | "paused" | "archived"
-  organizationId: string
+  id: string;
+  name: string;
+  description?: string;
+  repo: string;
+  ticketCount: number;
+  activeAgents: number;
+  lastActivity: Date;
+  status: "active" | "paused" | "archived";
+  organizationId: string;
 }
 
 export const mockProjects: MockProject[] = [
@@ -66,20 +66,20 @@ export const mockProjects: MockProject[] = [
     status: "paused",
     organizationId: "org-001",
   },
-]
+];
 
 export function getProjectById(id: string): MockProject | undefined {
-  return mockProjects.find((project) => project.id === id)
+  return mockProjects.find((project) => project.id === id);
 }
 
 export function getProjectByRepo(repo: string): MockProject | undefined {
-  return mockProjects.find((project) => project.repo === repo)
+  return mockProjects.find((project) => project.repo === repo);
 }
 
 export function getProjectsByOrganization(orgId: string): MockProject[] {
-  return mockProjects.filter((project) => project.organizationId === orgId)
+  return mockProjects.filter((project) => project.organizationId === orgId);
 }
 
 export function getActiveProjects(): MockProject[] {
-  return mockProjects.filter((project) => project.status === "active")
+  return mockProjects.filter((project) => project.status === "active");
 }

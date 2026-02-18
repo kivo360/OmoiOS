@@ -1,19 +1,19 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useSearchParams } from "next/navigation"
-import { Progress } from "@/components/ui/progress"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft, ChevronRight, ChevronLeft } from "lucide-react"
-import { useOnboarding, type OnboardingStep } from "@/hooks/useOnboarding"
-import { OnboardingChecklist } from "./OnboardingChecklist"
-import { WelcomeStep } from "./steps/WelcomeStep"
-import { GitHubStep } from "./steps/GitHubStep"
-import { RepoSelectStep } from "./steps/RepoSelectStep"
-import { FirstSpecStep } from "./steps/FirstSpecStep"
-import { PlanSelectStep } from "./steps/PlanSelectStep"
-import { CompleteStep } from "./steps/CompleteStep"
-import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, ChevronRight, ChevronLeft } from "lucide-react";
+import { useOnboarding, type OnboardingStep } from "@/hooks/useOnboarding";
+import { OnboardingChecklist } from "./OnboardingChecklist";
+import { WelcomeStep } from "./steps/WelcomeStep";
+import { GitHubStep } from "./steps/GitHubStep";
+import { RepoSelectStep } from "./steps/RepoSelectStep";
+import { FirstSpecStep } from "./steps/FirstSpecStep";
+import { PlanSelectStep } from "./steps/PlanSelectStep";
+import { CompleteStep } from "./steps/CompleteStep";
+import { cn } from "@/lib/utils";
 
 const STEP_COMPONENTS: Record<OnboardingStep, React.ComponentType> = {
   welcome: WelcomeStep,
@@ -22,7 +22,7 @@ const STEP_COMPONENTS: Record<OnboardingStep, React.ComponentType> = {
   "first-spec": FirstSpecStep,
   plan: PlanSelectStep,
   complete: CompleteStep,
-}
+};
 
 const STEP_TITLES: Record<OnboardingStep, string> = {
   welcome: "Welcome",
@@ -31,11 +31,11 @@ const STEP_TITLES: Record<OnboardingStep, string> = {
   "first-spec": "First Feature",
   plan: "Choose Plan",
   complete: "All Set!",
-}
+};
 
 export function OnboardingWizard() {
-  const searchParams = useSearchParams()
-  const [checklistExpanded, setChecklistExpanded] = useState(true)
+  const searchParams = useSearchParams();
+  const [checklistExpanded, setChecklistExpanded] = useState(true);
   const {
     currentStep,
     progress,
@@ -43,30 +43,30 @@ export function OnboardingWizard() {
     prevStep,
     goToStep,
     checkGitHubConnection,
-  } = useOnboarding()
+  } = useOnboarding();
 
   // Handle return from GitHub OAuth (including the new connect flow)
   useEffect(() => {
-    const step = searchParams.get("step")
-    const githubConnected = searchParams.get("github_connected")
-    const githubUsername = searchParams.get("github_username")
+    const step = searchParams.get("step");
+    const githubConnected = searchParams.get("github_connected");
+    const githubUsername = searchParams.get("github_username");
 
     if (githubConnected === "true") {
       // Check connection status from server (this updates the store)
-      checkGitHubConnection()
+      checkGitHubConnection();
 
       // If username is provided in URL (from connect callback), ensure it's captured
       if (githubUsername) {
-        console.log(`GitHub connected as @${githubUsername}`)
+        console.log(`GitHub connected as @${githubUsername}`);
       }
     }
 
     if (step && isValidStep(step)) {
-      goToStep(step as OnboardingStep)
+      goToStep(step as OnboardingStep);
     }
-  }, [searchParams, goToStep, checkGitHubConnection])
+  }, [searchParams, goToStep, checkGitHubConnection]);
 
-  const StepComponent = STEP_COMPONENTS[currentStep]
+  const StepComponent = STEP_COMPONENTS[currentStep];
 
   return (
     <div className="flex gap-6 justify-center">
@@ -106,10 +106,12 @@ export function OnboardingWizard() {
       </div>
 
       {/* Sidebar checklist - hidden on mobile */}
-      <div className={cn(
-        "hidden lg:block transition-all duration-300 shrink-0",
-        checklistExpanded ? "w-64" : "w-10"
-      )}>
+      <div
+        className={cn(
+          "hidden lg:block transition-all duration-300 shrink-0",
+          checklistExpanded ? "w-64" : "w-10",
+        )}
+      >
         <div className="sticky top-8">
           {/* Toggle button */}
           <Button
@@ -126,20 +128,33 @@ export function OnboardingWizard() {
           </Button>
 
           {/* Checklist content */}
-          <div className={cn(
-            "transition-all duration-300",
-            checklistExpanded ? "opacity-100" : "opacity-0 pointer-events-none w-0 overflow-hidden"
-          )}>
+          <div
+            className={cn(
+              "transition-all duration-300",
+              checklistExpanded
+                ? "opacity-100"
+                : "opacity-0 pointer-events-none w-0 overflow-hidden",
+            )}
+          >
             <div className="p-4 rounded-2xl border bg-card shadow-sm">
-              <OnboardingChecklist showPostOnboarding={currentStep === "complete"} />
+              <OnboardingChecklist
+                showPostOnboarding={currentStep === "complete"}
+              />
             </div>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function isValidStep(step: string): step is OnboardingStep {
-  return ["welcome", "github", "repo", "first-spec", "plan", "complete"].includes(step)
+  return [
+    "welcome",
+    "github",
+    "repo",
+    "first-spec",
+    "plan",
+    "complete",
+  ].includes(step);
 }

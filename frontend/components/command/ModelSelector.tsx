@@ -1,32 +1,32 @@
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useState } from "react";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 export interface Model {
-  id: string
-  name: string
-  description?: string
+  id: string;
+  name: string;
+  description?: string;
 }
 
 const defaultModels: Model[] = [
   { id: "opus-4.5", name: "Opus 4.5", description: "Most capable" },
   { id: "sonnet-4", name: "Sonnet 4", description: "Balanced" },
   { id: "haiku-3", name: "Haiku 3", description: "Fast" },
-]
+];
 
 interface ModelSelectorProps {
-  models?: Model[]
-  value?: string
-  onValueChange?: (value: string) => void
-  className?: string
+  models?: Model[];
+  value?: string;
+  onValueChange?: (value: string) => void;
+  className?: string;
 }
 
 export function ModelSelector({
@@ -35,12 +35,12 @@ export function ModelSelector({
   onValueChange,
   className,
 }: ModelSelectorProps) {
-  const [selectedModel, setSelectedModel] = useState(value || models[0]?.id)
+  const [selectedModel, setSelectedModel] = useState(value || models[0]?.id);
 
   const handleChange = (newValue: string) => {
-    setSelectedModel(newValue)
-    onValueChange?.(newValue)
-  }
+    setSelectedModel(newValue);
+    onValueChange?.(newValue);
+  };
 
   return (
     <Select value={selectedModel} onValueChange={handleChange}>
@@ -62,5 +62,5 @@ export function ModelSelector({
         ))}
       </SelectContent>
     </Select>
-  )
+  );
 }

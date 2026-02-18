@@ -1,30 +1,45 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { cn } from "@/lib/utils"
-import { Loader2, Check, X, AlertCircle, Clock, ShieldCheck, MoreVertical } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import {
+  Loader2,
+  Check,
+  X,
+  AlertCircle,
+  Clock,
+  ShieldCheck,
+  MoreVertical,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 
-export type TaskStatus = "pending" | "assigned" | "running" | "completed" | "failed" | "pending_validation" | "validating"
+export type TaskStatus =
+  | "pending"
+  | "assigned"
+  | "running"
+  | "completed"
+  | "failed"
+  | "pending_validation"
+  | "validating";
 
 interface TaskCardProps {
-  id: string
-  sandboxId: string | null
-  title: string | null
-  taskType: string
-  status: TaskStatus
-  timeAgo: string
-  isSelected?: boolean
-  className?: string
-  onMarkFailed?: (taskId: string) => void
+  id: string;
+  sandboxId: string | null;
+  title: string | null;
+  taskType: string;
+  status: TaskStatus;
+  timeAgo: string;
+  isSelected?: boolean;
+  className?: string;
+  onMarkFailed?: (taskId: string) => void;
   /** When false, shows full text without truncation. Default true */
-  compact?: boolean
+  compact?: boolean;
 }
 
 const statusConfig = {
@@ -63,7 +78,7 @@ const statusConfig = {
     iconClass: "animate-spin text-purple-500",
     label: "Validating",
   },
-}
+};
 
 export function TaskCard({
   id,
@@ -77,17 +92,23 @@ export function TaskCard({
   onMarkFailed,
   compact = true,
 }: TaskCardProps) {
-  const normalizedStatus = normalizeStatus(status)
-  const { icon: StatusIcon, iconClass, label: statusLabel } = statusConfig[normalizedStatus]
+  const normalizedStatus = normalizeStatus(status);
+  const {
+    icon: StatusIcon,
+    iconClass,
+    label: statusLabel,
+  } = statusConfig[normalizedStatus];
 
   // Display title if available, otherwise fall back to task type
-  const displayName = title || taskType || "Untitled Task"
+  const displayName = title || taskType || "Untitled Task";
 
   // Link to sandbox if available, otherwise to task
-  const href = sandboxId ? `/sandbox/${sandboxId}` : `/tasks/${id}`
+  const href = sandboxId ? `/sandbox/${sandboxId}` : `/tasks/${id}`;
 
   // Can mark as failed if running, assigned, or pending
-  const canMarkFailed = onMarkFailed && ["running", "assigned", "pending"].includes(normalizedStatus)
+  const canMarkFailed =
+    onMarkFailed &&
+    ["running", "assigned", "pending"].includes(normalizedStatus);
 
   // Expanded (non-compact) view
   if (!compact) {
@@ -96,7 +117,7 @@ export function TaskCard({
         className={cn(
           "group relative rounded-lg border bg-card p-3 transition-colors duration-150 hover:bg-accent",
           isSelected && "bg-accent border-l-2 border-l-primary",
-          className
+          className,
         )}
       >
         <Link href={href} className="block">
@@ -104,7 +125,9 @@ export function TaskCard({
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5">
               <StatusIcon className={cn("h-3.5 w-3.5", iconClass)} />
-              <span className="text-xs font-medium text-muted-foreground">{statusLabel}</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                {statusLabel}
+              </span>
             </div>
             <span className="text-xs text-muted-foreground">{timeAgo}</span>
           </div>
@@ -131,8 +154,8 @@ export function TaskCard({
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 onClick={(e) => {
-                  e.preventDefault()
-                  onMarkFailed(id)
+                  e.preventDefault();
+                  onMarkFailed(id);
                 }}
                 className="text-destructive focus:text-destructive"
               >
@@ -143,7 +166,7 @@ export function TaskCard({
           </DropdownMenu>
         )}
       </div>
-    )
+    );
   }
 
   // Compact view (default)
@@ -152,7 +175,7 @@ export function TaskCard({
       className={cn(
         "group relative rounded-md p-2 transition-colors duration-150 hover:bg-accent",
         isSelected && "bg-accent border-l-2 border-l-primary",
-        className
+        className,
       )}
     >
       <Link href={href} className="block">
@@ -164,7 +187,9 @@ export function TaskCard({
               {displayName}
             </p>
           </div>
-          <span className="shrink-0 text-xs text-muted-foreground">{timeAgo}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {timeAgo}
+          </span>
         </div>
       </Link>
 
@@ -185,8 +210,8 @@ export function TaskCard({
           <DropdownMenuContent align="end">
             <DropdownMenuItem
               onClick={(e) => {
-                e.preventDefault()
-                onMarkFailed(id)
+                e.preventDefault();
+                onMarkFailed(id);
               }}
               className="text-destructive focus:text-destructive"
             >
@@ -197,32 +222,32 @@ export function TaskCard({
         </DropdownMenu>
       )}
     </div>
-  )
+  );
 }
 
 function normalizeStatus(status: string): TaskStatus {
-  const lower = status.toLowerCase()
+  const lower = status.toLowerCase();
   switch (lower) {
     case "pending":
-      return "pending"
+      return "pending";
     case "assigned":
-      return "assigned"
+      return "assigned";
     case "running":
     case "active":
-      return "running"
+      return "running";
     case "completed":
     case "done":
     case "success":
-      return "completed"
+      return "completed";
     case "failed":
     case "error":
     case "cancelled":
-      return "failed"
+      return "failed";
     case "pending_validation":
-      return "pending_validation"
+      return "pending_validation";
     case "validating":
-      return "validating"
+      return "validating";
     default:
-      return "pending"
+      return "pending";
   }
 }

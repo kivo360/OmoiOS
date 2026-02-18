@@ -1,7 +1,13 @@
-export { PromptInput } from "./PromptInput"
-export { ModelSelector, type Model } from "./ModelSelector"
-export { RepoSelector, type Project, type Repository } from "./RepoSelector"
-export { RecentAgentsSidebar, type RecentAgent } from "./RecentAgentsSidebar"
-export { CommandPalette } from "./CommandPalette"
-export { WorkflowModeSelector, workflowModes, getWorkflowModeConfig, type WorkflowMode, type WorkflowModeOption } from "./WorkflowModeSelector"
-export { SpecDrivenSettingsPanel } from "./SpecDrivenSettingsPanel"
+export { PromptInput } from "./PromptInput";
+export { ModelSelector, type Model } from "./ModelSelector";
+export { RepoSelector, type Project, type Repository } from "./RepoSelector";
+export { RecentAgentsSidebar, type RecentAgent } from "./RecentAgentsSidebar";
+export { CommandPalette } from "./CommandPalette";
+export {
+  WorkflowModeSelector,
+  workflowModes,
+  getWorkflowModeConfig,
+  type WorkflowMode,
+  type WorkflowModeOption,
+} from "./WorkflowModeSelector";
+export { SpecDrivenSettingsPanel } from "./SpecDrivenSettingsPanel";

@@ -1,14 +1,20 @@
-"use client"
+"use client";
 
-import { use } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Textarea } from "@/components/ui/textarea"
+import { use } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft,
   ExternalLink,
@@ -21,26 +27,54 @@ import {
   AlertCircle,
   Bot,
   Send,
-} from "lucide-react"
-import { useAgent, useAgentHealth } from "@/hooks/useAgents"
+} from "lucide-react";
+import { useAgent, useAgentHealth } from "@/hooks/useAgents";
 
 interface AgentDetailPageProps {
-  params: Promise<{ agentId: string }>
+  params: Promise<{ agentId: string }>;
 }
 
-const statusConfig: Record<string, { icon: typeof Loader2; color: string; iconClass: string; label: string }> = {
-  healthy: { icon: CheckCircle, color: "success", iconClass: "", label: "Healthy" },
-  unhealthy: { icon: XCircle, color: "destructive", iconClass: "", label: "Unhealthy" },
+const statusConfig: Record<
+  string,
+  { icon: typeof Loader2; color: string; iconClass: string; label: string }
+> = {
+  healthy: {
+    icon: CheckCircle,
+    color: "success",
+    iconClass: "",
+    label: "Healthy",
+  },
+  unhealthy: {
+    icon: XCircle,
+    color: "destructive",
+    iconClass: "",
+    label: "Unhealthy",
+  },
   stale: { icon: AlertCircle, color: "warning", iconClass: "", label: "Stale" },
-  available: { icon: CheckCircle, color: "success", iconClass: "", label: "Available" },
-  busy: { icon: Loader2, color: "warning", iconClass: "animate-spin", label: "Busy" },
-  offline: { icon: XCircle, color: "destructive", iconClass: "", label: "Offline" },
-}
+  available: {
+    icon: CheckCircle,
+    color: "success",
+    iconClass: "",
+    label: "Available",
+  },
+  busy: {
+    icon: Loader2,
+    color: "warning",
+    iconClass: "animate-spin",
+    label: "Busy",
+  },
+  offline: {
+    icon: XCircle,
+    color: "destructive",
+    iconClass: "",
+    label: "Offline",
+  },
+};
 
 export default function AgentDetailPage({ params }: AgentDetailPageProps) {
-  const { agentId } = use(params)
-  const { data: agent, isLoading, error } = useAgent(agentId)
-  const { data: health } = useAgentHealth(agentId)
+  const { agentId } = use(params);
+  const { data: agent, isLoading, error } = useAgent(agentId);
+  const { data: health } = useAgentHealth(agentId);
 
   // Loading state
   if (isLoading) {
@@ -57,7 +91,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
           <Skeleton className="h-[400px] w-full" />
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -73,7 +107,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
           <Link href="/agents">Back to Agents</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   if (!agent) {
@@ -84,12 +118,13 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
           <Link href="/agents">Back to Agents</Link>
         </Button>
       </div>
-    )
+    );
   }
 
-  const healthStatus = health?.health_status || agent.health_status || "available"
-  const config = statusConfig[healthStatus] || statusConfig.available
-  const StatusIcon = config.icon
+  const healthStatus =
+    health?.health_status || agent.health_status || "available";
+  const config = statusConfig[healthStatus] || statusConfig.available;
+  const StatusIcon = config.icon;
 
   return (
     <div className="flex h-[calc(100vh-48px)] flex-col">
@@ -107,14 +142,23 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
             <div className="mt-2 flex items-center gap-3">
               <Bot className="h-6 w-6" />
               <h1 className="text-xl font-bold">{agent.agent_id}</h1>
-              <Badge variant={config.color as "default" | "destructive" | "secondary" | "outline"}>
+              <Badge
+                variant={
+                  config.color as
+                    | "default"
+                    | "destructive"
+                    | "secondary"
+                    | "outline"
+                }
+              >
                 <StatusIcon className={`mr-1 h-3 w-3 ${config.iconClass}`} />
                 {config.label}
               </Badge>
               <Badge variant="outline">{agent.agent_type}</Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Phase: {agent.phase_id} • Capabilities: {agent.capabilities?.join(", ") || "None"}
+              Phase: {agent.phase_id} • Capabilities:{" "}
+              {agent.capabilities?.join(", ") || "None"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -147,44 +191,70 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
               <Card>
                 <CardHeader>
                   <CardTitle>Agent Information</CardTitle>
-                  <CardDescription>Configuration and status details</CardDescription>
+                  <CardDescription>
+                    Configuration and status details
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Agent ID</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Agent ID
+                      </p>
                       <p className="text-sm font-mono">{agent.agent_id}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Agent Type</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Agent Type
+                      </p>
                       <p className="text-sm">{agent.agent_type}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Phase</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Phase
+                      </p>
                       <p className="text-sm">{agent.phase_id}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Status</p>
-                      <p className="text-sm capitalize">{agent.status || "Unknown"}</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Status
+                      </p>
+                      <p className="text-sm capitalize">
+                        {agent.status || "Unknown"}
+                      </p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Health Status</p>
-                      <p className="text-sm capitalize">{agent.health_status || "Unknown"}</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Health Status
+                      </p>
+                      <p className="text-sm capitalize">
+                        {agent.health_status || "Unknown"}
+                      </p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Last Heartbeat</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Last Heartbeat
+                      </p>
                       <p className="text-sm">
-                        {agent.last_heartbeat 
-                          ? new Date(agent.last_heartbeat).toLocaleString() 
+                        {agent.last_heartbeat
+                          ? new Date(agent.last_heartbeat).toLocaleString()
                           : "Never"}
                       </p>
                     </div>
                     <div className="md:col-span-2">
-                      <p className="text-sm font-medium text-muted-foreground">Capabilities</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Capabilities
+                      </p>
                       <div className="flex flex-wrap gap-2 mt-1">
                         {agent.capabilities?.map((cap) => (
-                          <Badge key={cap} variant="outline">{cap}</Badge>
-                        )) || <span className="text-sm text-muted-foreground">None configured</span>}
+                          <Badge key={cap} variant="outline">
+                            {cap}
+                          </Badge>
+                        )) || (
+                          <span className="text-sm text-muted-foreground">
+                            None configured
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -196,35 +266,54 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
               <Card>
                 <CardHeader>
                   <CardTitle>Health Metrics</CardTitle>
-                  <CardDescription>Current health status and metrics</CardDescription>
+                  <CardDescription>
+                    Current health status and metrics
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {health ? (
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Health Status</p>
-                        <Badge 
-                          variant={health.health_status === "healthy" ? "default" : "destructive"}
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Health Status
+                        </p>
+                        <Badge
+                          variant={
+                            health.health_status === "healthy"
+                              ? "default"
+                              : "destructive"
+                          }
                           className="mt-1"
                         >
                           {health.health_status}
                         </Badge>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Last Heartbeat</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Last Heartbeat
+                        </p>
                         <p className="text-sm">
-                          {health.last_heartbeat 
-                            ? new Date(health.last_heartbeat).toLocaleString() 
+                          {health.last_heartbeat
+                            ? new Date(health.last_heartbeat).toLocaleString()
                             : "Never"}
                         </p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Seconds Since Heartbeat</p>
-                        <p className="text-sm">{health.seconds_since_heartbeat ?? "N/A"}</p>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Seconds Since Heartbeat
+                        </p>
+                        <p className="text-sm">
+                          {health.seconds_since_heartbeat ?? "N/A"}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-muted-foreground">Is Stale</p>
-                        <Badge variant={health.is_stale ? "destructive" : "default"} className="mt-1">
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Is Stale
+                        </p>
+                        <Badge
+                          variant={health.is_stale ? "destructive" : "default"}
+                          className="mt-1"
+                        >
                           {health.is_stale ? "Yes" : "No"}
                         </Badge>
                       </div>
@@ -242,11 +331,14 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
               <Card>
                 <CardHeader>
                   <CardTitle>Agent Activity</CardTitle>
-                  <CardDescription>Recent activity log (placeholder)</CardDescription>
+                  <CardDescription>
+                    Recent activity log (placeholder)
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground">
-                    Activity tracking will be available once the agent starts processing tasks.
+                    Activity tracking will be available once the agent starts
+                    processing tasks.
                   </p>
                 </CardContent>
               </Card>
@@ -300,5 +392,5 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }

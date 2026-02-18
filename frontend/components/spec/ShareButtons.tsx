@@ -1,22 +1,27 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { toast } from "sonner"
-import { Copy, Linkedin, Twitter } from "lucide-react"
-import { trackEvent } from "@/lib/analytics/track"
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { Copy, Linkedin, Twitter } from "lucide-react";
+import { trackEvent } from "@/lib/analytics/track";
 
 interface ShareButtonsProps {
-  specTitle: string
-  shareUrl: string
-  specId: string
+  specTitle: string;
+  shareUrl: string;
+  specId: string;
   stats: {
-    requirements: number
-    tasks: number
-    coverage: number
-  }
+    requirements: number;
+    tasks: number;
+    coverage: number;
+  };
 }
 
-export function ShareButtons({ specTitle, shareUrl, specId, stats }: ShareButtonsProps) {
+export function ShareButtons({
+  specTitle,
+  shareUrl,
+  specId,
+  stats,
+}: ShareButtonsProps) {
   const tweetText = [
     `Just shipped "${specTitle}" with @TheGeodexes's OmoiOS`,
     "",
@@ -24,35 +29,35 @@ export function ShareButtons({ specTitle, shareUrl, specId, stats }: ShareButton
     "✅ PR created automatically",
     "",
     shareUrl,
-  ].join("\n")
+  ].join("\n");
 
   const handleShareTwitter = () => {
-    trackEvent("spec_shared", { platform: "twitter", spec_id: specId })
+    trackEvent("spec_shared", { platform: "twitter", spec_id: specId });
     window.open(
       `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
       "_blank",
-      "noopener,noreferrer"
-    )
-  }
+      "noopener,noreferrer",
+    );
+  };
 
   const handleShareLinkedIn = () => {
-    trackEvent("spec_shared", { platform: "linkedin", spec_id: specId })
+    trackEvent("spec_shared", { platform: "linkedin", spec_id: specId });
     window.open(
       `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`,
       "_blank",
-      "noopener,noreferrer"
-    )
-  }
+      "noopener,noreferrer",
+    );
+  };
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(shareUrl)
-      toast.success("Link copied!")
-      trackEvent("spec_shared", { platform: "copy_link", spec_id: specId })
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Link copied!");
+      trackEvent("spec_shared", { platform: "copy_link", spec_id: specId });
     } catch {
-      toast.error("Failed to copy link")
+      toast.error("Failed to copy link");
     }
-  }
+  };
 
   return (
     <div className="flex items-center gap-2">
@@ -69,5 +74,5 @@ export function ShareButtons({ specTitle, shareUrl, specId, stats }: ShareButton
         Copy Link
       </Button>
     </div>
-  )
+  );
 }

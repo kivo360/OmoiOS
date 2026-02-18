@@ -1,7 +1,7 @@
-import { getAllPosts, getAllCategories } from '@/lib/blog';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import type { Metadata } from 'next';
+import { getAllPosts, getAllCategories } from "@/lib/blog";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 
 interface PageProps {
   params: Promise<{ category: string }>;
@@ -13,7 +13,7 @@ export default async function CategoryPage({ params }: PageProps) {
 
   const posts = getAllPosts().filter(
     (post) =>
-      post.data.category?.toLowerCase() === decodedCategory.toLowerCase()
+      post.data.category?.toLowerCase() === decodedCategory.toLowerCase(),
   );
 
   if (posts.length === 0) notFound();
@@ -37,10 +37,10 @@ export default async function CategoryPage({ params }: PageProps) {
                 <span>{post.data.author}</span>
                 <span>•</span>
                 <time dateTime={String(post.data.date)}>
-                  {new Date(post.data.date).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
+                  {new Date(post.data.date).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
                   })}
                 </time>
               </div>

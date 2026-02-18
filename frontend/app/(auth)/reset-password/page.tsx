@@ -1,83 +1,102 @@
-"use client"
+"use client";
 
-import { useState, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { CardDescription, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Loader2, CheckCircle, CheckCircle2, XCircle } from "lucide-react"
-import { resetPassword } from "@/lib/api/auth"
-import { ApiError } from "@/lib/api/client"
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CardDescription, CardTitle } from "@/components/ui/card";
+import {
+  ArrowLeft,
+  Loader2,
+  CheckCircle,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
+import { resetPassword } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
 
 // Password requirements (same as register)
 const PASSWORD_REQUIREMENTS = [
-  { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
-  { id: "uppercase", label: "One uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
-  { id: "lowercase", label: "One lowercase letter", test: (p: string) => /[a-z]/.test(p) },
+  {
+    id: "length",
+    label: "At least 8 characters",
+    test: (p: string) => p.length >= 8,
+  },
+  {
+    id: "uppercase",
+    label: "One uppercase letter",
+    test: (p: string) => /[A-Z]/.test(p),
+  },
+  {
+    id: "lowercase",
+    label: "One lowercase letter",
+    test: (p: string) => /[a-z]/.test(p),
+  },
   { id: "number", label: "One number", test: (p: string) => /\d/.test(p) },
-]
+];
 
 function ResetPasswordForm() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const token = searchParams.get("token")
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token");
 
   const [formData, setFormData] = useState({
     password: "",
     confirmPassword: "",
-  })
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSuccess, setIsSuccess] = useState(false)
-  const [error, setError] = useState("")
-  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false)
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState("");
+  const [showPasswordRequirements, setShowPasswordRequirements] =
+    useState(false);
 
   // Check which password requirements are met
   const passwordChecks = PASSWORD_REQUIREMENTS.map((req) => ({
     ...req,
     met: req.test(formData.password),
-  }))
+  }));
 
-  const allPasswordRequirementsMet = passwordChecks.every((check) => check.met)
+  const allPasswordRequirementsMet = passwordChecks.every((check) => check.met);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
     if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match")
-      setIsLoading(false)
-      return
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
     }
 
     if (!allPasswordRequirementsMet) {
-      setError("Password does not meet all requirements")
-      setIsLoading(false)
-      return
+      setError("Password does not meet all requirements");
+      setIsLoading(false);
+      return;
     }
 
     try {
       await resetPassword({
         token: token!,
         new_password: formData.password,
-      })
+      });
 
-      setIsSuccess(true)
+      setIsSuccess(true);
       setTimeout(() => {
-        router.push("/login")
-      }, 3000)
+        router.push("/login");
+      }, 3000);
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setError(err.message);
       } else {
-        setError("Failed to reset password. Please try again.")
+        setError("Failed to reset password. Please try again.");
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   if (!token) {
     return (
@@ -90,7 +109,7 @@ function ResetPasswordForm() {
           <Link href="/forgot-password">Request a new link</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   if (isSuccess) {
@@ -109,7 +128,7 @@ function ResetPasswordForm() {
           <Link href="/login">Go to login</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -133,13 +152,15 @@ function ResetPasswordForm() {
             type="password"
             placeholder="Create a strong password"
             value={formData.password}
-            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, password: e.target.value })
+            }
             onFocus={() => setShowPasswordRequirements(true)}
             required
             disabled={isLoading}
             autoComplete="new-password"
           />
-          
+
           {/* Password requirements checklist */}
           {showPasswordRequirements && formData.password && (
             <div className="mt-2 space-y-1 text-xs">
@@ -169,14 +190,17 @@ function ResetPasswordForm() {
             type="password"
             placeholder="Confirm your new password"
             value={formData.confirmPassword}
-            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, confirmPassword: e.target.value })
+            }
             required
             disabled={isLoading}
             autoComplete="new-password"
           />
-          {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-            <p className="text-xs text-destructive">Passwords do not match</p>
-          )}
+          {formData.confirmPassword &&
+            formData.password !== formData.confirmPassword && (
+              <p className="text-xs text-destructive">Passwords do not match</p>
+            )}
         </div>
 
         <Button
@@ -199,13 +223,19 @@ function ResetPasswordForm() {
         </Link>
       </div>
     </div>
-  )
+  );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+        </div>
+      }
+    >
       <ResetPasswordForm />
     </Suspense>
-  )
+  );
 }

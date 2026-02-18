@@ -2,17 +2,17 @@
  * React hooks for sandbox operations and real-time events
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useCallback, useState, useMemo, useEffect } from "react"
-import { sandboxApi } from "@/lib/api/sandbox"
-import { useEvents, type SystemEvent } from "./useEvents"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState, useMemo, useEffect } from "react";
+import { sandboxApi } from "@/lib/api/sandbox";
+import { useEvents, type SystemEvent } from "./useEvents";
 import type {
   SandboxEvent,
   SandboxMessage,
   SandboxTask,
   TrajectorySummaryResponse,
   SandboxEventsListResponse,
-} from "@/lib/api/types"
+} from "@/lib/api/types";
 
 // ============================================================================
 // Query Keys
@@ -20,11 +20,14 @@ import type {
 
 export const sandboxKeys = {
   all: ["sandboxes"] as const,
-  events: (sandboxId: string) => [...sandboxKeys.all, "events", sandboxId] as const,
-  trajectory: (sandboxId: string) => [...sandboxKeys.all, "trajectory", sandboxId] as const,
-  messages: (sandboxId: string) => [...sandboxKeys.all, "messages", sandboxId] as const,
+  events: (sandboxId: string) =>
+    [...sandboxKeys.all, "events", sandboxId] as const,
+  trajectory: (sandboxId: string) =>
+    [...sandboxKeys.all, "trajectory", sandboxId] as const,
+  messages: (sandboxId: string) =>
+    [...sandboxKeys.all, "messages", sandboxId] as const,
   task: (sandboxId: string) => [...sandboxKeys.all, "task", sandboxId] as const,
-}
+};
 
 // ============================================================================
 // Hooks for Sandbox Events (HTTP API)
@@ -36,32 +39,39 @@ export const sandboxKeys = {
 export function useSandboxEvents(
   sandboxId: string | null,
   options: {
-    limit?: number
-    offset?: number
-    event_type?: string
-    enabled?: boolean
-  } = {}
+    limit?: number;
+    offset?: number;
+    event_type?: string;
+    enabled?: boolean;
+  } = {},
 ) {
-  const { limit = 100, offset = 0, event_type, enabled = true } = options
+  const { limit = 100, offset = 0, event_type, enabled = true } = options;
 
   return useQuery({
-    queryKey: [...sandboxKeys.events(sandboxId || ""), { limit, offset, event_type }],
-    queryFn: () => sandboxApi.getEvents(sandboxId!, { limit, offset, event_type }),
+    queryKey: [
+      ...sandboxKeys.events(sandboxId || ""),
+      { limit, offset, event_type },
+    ],
+    queryFn: () =>
+      sandboxApi.getEvents(sandboxId!, { limit, offset, event_type }),
     enabled: enabled && !!sandboxId,
-  })
+  });
 }
 
 /**
  * Fetch task associated with a sandbox
  */
-export function useSandboxTask(sandboxId: string | null, options: { enabled?: boolean } = {}) {
-  const { enabled = true } = options
+export function useSandboxTask(
+  sandboxId: string | null,
+  options: { enabled?: boolean } = {},
+) {
+  const { enabled = true } = options;
 
   return useQuery<SandboxTask>({
     queryKey: sandboxKeys.task(sandboxId || ""),
     queryFn: () => sandboxApi.getTask(sandboxId!),
     enabled: enabled && !!sandboxId,
-  })
+  });
 }
 
 /**
@@ -71,19 +81,23 @@ export function useSandboxTask(sandboxId: string | null, options: { enabled?: bo
 export function useSandboxTrajectory(
   sandboxId: string | null,
   options: {
-    limit?: number
-    cursor?: string | null
-    direction?: "older" | "newer"
-    enabled?: boolean
-  } = {}
+    limit?: number;
+    cursor?: string | null;
+    direction?: "older" | "newer";
+    enabled?: boolean;
+  } = {},
 ) {
-  const { limit = 100, cursor, direction, enabled = true } = options
+  const { limit = 100, cursor, direction, enabled = true } = options;
 
   return useQuery({
-    queryKey: [...sandboxKeys.trajectory(sandboxId || ""), { limit, cursor, direction }],
-    queryFn: () => sandboxApi.getTrajectory(sandboxId!, { limit, cursor, direction }),
+    queryKey: [
+      ...sandboxKeys.trajectory(sandboxId || ""),
+      { limit, cursor, direction },
+    ],
+    queryFn: () =>
+      sandboxApi.getTrajectory(sandboxId!, { limit, cursor, direction }),
     enabled: enabled && !!sandboxId,
-  })
+  });
 }
 
 // ============================================================================
@@ -96,12 +110,12 @@ export function useSandboxTrajectory(
 export function useSandboxRealtimeEvents(
   sandboxId: string | null,
   options: {
-    enabled?: boolean
-    onEvent?: (event: SandboxEvent) => void
-  } = {}
+    enabled?: boolean;
+    onEvent?: (event: SandboxEvent) => void;
+  } = {},
 ) {
-  const { enabled = true, onEvent } = options
-  const [events, setEvents] = useState<SandboxEvent[]>([])
+  const { enabled = true, onEvent } = options;
+  const [events, setEvents] = useState<SandboxEvent[]>([]);
 
   // Transform WebSocket event to SandboxEvent
   const handleEvent = useCallback(
@@ -109,17 +123,21 @@ export function useSandboxRealtimeEvents(
       const sandboxEvent: SandboxEvent = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         sandbox_id: systemEvent.entity_id,
-        event_type: (systemEvent.payload.original_event_type as string) || systemEvent.event_type,
+        event_type:
+          (systemEvent.payload.original_event_type as string) ||
+          systemEvent.event_type,
         event_data: systemEvent.payload,
-        source: (systemEvent.payload.source as "agent" | "worker" | "system") || "agent",
+        source:
+          (systemEvent.payload.source as "agent" | "worker" | "system") ||
+          "agent",
         created_at: new Date().toISOString(),
-      }
+      };
 
-      setEvents((prev) => [sandboxEvent, ...prev].slice(0, 500))
-      onEvent?.(sandboxEvent)
+      setEvents((prev) => [sandboxEvent, ...prev].slice(0, 500));
+      onEvent?.(sandboxEvent);
     },
-    [onEvent]
-  )
+    [onEvent],
+  );
 
   // Subscribe to sandbox events via WebSocket
   const { isConnected, isConnecting, error, clearEvents } = useEvents({
@@ -132,12 +150,12 @@ export function useSandboxRealtimeEvents(
       : undefined,
     onEvent: handleEvent,
     maxEvents: 500,
-  })
+  });
 
   const clear = useCallback(() => {
-    setEvents([])
-    clearEvents()
-  }, [clearEvents])
+    setEvents([]);
+    clearEvents();
+  }, [clearEvents]);
 
   return {
     events,
@@ -145,7 +163,7 @@ export function useSandboxRealtimeEvents(
     isConnecting,
     error,
     clearEvents: clear,
-  }
+  };
 }
 
 // ============================================================================
@@ -156,29 +174,39 @@ export function useSandboxRealtimeEvents(
  * Send a message to a sandbox
  */
 export function useSendSandboxMessage() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ sandboxId, message }: { sandboxId: string; message: SandboxMessage }) =>
-      sandboxApi.sendMessage(sandboxId, message),
+    mutationFn: ({
+      sandboxId,
+      message,
+    }: {
+      sandboxId: string;
+      message: SandboxMessage;
+    }) => sandboxApi.sendMessage(sandboxId, message),
     onSuccess: (_, { sandboxId }) => {
       // Invalidate messages query
-      queryClient.invalidateQueries({ queryKey: sandboxKeys.messages(sandboxId) })
+      queryClient.invalidateQueries({
+        queryKey: sandboxKeys.messages(sandboxId),
+      });
     },
-  })
+  });
 }
 
 /**
  * Get pending messages for a sandbox
  */
-export function useSandboxMessages(sandboxId: string | null, options: { enabled?: boolean } = {}) {
-  const { enabled = true } = options
+export function useSandboxMessages(
+  sandboxId: string | null,
+  options: { enabled?: boolean } = {},
+) {
+  const { enabled = true } = options;
 
   return useQuery({
     queryKey: sandboxKeys.messages(sandboxId || ""),
     queryFn: () => sandboxApi.getMessages(sandboxId!),
     enabled: enabled && !!sandboxId,
-  })
+  });
 }
 
 // ============================================================================
@@ -190,13 +218,13 @@ export function useSandboxMessages(sandboxId: string | null, options: { enabled?
  * and cursor-based infinite scroll pagination.
  */
 export function useSandboxMonitor(sandboxId: string | null) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   // State for infinite scroll pagination
-  const [olderEvents, setOlderEvents] = useState<SandboxEvent[]>([])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [olderEvents, setOlderEvents] = useState<SandboxEvent[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Real-time events
   const {
@@ -207,7 +235,7 @@ export function useSandboxMonitor(sandboxId: string | null) {
     clearEvents,
   } = useSandboxRealtimeEvents(sandboxId, {
     enabled: !!sandboxId,
-  })
+  });
 
   // Historical events (for initial load)
   // Request 100 events per page (events are returned newest-first from API)
@@ -218,57 +246,57 @@ export function useSandboxMonitor(sandboxId: string | null) {
   } = useSandboxTrajectory(sandboxId, {
     limit: 100,
     enabled: !!sandboxId,
-  })
+  });
 
   // Reset pagination state when sandbox changes
   useEffect(() => {
-    setOlderEvents([])
-    setNextCursor(null)
-    setHasMore(false)
-  }, [sandboxId])
+    setOlderEvents([]);
+    setNextCursor(null);
+    setHasMore(false);
+  }, [sandboxId]);
 
   // Update cursor and hasMore when initial data loads
   useEffect(() => {
     if (historicalData) {
-      setNextCursor(historicalData.next_cursor)
-      setHasMore(historicalData.has_more)
+      setNextCursor(historicalData.next_cursor);
+      setHasMore(historicalData.has_more);
     }
-  }, [historicalData])
+  }, [historicalData]);
 
   // Send message mutation
-  const sendMessageMutation = useSendSandboxMessage()
+  const sendMessageMutation = useSendSandboxMessage();
 
   // Memoize historical events reference (initial page)
   // API returns events newest-first, so we reverse to get chronological order for display
   const initialEvents = useMemo(
     () => (historicalData?.events || []).slice().reverse(),
-    [historicalData?.events]
-  )
+    [historicalData?.events],
+  );
 
   // Load more older events (for infinite scroll)
   const loadMoreEvents = useCallback(async () => {
-    if (!sandboxId || !nextCursor || isLoadingMore) return
+    if (!sandboxId || !nextCursor || isLoadingMore) return;
 
-    setIsLoadingMore(true)
+    setIsLoadingMore(true);
     try {
       const data = await sandboxApi.getTrajectory(sandboxId, {
         limit: 100,
         cursor: nextCursor,
         direction: "older",
-      })
+      });
 
       // Reverse to get chronological order (oldest first within this batch)
-      const newEvents = data.events.slice().reverse()
+      const newEvents = data.events.slice().reverse();
       // Prepend older events (they go before the initial events)
-      setOlderEvents((prev) => [...newEvents, ...prev])
-      setNextCursor(data.next_cursor)
-      setHasMore(data.has_more)
+      setOlderEvents((prev) => [...newEvents, ...prev]);
+      setNextCursor(data.next_cursor);
+      setHasMore(data.has_more);
     } catch (error) {
-      console.error("Failed to load more events:", error)
+      console.error("Failed to load more events:", error);
     } finally {
-      setIsLoadingMore(false)
+      setIsLoadingMore(false);
     }
-  }, [sandboxId, nextCursor, isLoadingMore])
+  }, [sandboxId, nextCursor, isLoadingMore]);
 
   // Combine all events: older (loaded via infinite scroll) + initial + realtime
   // Order: oldest first (chronological)
@@ -276,45 +304,47 @@ export function useSandboxMonitor(sandboxId: string | null) {
     // olderEvents are already chronological (oldest first)
     // initialEvents are already chronological (oldest first within initial page)
     // realtimeEvents are newest first, so we need to handle them carefully
-    const allEvents = [...olderEvents, ...initialEvents, ...realtimeEvents]
+    const allEvents = [...olderEvents, ...initialEvents, ...realtimeEvents];
 
     // Deduplicate by event ID (most reliable) or fallback to type+timestamp
-    const seen = new Set<string>()
+    const seen = new Set<string>();
     return allEvents.filter((event) => {
-      const key = event.id || `${event.event_type}-${event.created_at}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-  }, [olderEvents, initialEvents, realtimeEvents])
+      const key = event.id || `${event.event_type}-${event.created_at}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [olderEvents, initialEvents, realtimeEvents]);
 
   // Memoize sendMessage callback
   const sendMessage = useCallback(
     (content: string, messageType?: SandboxMessage["message_type"]) => {
-      if (!sandboxId) return
+      if (!sandboxId) return;
       return sendMessageMutation.mutateAsync({
         sandboxId,
         message: { content, message_type: messageType || "user_message" },
-      })
+      });
     },
-    [sandboxId, sendMessageMutation]
-  )
+    [sandboxId, sendMessageMutation],
+  );
 
   // Memoize refresh callback - also clears loaded older events
   const refresh = useCallback(() => {
     if (sandboxId) {
-      setOlderEvents([])
-      setNextCursor(null)
-      setHasMore(false)
-      queryClient.invalidateQueries({ queryKey: sandboxKeys.trajectory(sandboxId) })
+      setOlderEvents([]);
+      setNextCursor(null);
+      setHasMore(false);
+      queryClient.invalidateQueries({
+        queryKey: sandboxKeys.trajectory(sandboxId),
+      });
     }
-  }, [sandboxId, queryClient])
+  }, [sandboxId, queryClient]);
 
   // Clear all events including loaded older events
   const clearAllEvents = useCallback(() => {
-    setOlderEvents([])
-    clearEvents()
-  }, [clearEvents])
+    setOlderEvents([]);
+    clearEvents();
+  }, [clearEvents]);
 
   return {
     // Events
@@ -343,5 +373,5 @@ export function useSandboxMonitor(sandboxId: string | null) {
 
     // Refresh
     refresh,
-  }
+  };
 }

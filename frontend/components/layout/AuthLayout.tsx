@@ -1,16 +1,22 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { OmoiOSLogo } from "@/components/ui/omoios-logo"
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { OmoiOSLogo } from "@/components/ui/omoios-logo";
 
 interface AuthLayoutProps {
-  children: React.ReactNode
-  title: string
-  description?: string
-  showBackLink?: boolean
-  backLinkHref?: string
-  backLinkText?: string
+  children: React.ReactNode;
+  title: string;
+  description?: string;
+  showBackLink?: boolean;
+  backLinkHref?: string;
+  backLinkText?: string;
 }
 
 export function AuthLayout({
@@ -32,19 +38,18 @@ export function AuthLayout({
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">{title}</CardTitle>
-          {description && (
-            <CardDescription>{description}</CardDescription>
-          )}
+          {description && <CardDescription>{description}</CardDescription>}
         </CardHeader>
-        <CardContent>
-          {children}
-        </CardContent>
+        <CardContent>{children}</CardContent>
       </Card>
 
       {/* Back link */}
       {showBackLink && (
         <p className="mt-6 text-sm text-muted-foreground">
-          <Link href={backLinkHref} className="hover:text-foreground underline-offset-4 hover:underline">
+          <Link
+            href={backLinkHref}
+            className="hover:text-foreground underline-offset-4 hover:underline"
+          >
             {backLinkText}
           </Link>
         </p>
@@ -55,5 +60,5 @@ export function AuthLayout({
         <p>© {new Date().getFullYear()} OmoiOS. All rights reserved.</p>
       </footer>
     </div>
-  )
+  );
 }

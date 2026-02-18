@@ -1,11 +1,18 @@
-"use client"
+"use client";
 
-import { createContext, useContext, useEffect, useCallback, useRef, type ReactNode } from "react"
-import { create } from "zustand"
-import { persist } from "zustand/middleware"
-import { useRouter, usePathname } from "next/navigation"
-import type { User } from "@/lib/api/types"
-import { getCurrentUser, logout as apiLogout } from "@/lib/api/auth"
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from "react";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { useRouter, usePathname } from "next/navigation";
+import type { User } from "@/lib/api/types";
+import { getCurrentUser, logout as apiLogout } from "@/lib/api/auth";
 import {
   getAccessToken,
   clearTokens,
@@ -13,32 +20,42 @@ import {
   needsRevalidation,
   shouldRefreshToken,
   setLastValidated,
-} from "@/lib/api/client"
-import { setUserContext, clearUserContext, addNavigationBreadcrumb } from "@/lib/sentry/context"
-import { identifyUser, resetUser, clearOrganization, track, ANALYTICS_EVENTS } from "@/lib/analytics"
+} from "@/lib/api/client";
+import {
+  setUserContext,
+  clearUserContext,
+  addNavigationBreadcrumb,
+} from "@/lib/sentry/context";
+import {
+  identifyUser,
+  resetUser,
+  clearOrganization,
+  track,
+  ANALYTICS_EVENTS,
+} from "@/lib/analytics";
 import {
   initialSync as syncOnboarding,
   setOnboardingCookie,
   checkOnboardingNeeded,
-} from "@/lib/onboarding"
+} from "@/lib/onboarding";
 
 // ============================================================================
 // Auth Store (Zustand)
 // ============================================================================
 
 interface AuthState {
-  user: User | null
-  isLoading: boolean
-  isAuthenticated: boolean
-  error: string | null
-  lastValidatedAt: number | null
+  user: User | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  error: string | null;
+  lastValidatedAt: number | null;
 
   // Actions
-  setUser: (user: User | null) => void
-  setLoading: (loading: boolean) => void
-  setError: (error: string | null) => void
-  setLastValidatedAt: (timestamp: number | null) => void
-  reset: () => void
+  setUser: (user: User | null) => void;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  setLastValidatedAt: (timestamp: number | null) => void;
+  reset: () => void;
 }
 
 const useAuthStore = create<AuthState>()(
@@ -52,12 +69,12 @@ const useAuthStore = create<AuthState>()(
 
       setUser: (user) => {
         // Update Sentry user context for error tracking
-        setUserContext(user)
+        setUserContext(user);
         set({
           user,
           isAuthenticated: !!user,
           error: null,
-        })
+        });
       },
 
       setLoading: (isLoading) => set({ isLoading }),
@@ -68,14 +85,14 @@ const useAuthStore = create<AuthState>()(
 
       reset: () => {
         // Clear Sentry user context
-        clearUserContext()
+        clearUserContext();
         set({
           user: null,
           isLoading: false,
           isAuthenticated: false,
           error: null,
           lastValidatedAt: null,
-        })
+        });
       },
     }),
     {
@@ -86,25 +103,25 @@ const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
         lastValidatedAt: state.lastValidatedAt,
       }),
-    }
-  )
-)
+    },
+  ),
+);
 
 // ============================================================================
 // Auth Context
 // ============================================================================
 
 interface AuthContextValue {
-  user: User | null
-  isLoading: boolean
-  isAuthenticated: boolean
-  error: string | null
-  login: (user: User) => void
-  logout: () => Promise<void>
-  refreshUser: () => Promise<void>
+  user: User | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  error: string | null;
+  login: (user: User) => void;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null)
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 // ============================================================================
 // Auth Provider Component
@@ -123,20 +140,20 @@ const PUBLIC_ROUTES = [
   "/feed.xml",
   "/sitemap.xml",
   "/robots.txt",
-]
+];
 
 // Routes that should redirect to main app if already authenticated
-const AUTH_ROUTES = ["/login", "/register"]
+const AUTH_ROUTES = ["/login", "/register"];
 
 interface AuthProviderProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const isValidatingRef = useRef(false)
-  const hasRedirectedRef = useRef(false)
+  const router = useRouter();
+  const pathname = usePathname();
+  const isValidatingRef = useRef(false);
+  const hasRedirectedRef = useRef(false);
 
   const {
     user,
@@ -148,227 +165,247 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setError,
     setLastValidatedAt,
     reset,
-  } = useAuthStore()
+  } = useAuthStore();
 
   // Check if current route is public
-  const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname?.startsWith(route))
-  const isAuthRoute = AUTH_ROUTES.some((route) => pathname?.startsWith(route))
+  const isPublicRoute = PUBLIC_ROUTES.some((route) =>
+    pathname?.startsWith(route),
+  );
+  const isAuthRoute = AUTH_ROUTES.some((route) => pathname?.startsWith(route));
 
   // Background validation - doesn't block UI
   const validateInBackground = useCallback(async () => {
-    if (isValidatingRef.current) return
-    isValidatingRef.current = true
+    if (isValidatingRef.current) return;
+    isValidatingRef.current = true;
 
     try {
-      const userData = await getCurrentUser()
-      setUser(userData)
-      setLastValidatedAt(Date.now())
-      setLastValidated() // Also update localStorage
+      const userData = await getCurrentUser();
+      setUser(userData);
+      setLastValidatedAt(Date.now());
+      setLastValidated(); // Also update localStorage
 
       // Re-identify user in PostHog (in case session was restored)
-      identifyUser(userData)
+      identifyUser(userData);
     } catch (err) {
-      console.error("Background validation failed:", err)
+      console.error("Background validation failed:", err);
       // Token is invalid - clear everything and redirect
-      reset()
-      clearTokens()
+      reset();
+      clearTokens();
       if (!isPublicRoute && pathname !== "/") {
-        router.push("/login")
+        router.push("/login");
       }
     } finally {
-      isValidatingRef.current = false
+      isValidatingRef.current = false;
     }
-  }, [setUser, setLastValidatedAt, reset, isPublicRoute, pathname, router])
+  }, [setUser, setLastValidatedAt, reset, isPublicRoute, pathname, router]);
 
   // Refresh user data from API (blocking)
   const refreshUser = useCallback(async () => {
-    const token = getAccessToken()
+    const token = getAccessToken();
 
     if (!token) {
-      reset()
-      return
+      reset();
+      return;
     }
 
     try {
-      setLoading(true)
-      const userData = await getCurrentUser()
-      setUser(userData)
-      setLastValidatedAt(Date.now())
-      setLastValidated()
+      setLoading(true);
+      const userData = await getCurrentUser();
+      setUser(userData);
+      setLastValidatedAt(Date.now());
+      setLastValidated();
 
       // Re-identify user in PostHog (in case session was restored)
-      identifyUser(userData)
+      identifyUser(userData);
     } catch (err) {
-      console.error("Failed to refresh user:", err)
-      reset()
-      clearTokens()
+      console.error("Failed to refresh user:", err);
+      reset();
+      clearTokens();
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [setUser, setLoading, setLastValidatedAt, reset])
+  }, [setUser, setLoading, setLastValidatedAt, reset]);
 
   // Login handler - called after successful login API call
   const login = useCallback(
     (userData: User) => {
-      setUser(userData)
-      setLastValidatedAt(Date.now())
+      setUser(userData);
+      setLastValidatedAt(Date.now());
 
       // Identify user in PostHog for analytics
-      identifyUser(userData)
+      identifyUser(userData);
       track(ANALYTICS_EVENTS.USER_LOGGED_IN, {
-        auth_method: 'email',
-      })
+        auth_method: "email",
+      });
     },
-    [setUser, setLastValidatedAt]
-  )
+    [setUser, setLastValidatedAt],
+  );
 
   // Logout handler
   const logout = useCallback(async () => {
     try {
       // Track logout event before resetting
-      track(ANALYTICS_EVENTS.USER_LOGGED_OUT, {})
-      await apiLogout()
+      track(ANALYTICS_EVENTS.USER_LOGGED_OUT, {});
+      await apiLogout();
     } catch (err) {
-      console.error("Logout error:", err)
+      console.error("Logout error:", err);
     } finally {
       // Reset PostHog user identity and organization context
-      clearOrganization()
-      resetUser()
-      reset()
+      clearOrganization();
+      resetUser();
+      reset();
       // Clear onboarding cookie
-      setOnboardingCookie(false)
-      router.push("/login")
+      setOnboardingCookie(false);
+      router.push("/login");
     }
-  }, [reset, router])
+  }, [reset, router]);
 
   // Initial auth check on mount - OPTIMIZED for instant redirects
   useEffect(() => {
-    const token = getAccessToken()
-    const hasPersistedAuth = isAuthenticated && user
+    const token = getAccessToken();
+    const hasPersistedAuth = isAuthenticated && user;
 
     // Case 1: No token at all - not authenticated
     if (!token) {
-      setLoading(false)
-      return
+      setLoading(false);
+      return;
     }
 
     // Case 2: Have token AND persisted auth state AND token is still valid
     // -> Trust the cache, skip blocking API call, validate in background
     if (hasPersistedAuth && isAccessTokenValid()) {
-      setLoading(false) // Immediately ready
+      setLoading(false); // Immediately ready
 
       // Only validate in background if enough time has passed
       if (needsRevalidation()) {
-        validateInBackground()
+        validateInBackground();
       }
-      return
+      return;
     }
 
     // Case 3: Have token but no persisted state, or token expired
     // -> Need to validate (blocking)
     if (token && !hasPersistedAuth) {
-      refreshUser()
-      return
+      refreshUser();
+      return;
     }
 
     // Case 4: Have persisted state but token is expired
     // -> Try to refresh token, if fails then logout
     if (hasPersistedAuth && !isAccessTokenValid()) {
       // Token expired but we have refresh token - attempt silent refresh
-      refreshUser()
-      return
+      refreshUser();
+      return;
     }
 
-    setLoading(false)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    setLoading(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle route protection - FALLBACK for cases middleware misses
   // Primary redirects happen in middleware.ts at the edge (faster)
   // This is a safety net for edge cases (e.g., cookie/localStorage mismatch)
   useEffect(() => {
     // Wait for loading to complete before making redirect decisions
-    if (isLoading) return
+    if (isLoading) return;
 
     // Reset redirect flag when pathname changes
-    hasRedirectedRef.current = false
+    hasRedirectedRef.current = false;
 
     // If not authenticated and trying to access protected route
     if (!isAuthenticated && !isPublicRoute && pathname !== "/") {
-      router.replace("/login")
-      return
+      router.replace("/login");
+      return;
     }
 
     // If authenticated and trying to access auth routes (login/register)
     // Note: Middleware should catch this first, but this is a fallback
     if (isAuthenticated && isAuthRoute && !hasRedirectedRef.current) {
-      hasRedirectedRef.current = true
-      router.replace("/command")
-      return
+      hasRedirectedRef.current = true;
+      router.replace("/command");
+      return;
     }
-  }, [isLoading, isAuthenticated, isPublicRoute, isAuthRoute, pathname, router])
+  }, [
+    isLoading,
+    isAuthenticated,
+    isPublicRoute,
+    isAuthRoute,
+    pathname,
+    router,
+  ]);
 
   // Background token refresh before expiry
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated) return;
 
     const checkTokenRefresh = () => {
       if (shouldRefreshToken()) {
-        validateInBackground()
+        validateInBackground();
       }
-    }
+    };
 
     // Check immediately and then every minute
-    checkTokenRefresh()
-    const interval = setInterval(checkTokenRefresh, 60 * 1000)
+    checkTokenRefresh();
+    const interval = setInterval(checkTokenRefresh, 60 * 1000);
 
-    return () => clearInterval(interval)
-  }, [isAuthenticated, validateInBackground])
+    return () => clearInterval(interval);
+  }, [isAuthenticated, validateInBackground]);
 
   // Onboarding sync and enforcement
   // This syncs onboarding state from server and sets the cookie for middleware
-  const hasCheckedOnboardingRef = useRef(false)
+  const hasCheckedOnboardingRef = useRef(false);
   useEffect(() => {
     // Only check onboarding when authenticated and not loading
-    if (!isAuthenticated || isLoading || hasCheckedOnboardingRef.current) return
+    if (!isAuthenticated || isLoading || hasCheckedOnboardingRef.current)
+      return;
 
     const checkOnboarding = async () => {
       try {
-        hasCheckedOnboardingRef.current = true
+        hasCheckedOnboardingRef.current = true;
 
         // Sync onboarding state from server
-        const syncResult = await syncOnboarding()
+        const syncResult = await syncOnboarding();
 
         // If sync healed inconsistencies, the cookie is already set by syncOnboarding
         if (syncResult.status === "synced" || syncResult.status === "healed") {
           // Check if onboarding is needed and redirect if on protected route
-          const needsOnboarding = await checkOnboardingNeeded()
+          const needsOnboarding = await checkOnboardingNeeded();
 
           // Skip onboarding routes and other exempt routes
-          const isOnboardingRoute = pathname?.startsWith("/onboarding")
-          const isCallbackRoute = pathname?.startsWith("/callback")
-          const isSettingsRoute = pathname?.startsWith("/settings")
+          const isOnboardingRoute = pathname?.startsWith("/onboarding");
+          const isCallbackRoute = pathname?.startsWith("/callback");
+          const isSettingsRoute = pathname?.startsWith("/settings");
 
-          if (needsOnboarding && !isOnboardingRoute && !isCallbackRoute && !isSettingsRoute && !isPublicRoute) {
-            router.replace("/onboarding")
+          if (
+            needsOnboarding &&
+            !isOnboardingRoute &&
+            !isCallbackRoute &&
+            !isSettingsRoute &&
+            !isPublicRoute
+          ) {
+            router.replace("/onboarding");
           }
         }
       } catch (err) {
         // Onboarding sync failed - continue without blocking
-        console.log("Failed to sync onboarding:", err)
+        console.log("Failed to sync onboarding:", err);
       }
-    }
+    };
 
-    checkOnboarding()
-  }, [isAuthenticated, isLoading, pathname, isPublicRoute, router])
+    checkOnboarding();
+  }, [isAuthenticated, isLoading, pathname, isPublicRoute, router]);
 
   // Track navigation changes for Sentry breadcrumbs
-  const previousPathnameRef = useRef<string | null>(null)
+  const previousPathnameRef = useRef<string | null>(null);
   useEffect(() => {
-    if (pathname && previousPathnameRef.current && previousPathnameRef.current !== pathname) {
-      addNavigationBreadcrumb(previousPathnameRef.current, pathname)
+    if (
+      pathname &&
+      previousPathnameRef.current &&
+      previousPathnameRef.current !== pathname
+    ) {
+      addNavigationBreadcrumb(previousPathnameRef.current, pathname);
     }
-    previousPathnameRef.current = pathname
-  }, [pathname])
+    previousPathnameRef.current = pathname;
+  }, [pathname]);
 
   const value: AuthContextValue = {
     user,
@@ -378,9 +415,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     logout,
     refreshUser,
-  }
+  };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // ============================================================================
@@ -388,14 +425,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 // ============================================================================
 
 export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext)
-  
+  const context = useContext(AuthContext);
+
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useAuth must be used within an AuthProvider");
   }
-  
-  return context
+
+  return context;
 }
 
 // Export store for direct access if needed
-export { useAuthStore }
+export { useAuthStore };

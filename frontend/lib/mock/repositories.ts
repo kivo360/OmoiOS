@@ -1,15 +1,15 @@
 export interface MockRepository {
-  id: string
-  fullName: string
-  name: string
-  owner: string
-  description?: string
-  isPrivate: boolean
-  defaultBranch: string
-  updatedAt: Date
-  language?: string
-  isConnected: boolean
-  connectedProjectId?: string
+  id: string;
+  fullName: string;
+  name: string;
+  owner: string;
+  description?: string;
+  isPrivate: boolean;
+  defaultBranch: string;
+  updatedAt: Date;
+  language?: string;
+  isConnected: boolean;
+  connectedProjectId?: string;
 }
 
 export const mockRepositories: MockRepository[] = [
@@ -115,24 +115,26 @@ export const mockRepositories: MockRepository[] = [
     language: "Python",
     isConnected: false,
   },
-]
+];
 
 export function getRepositoryById(id: string): MockRepository | undefined {
-  return mockRepositories.find((repo) => repo.id === id)
+  return mockRepositories.find((repo) => repo.id === id);
 }
 
-export function getRepositoryByFullName(fullName: string): MockRepository | undefined {
-  return mockRepositories.find((repo) => repo.fullName === fullName)
+export function getRepositoryByFullName(
+  fullName: string,
+): MockRepository | undefined {
+  return mockRepositories.find((repo) => repo.fullName === fullName);
 }
 
 export function getConnectedRepositories(): MockRepository[] {
-  return mockRepositories.filter((repo) => repo.isConnected)
+  return mockRepositories.filter((repo) => repo.isConnected);
 }
 
 export function getUnconnectedRepositories(): MockRepository[] {
-  return mockRepositories.filter((repo) => !repo.isConnected)
+  return mockRepositories.filter((repo) => !repo.isConnected);
 }
 
 export function getRepositoriesByOwner(owner: string): MockRepository[] {
-  return mockRepositories.filter((repo) => repo.owner === owner)
+  return mockRepositories.filter((repo) => repo.owner === owner);
 }

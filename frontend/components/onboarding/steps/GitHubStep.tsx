@@ -1,24 +1,19 @@
-"use client"
+"use client";
 
-import { useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { CardTitle, CardDescription } from "@/components/ui/card"
-import { Github, Shield, GitBranch, Loader2, CheckCircle } from "lucide-react"
-import { useOnboarding } from "@/hooks/useOnboarding"
+import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { CardTitle, CardDescription } from "@/components/ui/card";
+import { Github, Shield, GitBranch, Loader2, CheckCircle } from "lucide-react";
+import { useOnboarding } from "@/hooks/useOnboarding";
 
 export function GitHubStep() {
-  const {
-    data,
-    isLoading,
-    connectGitHub,
-    checkGitHubConnection,
-    nextStep,
-  } = useOnboarding()
+  const { data, isLoading, connectGitHub, checkGitHubConnection, nextStep } =
+    useOnboarding();
 
   // Check connection status on mount
   useEffect(() => {
-    checkGitHubConnection()
-  }, [checkGitHubConnection])
+    checkGitHubConnection();
+  }, [checkGitHubConnection]);
 
   // If already connected, show success and auto-advance
   if (data.githubConnected) {
@@ -31,7 +26,10 @@ export function GitHubStep() {
         <div className="space-y-2">
           <CardTitle className="text-2xl">GitHub Connected!</CardTitle>
           <CardDescription>
-            Connected as <span className="font-medium text-foreground">@{data.githubUsername}</span>
+            Connected as{" "}
+            <span className="font-medium text-foreground">
+              @{data.githubUsername}
+            </span>
           </CardDescription>
         </div>
 
@@ -39,7 +37,7 @@ export function GitHubStep() {
           Continue to Select Repository
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -48,7 +46,8 @@ export function GitHubStep() {
       <div className="text-center space-y-2">
         <CardTitle className="text-2xl">Connect Your Code</CardTitle>
         <CardDescription>
-          OmoiOS needs GitHub access to create branches and pull requests for you.
+          OmoiOS needs GitHub access to create branches and pull requests for
+          you.
         </CardDescription>
       </div>
 
@@ -59,7 +58,8 @@ export function GitHubStep() {
         </div>
 
         <p className="mt-4 text-sm text-muted-foreground max-w-xs mx-auto">
-          Click below to authorize OmoiOS with GitHub. You&apos;ll choose which repos to share.
+          Click below to authorize OmoiOS with GitHub. You&apos;ll choose which
+          repos to share.
         </p>
 
         <Button
@@ -105,7 +105,7 @@ export function GitHubStep() {
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
 function SecurityItem({ icon, text }: { icon: React.ReactNode; text: string }) {
@@ -116,5 +116,5 @@ function SecurityItem({ icon, text }: { icon: React.ReactNode; text: string }) {
       </div>
       {text}
     </div>
-  )
+  );
 }

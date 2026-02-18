@@ -1,11 +1,18 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
-import { User, Bot, Code2, Rocket, GitPullRequest, CheckCircle2 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { motion } from "framer-motion";
+import {
+  User,
+  Bot,
+  Code2,
+  Rocket,
+  GitPullRequest,
+  CheckCircle2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface WorkflowDiagramProps {
-  className?: string
+  className?: string;
 }
 
 const agents = [
@@ -40,7 +47,7 @@ const agents = [
     description: "Git workflows, PR creation",
     output: "Pull Request",
   },
-]
+];
 
 export function WorkflowDiagram({ className }: WorkflowDiagramProps) {
   return (
@@ -172,7 +179,7 @@ export function WorkflowDiagram({ className }: WorkflowDiagramProps) {
               className={cn(
                 "relative flex h-16 w-16 items-center justify-center rounded-xl border-2",
                 agent.borderClass,
-                agent.bgClass
+                agent.bgClass,
               )}
             >
               <div className={agent.colorClass}>{agent.icon}</div>
@@ -185,8 +192,12 @@ export function WorkflowDiagram({ className }: WorkflowDiagramProps) {
               )}
             </div>
             <div className="mt-2 text-center">
-              <div className="text-sm font-medium text-foreground">{agent.name}</div>
-              <div className="text-xs text-muted-foreground">{agent.output}</div>
+              <div className="text-sm font-medium text-foreground">
+                {agent.name}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {agent.output}
+              </div>
             </div>
           </motion.div>
         ))}
@@ -220,11 +231,11 @@ export function WorkflowDiagram({ className }: WorkflowDiagramProps) {
         <div className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/50 px-4 py-3">
           <CheckCircle2 className="h-4 w-4 text-success" />
           <span className="text-sm text-muted-foreground">
-            <span className="text-foreground">Human-in-the-Loop:</span> You review the
-            final PR
+            <span className="text-foreground">Human-in-the-Loop:</span> You
+            review the final PR
           </span>
         </div>
       </motion.div>
     </div>
-  )
+  );
 }

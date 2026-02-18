@@ -1,62 +1,62 @@
-"use client"
+"use client";
 
-import { useEffect, useRef, useCallback, useState } from "react"
+import { useEffect, useRef, useCallback, useState } from "react";
 
 interface UseInfiniteScrollTopOptions {
   /**
    * Whether there are more items to load
    */
-  hasMore: boolean
+  hasMore: boolean;
   /**
    * Whether currently loading more items
    */
-  isLoading: boolean
+  isLoading: boolean;
   /**
    * Function to call when the sentinel becomes visible
    */
-  onLoadMore: () => void | Promise<void>
+  onLoadMore: () => void | Promise<void>;
   /**
    * Cooldown period in ms between loads (default: 1500ms)
    * Prevents rapid-fire loads when scrolling to top
    */
-  cooldownMs?: number
+  cooldownMs?: number;
   /**
    * Whether the hook is enabled (default: true)
    */
-  enabled?: boolean
+  enabled?: boolean;
   /**
    * Threshold for IntersectionObserver (0-1, default: 0.1)
    * How much of the sentinel needs to be visible to trigger
    */
-  threshold?: number
+  threshold?: number;
   /**
    * Root margin for IntersectionObserver (default: "100px")
    * Allows triggering before the sentinel is fully visible
    */
-  rootMargin?: string
+  rootMargin?: string;
 }
 
 interface UseInfiniteScrollTopReturn {
   /**
    * Ref to attach to the sentinel element at the top of the list
    */
-  sentinelRef: React.RefObject<HTMLDivElement>
+  sentinelRef: React.RefObject<HTMLDivElement>;
   /**
    * Ref for the scroll container viewport
    */
-  viewportRef: React.RefObject<HTMLDivElement>
+  viewportRef: React.RefObject<HTMLDivElement>;
   /**
    * Whether we're in cooldown period
    */
-  isInCooldown: boolean
+  isInCooldown: boolean;
   /**
    * Call this before loading to capture scroll position
    */
-  captureScrollPosition: () => void
+  captureScrollPosition: () => void;
   /**
    * Call this after loading to restore scroll position
    */
-  restoreScrollPosition: () => void
+  restoreScrollPosition: () => void;
 }
 
 /**
@@ -99,16 +99,16 @@ export function useInfiniteScrollTop({
   threshold = 0.1,
   rootMargin = "100px",
 }: UseInfiniteScrollTopOptions): UseInfiniteScrollTopReturn {
-  const sentinelRef = useRef<HTMLDivElement>(null!)
-  const viewportRef = useRef<HTMLDivElement>(null!)
-  const [isInCooldown, setIsInCooldown] = useState(false)
-  const cooldownTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null!);
+  const viewportRef = useRef<HTMLDivElement>(null!);
+  const [isInCooldown, setIsInCooldown] = useState(false);
+  const cooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Store scroll position data
   const scrollDataRef = useRef<{
-    scrollHeight: number
-    scrollTop: number
-  } | null>(null)
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
 
   // Capture current scroll position before loading more content
   const captureScrollPosition = useCallback(() => {
@@ -116,41 +116,42 @@ export function useInfiniteScrollTop({
       scrollDataRef.current = {
         scrollHeight: viewportRef.current.scrollHeight,
         scrollTop: viewportRef.current.scrollTop,
-      }
+      };
     }
-  }, [])
+  }, []);
 
   // Restore scroll position after content is prepended
   // This keeps the user at the same visual position
   const restoreScrollPosition = useCallback(() => {
     if (viewportRef.current && scrollDataRef.current) {
-      const newScrollHeight = viewportRef.current.scrollHeight
-      const heightDiff = newScrollHeight - scrollDataRef.current.scrollHeight
+      const newScrollHeight = viewportRef.current.scrollHeight;
+      const heightDiff = newScrollHeight - scrollDataRef.current.scrollHeight;
 
       // Add the height difference to maintain visual position
-      viewportRef.current.scrollTop = scrollDataRef.current.scrollTop + heightDiff
-      scrollDataRef.current = null
+      viewportRef.current.scrollTop =
+        scrollDataRef.current.scrollTop + heightDiff;
+      scrollDataRef.current = null;
     }
-  }, [])
+  }, []);
 
   // Start cooldown timer
   const startCooldown = useCallback(() => {
-    setIsInCooldown(true)
+    setIsInCooldown(true);
 
     if (cooldownTimerRef.current) {
-      clearTimeout(cooldownTimerRef.current)
+      clearTimeout(cooldownTimerRef.current);
     }
 
     cooldownTimerRef.current = setTimeout(() => {
-      setIsInCooldown(false)
-      cooldownTimerRef.current = null
-    }, cooldownMs)
-  }, [cooldownMs])
+      setIsInCooldown(false);
+      cooldownTimerRef.current = null;
+    }, cooldownMs);
+  }, [cooldownMs]);
 
   // Handle intersection
   const handleIntersection = useCallback(
     async (entries: IntersectionObserverEntry[]) => {
-      const [entry] = entries
+      const [entry] = entries;
 
       // Only trigger if:
       // 1. Sentinel is intersecting (visible)
@@ -165,33 +166,41 @@ export function useInfiniteScrollTop({
         hasMore &&
         enabled
       ) {
-        startCooldown()
-        captureScrollPosition()
-        await onLoadMore()
+        startCooldown();
+        captureScrollPosition();
+        await onLoadMore();
       }
     },
-    [isLoading, isInCooldown, hasMore, enabled, startCooldown, captureScrollPosition, onLoadMore]
-  )
+    [
+      isLoading,
+      isInCooldown,
+      hasMore,
+      enabled,
+      startCooldown,
+      captureScrollPosition,
+      onLoadMore,
+    ],
+  );
 
   // Set up IntersectionObserver
   useEffect(() => {
-    if (!enabled || !sentinelRef.current) return
+    if (!enabled || !sentinelRef.current) return;
 
     const observer = new IntersectionObserver(handleIntersection, {
       root: viewportRef.current,
       rootMargin,
       threshold,
-    })
+    });
 
-    observer.observe(sentinelRef.current)
+    observer.observe(sentinelRef.current);
 
     return () => {
-      observer.disconnect()
+      observer.disconnect();
       if (cooldownTimerRef.current) {
-        clearTimeout(cooldownTimerRef.current)
+        clearTimeout(cooldownTimerRef.current);
       }
-    }
-  }, [enabled, handleIntersection, rootMargin, threshold])
+    };
+  }, [enabled, handleIntersection, rootMargin, threshold]);
 
   return {
     sentinelRef,
@@ -199,5 +208,5 @@ export function useInfiniteScrollTop({
     isInCooldown,
     captureScrollPosition,
     restoreScrollPosition,
-  }
+  };
 }

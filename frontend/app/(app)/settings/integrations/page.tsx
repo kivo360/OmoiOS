@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
-import { ConnectedAccounts } from "@/components/settings/ConnectedAccounts"
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { ConnectedAccounts } from "@/components/settings/ConnectedAccounts";
 
 export default function IntegrationsSettingsPage() {
   return (
@@ -26,5 +26,5 @@ export default function IntegrationsSettingsPage() {
         <ConnectedAccounts />
       </div>
     </div>
-  )
+  );
 }

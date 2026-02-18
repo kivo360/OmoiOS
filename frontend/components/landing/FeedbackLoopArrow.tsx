@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import { motion, AnimatePresence } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 interface FeedbackLoopArrowProps {
-  show: boolean
-  fromPhase: "testing" | "implementation"
-  toPhase: "implementation" | "requirements"
-  message?: string
-  className?: string
+  show: boolean;
+  fromPhase: "testing" | "implementation";
+  toPhase: "implementation" | "requirements";
+  message?: string;
+  className?: string;
 }
 
 export function FeedbackLoopArrow({
@@ -22,16 +22,16 @@ export function FeedbackLoopArrow({
   const getPath = () => {
     if (fromPhase === "testing" && toPhase === "implementation") {
       // Curved path from testing back to implementation
-      return "M 380,60 C 340,120 260,120 220,60"
+      return "M 380,60 C 340,120 260,120 220,60";
     }
     if (fromPhase === "implementation" && toPhase === "requirements") {
       // Curved path from implementation back to requirements
-      return "M 220,60 C 180,120 100,120 60,60"
+      return "M 220,60 C 180,120 100,120 60,60";
     }
-    return "M 300,50 C 250,100 150,100 100,50"
-  }
+    return "M 300,50 C 250,100 150,100 100,50";
+  };
 
-  const path = getPath()
+  const path = getPath();
 
   return (
     <AnimatePresence>
@@ -123,7 +123,7 @@ export function FeedbackLoopArrow({
         </div>
       )}
     </AnimatePresence>
-  )
+  );
 }
 
 // Simplified version for inline use
@@ -131,8 +131,8 @@ export function SimpleFeedbackArrow({
   show,
   className,
 }: {
-  show: boolean
-  className?: string
+  show: boolean;
+  className?: string;
 }) {
   return (
     <AnimatePresence>
@@ -167,5 +167,5 @@ export function SimpleFeedbackArrow({
         </motion.div>
       )}
     </AnimatePresence>
-  )
+  );
 }

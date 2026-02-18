@@ -1,13 +1,19 @@
-"use client"
+"use client";
 
-import { use } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { use } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeft,
   Settings,
@@ -20,19 +26,19 @@ import {
   ExternalLink,
   Play,
   AlertCircle,
-} from "lucide-react"
-import { useProject, useProjectStats } from "@/hooks/useProjects"
+} from "lucide-react";
+import { useProject, useProjectStats } from "@/hooks/useProjects";
 
 interface ProjectPageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }
 
 export default function ProjectPage({ params }: ProjectPageProps) {
-  const { id } = use(params)
-  
+  const { id } = use(params);
+
   // Fetch project and stats from API
-  const { data: project, isLoading, error } = useProject(id)
-  const { data: stats } = useProjectStats(id)
+  const { data: project, isLoading, error } = useProject(id);
+  const { data: stats } = useProjectStats(id);
 
   // Loading state
   if (isLoading) {
@@ -53,7 +59,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -69,7 +75,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           <Link href="/projects">Back to Projects</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   if (!project) {
@@ -80,12 +86,13 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           <Link href="/projects">Back to Projects</Link>
         </Button>
       </div>
-    )
+    );
   }
 
-  const repoUrl = project.github_owner && project.github_repo 
-    ? `${project.github_owner}/${project.github_repo}` 
-    : null
+  const repoUrl =
+    project.github_owner && project.github_repo
+      ? `${project.github_owner}/${project.github_repo}`
+      : null;
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -103,7 +110,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">{project.name}</h1>
-            <Badge variant={project.status === "active" ? "default" : "secondary"}>
+            <Badge
+              variant={project.status === "active" ? "default" : "secondary"}
+            >
               {project.status}
             </Badge>
           </div>
@@ -148,7 +157,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 <Ticket className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats?.total_tickets ?? 0}</p>
+                <p className="text-2xl font-bold">
+                  {stats?.total_tickets ?? 0}
+                </p>
                 <p className="text-sm text-muted-foreground">Tickets</p>
               </div>
             </div>
@@ -161,7 +172,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 <Bot className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats?.active_agents ?? 0}</p>
+                <p className="text-2xl font-bold">
+                  {stats?.active_agents ?? 0}
+                </p>
                 <p className="text-sm text-muted-foreground">Active Agents</p>
               </div>
             </div>
@@ -174,7 +187,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 <GitBranch className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats?.total_commits ?? 0}</p>
+                <p className="text-2xl font-bold">
+                  {stats?.total_commits ?? 0}
+                </p>
                 <p className="text-sm text-muted-foreground">Commits</p>
               </div>
             </div>
@@ -190,7 +205,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 <p className="text-2xl font-bold">
                   {project.github_connected ? "Yes" : "No"}
                 </p>
-                <p className="text-sm text-muted-foreground">GitHub Connected</p>
+                <p className="text-sm text-muted-foreground">
+                  GitHub Connected
+                </p>
               </div>
             </div>
           </CardContent>
@@ -233,25 +250,39 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Project Details</CardTitle>
-              <CardDescription>Project configuration and settings</CardDescription>
+              <CardDescription>
+                Project configuration and settings
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Default Phase</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Default Phase
+                  </p>
                   <p className="text-sm">{project.default_phase_id}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Status</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Status
+                  </p>
                   <p className="text-sm capitalize">{project.status}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Created</p>
-                  <p className="text-sm">{new Date(project.created_at).toLocaleDateString()}</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Created
+                  </p>
+                  <p className="text-sm">
+                    {new Date(project.created_at).toLocaleDateString()}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
-                  <p className="text-sm">{new Date(project.updated_at).toLocaleDateString()}</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Last Updated
+                  </p>
+                  <p className="text-sm">
+                    {new Date(project.updated_at).toLocaleDateString()}
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -262,20 +293,32 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Tickets by Status</CardTitle>
-              <CardDescription>Distribution of tickets across statuses</CardDescription>
+              <CardDescription>
+                Distribution of tickets across statuses
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {stats?.tickets_by_status && Object.keys(stats.tickets_by_status).length > 0 ? (
+              {stats?.tickets_by_status &&
+              Object.keys(stats.tickets_by_status).length > 0 ? (
                 <div className="space-y-3">
-                  {Object.entries(stats.tickets_by_status).map(([status, count]) => (
-                    <div key={status} className="flex items-center justify-between">
-                      <span className="text-sm capitalize">{status.replace(/_/g, " ")}</span>
-                      <Badge variant="outline">{count}</Badge>
-                    </div>
-                  ))}
+                  {Object.entries(stats.tickets_by_status).map(
+                    ([status, count]) => (
+                      <div
+                        key={status}
+                        className="flex items-center justify-between"
+                      >
+                        <span className="text-sm capitalize">
+                          {status.replace(/_/g, " ")}
+                        </span>
+                        <Badge variant="outline">{count}</Badge>
+                      </div>
+                    ),
+                  )}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No ticket data available yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  No ticket data available yet.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -285,25 +328,35 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Tickets by Phase</CardTitle>
-              <CardDescription>Distribution of tickets across phases</CardDescription>
+              <CardDescription>
+                Distribution of tickets across phases
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {stats?.tickets_by_phase && Object.keys(stats.tickets_by_phase).length > 0 ? (
+              {stats?.tickets_by_phase &&
+              Object.keys(stats.tickets_by_phase).length > 0 ? (
                 <div className="space-y-3">
-                  {Object.entries(stats.tickets_by_phase).map(([phase, count]) => (
-                    <div key={phase} className="flex items-center justify-between">
-                      <span className="text-sm">{phase}</span>
-                      <Badge variant="outline">{count}</Badge>
-                    </div>
-                  ))}
+                  {Object.entries(stats.tickets_by_phase).map(
+                    ([phase, count]) => (
+                      <div
+                        key={phase}
+                        className="flex items-center justify-between"
+                      >
+                        <span className="text-sm">{phase}</span>
+                        <Badge variant="outline">{count}</Badge>
+                      </div>
+                    ),
+                  )}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No phase data available yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  No phase data available yet.
+                </p>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

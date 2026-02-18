@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { useCallback, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { useCallback, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Loader2,
   AlertCircle,
@@ -10,14 +10,14 @@ import {
   Globe,
   RefreshCw,
   ExternalLink,
-} from "lucide-react"
-import type { PreviewSession } from "@/lib/api/types"
+} from "lucide-react";
+import type { PreviewSession } from "@/lib/api/types";
 
 interface PreviewPanelProps {
-  preview: PreviewSession
-  onStop: () => void
-  isStopping: boolean
-  onRefreshData: () => void
+  preview: PreviewSession;
+  onStop: () => void;
+  isStopping: boolean;
+  onRefreshData: () => void;
 }
 
 export function PreviewPanel({
@@ -26,22 +26,22 @@ export function PreviewPanel({
   isStopping,
   onRefreshData,
 }: PreviewPanelProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const refreshIframe = useCallback(() => {
     if (iframeRef.current) {
       // Reload iframe by re-setting src
-      const src = iframeRef.current.src
-      iframeRef.current.src = ""
-      iframeRef.current.src = src
+      const src = iframeRef.current.src;
+      iframeRef.current.src = "";
+      iframeRef.current.src = src;
     }
-  }, [])
+  }, []);
 
   const openInNewTab = useCallback(() => {
     if (preview.preview_url) {
-      window.open(preview.preview_url, "_blank", "noopener,noreferrer")
+      window.open(preview.preview_url, "_blank", "noopener,noreferrer");
     }
-  }, [preview.preview_url])
+  }, [preview.preview_url]);
 
   // Pending / Starting state
   if (preview.status === "pending" || preview.status === "starting") {
@@ -54,7 +54,7 @@ export function PreviewPanel({
             : "Dev server starting..."}
         </p>
       </div>
-    )
+    );
   }
 
   // Failed state
@@ -64,14 +64,16 @@ export function PreviewPanel({
         <AlertCircle className="h-8 w-8 text-destructive" />
         <p className="text-sm font-medium text-destructive">Preview failed</p>
         {preview.error_message && (
-          <p className="max-w-md text-center text-xs">{preview.error_message}</p>
+          <p className="max-w-md text-center text-xs">
+            {preview.error_message}
+          </p>
         )}
         <Button variant="outline" size="sm" onClick={onRefreshData}>
           <RefreshCw className="mr-2 h-3 w-3" />
           Retry
         </Button>
       </div>
-    )
+    );
   }
 
   // Stopped state
@@ -86,7 +88,7 @@ export function PreviewPanel({
           </p>
         )}
       </div>
-    )
+    );
   }
 
   // Ready state — toolbar + iframe
@@ -146,5 +148,5 @@ export function PreviewPanel({
         title="Live Preview"
       />
     </div>
-  )
+  );
 }

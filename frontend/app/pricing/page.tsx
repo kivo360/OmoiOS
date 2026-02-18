@@ -1,6 +1,6 @@
-import { Metadata } from "next"
-import { Check, Zap, Crown, Users, Building2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Metadata } from "next";
+import { Check, Zap, Crown, Users, Building2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardHeader,
@@ -8,10 +8,10 @@ import {
   CardFooter,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
-import Link from "next/link"
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Pricing - OmoiOS | Autonomous Engineering Platform",
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://omoios.dev/pricing",
   },
-}
+};
 
 // Structured data for SEO (JSON-LD)
 const structuredData = {
@@ -71,7 +71,8 @@ const structuredData = {
       priceCurrency: "USD",
       priceValidUntil: "2026-12-31",
       availability: "https://schema.org/InStock",
-      description: "5 agents, 100 workflows/month, priority support, BYO API keys",
+      description:
+        "5 agents, 100 workflows/month, priority support, BYO API keys",
       url: "https://omoios.dev/register?plan=pro",
     },
     {
@@ -108,18 +109,18 @@ const structuredData = {
       url: "https://omoios.dev/register?plan=lifetime",
     },
   ],
-}
+};
 
 interface PricingTier {
-  name: string
-  price: number | string
-  period: string
-  description: string
-  features: string[]
-  cta: string
-  popular?: boolean
-  href: string
-  icon: React.ReactNode
+  name: string;
+  price: number | string;
+  period: string;
+  description: string;
+  features: string[];
+  cta: string;
+  popular?: boolean;
+  href: string;
+  icon: React.ReactNode;
 }
 
 const pricingTiers: PricingTier[] = [
@@ -176,7 +177,7 @@ const pricingTiers: PricingTier[] = [
     cta: "Get Team",
     href: "/register?plan=team",
   },
-]
+];
 
 export default function PricingPage() {
   return (
@@ -195,10 +196,16 @@ export default function PricingPage() {
               OmoiOS
             </Link>
             <nav className="flex items-center gap-6">
-              <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground">
+              <Link
+                href="/docs"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
                 Docs
               </Link>
-              <Link href="/blog" className="text-sm text-muted-foreground hover:text-foreground">
+              <Link
+                href="/blog"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
                 Blog
               </Link>
               <Link href="/pricing" className="text-sm font-medium">
@@ -232,7 +239,8 @@ export default function PricingPage() {
                   key={tier.name}
                   className={cn(
                     "relative flex flex-col",
-                    tier.popular && "border-primary shadow-lg ring-2 ring-primary/20"
+                    tier.popular &&
+                      "border-primary shadow-lg ring-2 ring-primary/20",
                   )}
                 >
                   {tier.popular && (
@@ -254,9 +262,13 @@ export default function PricingPage() {
                   <CardContent className="flex-1">
                     <div className="mb-6">
                       <span className="text-4xl font-bold">
-                        {typeof tier.price === "number" ? `$${tier.price}` : tier.price}
+                        {typeof tier.price === "number"
+                          ? `$${tier.price}`
+                          : tier.price}
                       </span>
-                      <span className="text-muted-foreground">{tier.period}</span>
+                      <span className="text-muted-foreground">
+                        {tier.period}
+                      </span>
                     </div>
 
                     <ul className="space-y-3">
@@ -298,7 +310,8 @@ export default function PricingPage() {
                     <div>
                       <h2 className="text-2xl font-bold">BYO Platform</h2>
                       <p className="text-muted-foreground mt-1">
-                        Bring your own LLM API keys — unlimited workflows at the lowest price
+                        Bring your own LLM API keys — unlimited workflows at the
+                        lowest price
                       </p>
                     </div>
                   </div>
@@ -318,7 +331,10 @@ export default function PricingPage() {
                         "Bring your own API keys",
                         "Community support",
                       ].map((feature) => (
-                        <li key={feature} className="flex items-center gap-2 text-sm">
+                        <li
+                          key={feature}
+                          className="flex items-center gap-2 text-sm"
+                        >
                           <Check className="h-4 w-4 text-primary" />
                           {feature}
                         </li>
@@ -327,7 +343,8 @@ export default function PricingPage() {
                   </div>
                   <div className="flex flex-col justify-center">
                     <p className="text-muted-foreground mb-4">
-                      Already have an Anthropic or OpenAI API key? Get unlimited workflows for just $19/month.
+                      Already have an Anthropic or OpenAI API key? Get unlimited
+                      workflows for just $19/month.
                     </p>
                     <Button size="lg" asChild>
                       <Link href="/register?plan=byo">Get BYO Platform</Link>
@@ -367,7 +384,10 @@ export default function PricingPage() {
                         "No recurring charges ever",
                         "Founding member badge",
                       ].map((feature) => (
-                        <li key={feature} className="flex items-center gap-2 text-sm">
+                        <li
+                          key={feature}
+                          className="flex items-center gap-2 text-sm"
+                        >
                           <Check className="h-4 w-4 text-primary" />
                           {feature}
                         </li>
@@ -376,10 +396,13 @@ export default function PricingPage() {
                   </div>
                   <div className="flex flex-col justify-center">
                     <p className="text-muted-foreground mb-4">
-                      Lock in lifetime access at our founding price. Limited availability.
+                      Lock in lifetime access at our founding price. Limited
+                      availability.
                     </p>
                     <Button size="lg" asChild>
-                      <Link href="/register?plan=lifetime">Claim Lifetime Access</Link>
+                      <Link href="/register?plan=lifetime">
+                        Claim Lifetime Access
+                      </Link>
                     </Button>
                   </div>
                 </div>
@@ -395,7 +418,8 @@ export default function PricingPage() {
                     <div>
                       <h2 className="text-2xl font-bold">Enterprise</h2>
                       <p className="text-muted-foreground mt-1">
-                        For organizations that need maximum power and flexibility
+                        For organizations that need maximum power and
+                        flexibility
                       </p>
                     </div>
                   </div>
@@ -407,7 +431,9 @@ export default function PricingPage() {
 
                 <div className="grid md:grid-cols-2 gap-6 mt-8">
                   <div>
-                    <h3 className="font-semibold mb-3">Everything in Team, plus:</h3>
+                    <h3 className="font-semibold mb-3">
+                      Everything in Team, plus:
+                    </h3>
                     <ul className="space-y-2">
                       {[
                         "Unlimited concurrent agents",
@@ -419,7 +445,10 @@ export default function PricingPage() {
                         "Dedicated success manager",
                         "Training & onboarding",
                       ].map((feature) => (
-                        <li key={feature} className="flex items-center gap-2 text-sm">
+                        <li
+                          key={feature}
+                          className="flex items-center gap-2 text-sm"
+                        >
                           <Check className="h-4 w-4 text-primary" />
                           {feature}
                         </li>
@@ -428,7 +457,8 @@ export default function PricingPage() {
                   </div>
                   <div className="flex flex-col justify-center">
                     <p className="text-muted-foreground mb-4">
-                      Get a custom quote based on your team size and requirements.
+                      Get a custom quote based on your team size and
+                      requirements.
                     </p>
                     <Button size="lg" asChild>
                       <a href="mailto:enterprise@omoios.dev">Talk to Sales</a>
@@ -453,41 +483,46 @@ export default function PricingPage() {
               <div>
                 <h3 className="font-semibold">What counts as a workflow?</h3>
                 <p className="text-muted-foreground mt-1">
-                  A workflow is a complete feature spec that goes through the full
-                  OmoiOS pipeline: Requirements → Design → Tasks → Execution. Each
-                  spec you submit counts as one workflow.
+                  A workflow is a complete feature spec that goes through the
+                  full OmoiOS pipeline: Requirements → Design → Tasks →
+                  Execution. Each spec you submit counts as one workflow.
                 </p>
               </div>
               <div>
                 <h3 className="font-semibold">Can I bring my own API keys?</h3>
                 <p className="text-muted-foreground mt-1">
-                  Yes! Pro, Team, and Enterprise plans support Bring Your Own Keys
-                  (BYO). Connect your Anthropic, OpenAI, or other LLM provider keys
-                  to use your own API credits.
+                  Yes! Pro, Team, and Enterprise plans support Bring Your Own
+                  Keys (BYO). Connect your Anthropic, OpenAI, or other LLM
+                  provider keys to use your own API credits.
                 </p>
               </div>
               <div>
-                <h3 className="font-semibold">What happens if I exceed my workflow limit?</h3>
+                <h3 className="font-semibold">
+                  What happens if I exceed my workflow limit?
+                </h3>
                 <p className="text-muted-foreground mt-1">
-                  Your workflows will queue until the next billing cycle, or you can
-                  upgrade your plan. The BYO Platform tier offers unlimited workflows
-                  for just $19/month when you bring your own API keys.
+                  Your workflows will queue until the next billing cycle, or you
+                  can upgrade your plan. The BYO Platform tier offers unlimited
+                  workflows for just $19/month when you bring your own API keys.
                 </p>
               </div>
               <div>
                 <h3 className="font-semibold">Is there a free trial?</h3>
                 <p className="text-muted-foreground mt-1">
-                  The Starter plan is free forever with 5 workflows per month. For
-                  Pro and Team plans, we offer a 14-day money-back guarantee.
+                  The Starter plan is free forever with 5 workflows per month.
+                  For Pro and Team plans, we offer a 14-day money-back
+                  guarantee.
                 </p>
               </div>
               <div>
-                <h3 className="font-semibold">How does OmoiOS compare to Devin?</h3>
+                <h3 className="font-semibold">
+                  How does OmoiOS compare to Devin?
+                </h3>
                 <p className="text-muted-foreground mt-1">
-                  OmoiOS is spec-driven with full visibility into what agents are
-                  doing. You approve the plan, see the dependency graph, and every
-                  task traces back to requirements. Devin is $500/seat; OmoiOS Pro
-                  starts at $50/month with 5 parallel agents.
+                  OmoiOS is spec-driven with full visibility into what agents
+                  are doing. You approve the plan, see the dependency graph, and
+                  every task traces back to requirements. Devin is $500/seat;
+                  OmoiOS Pro starts at $50/month with 5 parallel agents.
                 </p>
               </div>
             </div>
@@ -526,5 +561,5 @@ export default function PricingPage() {
         </footer>
       </main>
     </>
-  )
+  );
 }

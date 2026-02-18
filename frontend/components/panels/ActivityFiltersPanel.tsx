@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { 
-  Activity, 
-  Search, 
+import { useState } from "react";
+import {
+  Activity,
+  Search,
   ChevronDown,
   GitCommit,
   Brain,
@@ -15,34 +15,38 @@ import {
   Bot,
   User,
   Cpu,
-} from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 interface FilterSectionProps {
-  title: string
-  children: React.ReactNode
-  defaultOpen?: boolean
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
 }
 
-function FilterSection({ title, children, defaultOpen = true }: FilterSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
+function FilterSection({
+  title,
+  children,
+  defaultOpen = true,
+}: FilterSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -51,7 +55,7 @@ function FilterSection({ title, children, defaultOpen = true }: FilterSectionPro
         <ChevronDown
           className={cn(
             "h-4 w-4 text-muted-foreground transition-transform",
-            isOpen && "rotate-180"
+            isOpen && "rotate-180",
           )}
         />
       </CollapsibleTrigger>
@@ -59,7 +63,7 @@ function FilterSection({ title, children, defaultOpen = true }: FilterSectionPro
         {children}
       </CollapsibleContent>
     </Collapsible>
-  )
+  );
 }
 
 export function ActivityFiltersPanel() {
@@ -72,15 +76,15 @@ export function ActivityFiltersPanel() {
     prOpened: true,
     ticketStatus: true,
     tasksGenerated: true,
-  })
+  });
 
-  const [actorFilter, setActorFilter] = useState("all")
-  const [projectFilter, setProjectFilter] = useState("all")
-  const [timeRange, setTimeRange] = useState("all")
+  const [actorFilter, setActorFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [timeRange, setTimeRange] = useState("all");
 
   const toggleActivityType = (type: keyof typeof activityTypes) => {
-    setActivityTypes((prev) => ({ ...prev, [type]: !prev[type] }))
-  }
+    setActivityTypes((prev) => ({ ...prev, [type]: !prev[type] }));
+  };
 
   const clearFilters = () => {
     setActivityTypes({
@@ -92,11 +96,11 @@ export function ActivityFiltersPanel() {
       prOpened: true,
       ticketStatus: true,
       tasksGenerated: true,
-    })
-    setActorFilter("all")
-    setProjectFilter("all")
-    setTimeRange("all")
-  }
+    });
+    setActorFilter("all");
+    setProjectFilter("all");
+    setTimeRange("all");
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -108,10 +112,7 @@ export function ActivityFiltersPanel() {
         </div>
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search activities..."
-            className="pl-8 h-9"
-          />
+          <Input placeholder="Search activities..." className="pl-8 h-9" />
         </div>
       </div>
 
@@ -127,7 +128,10 @@ export function ActivityFiltersPanel() {
                   checked={activityTypes.commit}
                   onCheckedChange={() => toggleActivityType("commit")}
                 />
-                <Label htmlFor="commit" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="commit"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <GitCommit className="h-3.5 w-3.5 text-blue-500" />
                   Commits
                 </Label>
@@ -138,7 +142,10 @@ export function ActivityFiltersPanel() {
                   checked={activityTypes.decision}
                   onCheckedChange={() => toggleActivityType("decision")}
                 />
-                <Label htmlFor="decision" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="decision"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <Brain className="h-3.5 w-3.5 text-purple-500" />
                   Decisions
                 </Label>
@@ -149,7 +156,10 @@ export function ActivityFiltersPanel() {
                   checked={activityTypes.comment}
                   onCheckedChange={() => toggleActivityType("comment")}
                 />
-                <Label htmlFor="comment" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="comment"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <MessageSquare className="h-3.5 w-3.5 text-gray-500" />
                   Comments
                 </Label>
@@ -160,7 +170,10 @@ export function ActivityFiltersPanel() {
                   checked={activityTypes.taskComplete}
                   onCheckedChange={() => toggleActivityType("taskComplete")}
                 />
-                <Label htmlFor="taskComplete" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="taskComplete"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
                   Task Completions
                 </Label>
@@ -171,7 +184,10 @@ export function ActivityFiltersPanel() {
                   checked={activityTypes.error}
                   onCheckedChange={() => toggleActivityType("error")}
                 />
-                <Label htmlFor="error" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="error"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <XCircle className="h-3.5 w-3.5 text-red-500" />
                   Errors
                 </Label>
@@ -182,7 +198,10 @@ export function ActivityFiltersPanel() {
                   checked={activityTypes.prOpened}
                   onCheckedChange={() => toggleActivityType("prOpened")}
                 />
-                <Label htmlFor="prOpened" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="prOpened"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <FileCode className="h-3.5 w-3.5 text-orange-500" />
                   Pull Requests
                 </Label>
@@ -193,7 +212,10 @@ export function ActivityFiltersPanel() {
                   checked={activityTypes.ticketStatus}
                   onCheckedChange={() => toggleActivityType("ticketStatus")}
                 />
-                <Label htmlFor="ticketStatus" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="ticketStatus"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <Ticket className="h-3.5 w-3.5 text-yellow-500" />
                   Ticket Updates
                 </Label>
@@ -204,7 +226,10 @@ export function ActivityFiltersPanel() {
                   checked={activityTypes.tasksGenerated}
                   onCheckedChange={() => toggleActivityType("tasksGenerated")}
                 />
-                <Label htmlFor="tasksGenerated" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="tasksGenerated"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <Cpu className="h-3.5 w-3.5 text-indigo-500" />
                   Tasks Generated
                 </Label>
@@ -288,5 +313,5 @@ export function ActivityFiltersPanel() {
         </Button>
       </div>
     </div>
-  )
+  );
 }

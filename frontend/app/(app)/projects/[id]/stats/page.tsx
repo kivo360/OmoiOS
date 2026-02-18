@@ -1,20 +1,26 @@
-"use client"
+"use client";
 
-import { use, useState, useMemo } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { use, useState, useMemo } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   ArrowLeft,
   TrendingUp,
@@ -34,48 +40,58 @@ import {
   Timer,
   FileCode,
   Download,
-} from "lucide-react"
-import { useProject, useProjectStats } from "@/hooks/useProjects"
-import { useAgents } from "@/hooks/useAgents"
-import { useTickets } from "@/hooks/useTickets"
-import { PHASES } from "@/lib/phases-config"
+} from "lucide-react";
+import { useProject, useProjectStats } from "@/hooks/useProjects";
+import { useAgents } from "@/hooks/useAgents";
+import { useTickets } from "@/hooks/useTickets";
+import { PHASES } from "@/lib/phases-config";
 
 interface StatsPageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }
 
 // Phase colors for display
 const phaseColors: Record<string, string> = {
-  "PHASE_BACKLOG": "#6b7280",
-  "PHASE_REQUIREMENTS": "#8b5cf6",
-  "PHASE_DESIGN": "#3b82f6",
-  "PHASE_IMPLEMENTATION": "#22c55e",
-  "PHASE_TESTING": "#f59e0b",
-  "PHASE_REVIEW": "#ec4899",
-  "PHASE_DONE": "#10b981",
-}
+  PHASE_BACKLOG: "#6b7280",
+  PHASE_REQUIREMENTS: "#8b5cf6",
+  PHASE_DESIGN: "#3b82f6",
+  PHASE_IMPLEMENTATION: "#22c55e",
+  PHASE_TESTING: "#f59e0b",
+  PHASE_REVIEW: "#ec4899",
+  PHASE_DONE: "#10b981",
+};
 
 export default function StatsPage({ params }: StatsPageProps) {
-  const { id: projectId } = use(params)
-  const [timeRange, setTimeRange] = useState("7d")
+  const { id: projectId } = use(params);
+  const [timeRange, setTimeRange] = useState("7d");
 
-  const { data: project, isLoading: projectLoading, error: projectError } = useProject(projectId)
-  const { data: projectStats, isLoading: statsLoading } = useProjectStats(projectId)
-  const { data: agentsData } = useAgents()
-  const { data: ticketsData } = useTickets()
+  const {
+    data: project,
+    isLoading: projectLoading,
+    error: projectError,
+  } = useProject(projectId);
+  const { data: projectStats, isLoading: statsLoading } =
+    useProjectStats(projectId);
+  const { data: agentsData } = useAgents();
+  const { data: ticketsData } = useTickets();
 
-  const isLoading = projectLoading || statsLoading
+  const isLoading = projectLoading || statsLoading;
 
   // Calculate stats from real data
   const stats = useMemo(() => {
-    if (!projectStats) return null
+    if (!projectStats) return null;
 
-    const totalTickets = projectStats.total_tickets
-    const completedTickets = projectStats.tickets_by_status["done"] || 0
-    const inProgress = projectStats.tickets_by_status["in_progress"] || 0
-    const blocked = projectStats.tickets_by_status["blocked"] || 0
-    const pending = (projectStats.tickets_by_status["open"] || 0) + (projectStats.tickets_by_status["todo"] || 0)
-    const completionRate = totalTickets > 0 ? Math.round((completedTickets / totalTickets) * 100) : 0
+    const totalTickets = projectStats.total_tickets;
+    const completedTickets = projectStats.tickets_by_status["done"] || 0;
+    const inProgress = projectStats.tickets_by_status["in_progress"] || 0;
+    const blocked = projectStats.tickets_by_status["blocked"] || 0;
+    const pending =
+      (projectStats.tickets_by_status["open"] || 0) +
+      (projectStats.tickets_by_status["todo"] || 0);
+    const completionRate =
+      totalTickets > 0
+        ? Math.round((completedTickets / totalTickets) * 100)
+        : 0;
 
     return {
       overview: {
@@ -119,25 +135,25 @@ export default function StatsPage({ params }: StatsPageProps) {
           documentation: 0,
         },
       },
-    }
-  }, [projectStats])
+    };
+  }, [projectStats]);
 
   // Calculate tickets by phase from real data
   const ticketsByPhase = useMemo(() => {
-    if (!projectStats?.tickets_by_phase) return []
-    
-    return PHASES.map(phase => ({
+    if (!projectStats?.tickets_by_phase) return [];
+
+    return PHASES.map((phase) => ({
       phase: phase.name,
       count: projectStats.tickets_by_phase[phase.id] || 0,
       color: phaseColors[phase.id] || "#6b7280",
-    })).filter(p => p.count > 0 || PHASES.find(ph => ph.name === p.phase))
-  }, [projectStats])
+    })).filter((p) => p.count > 0 || PHASES.find((ph) => ph.name === p.phase));
+  }, [projectStats]);
 
   // Get project-specific agents
   const projectAgents = useMemo(() => {
-    if (!agentsData) return []
-    return agentsData.filter(a => a.tags?.includes(`project:${projectId}`))
-  }, [agentsData, projectId])
+    if (!agentsData) return [];
+    return agentsData.filter((a) => a.tags?.includes(`project:${projectId}`));
+  }, [agentsData, projectId]);
 
   // Weekly activity placeholder (would need time-series API)
   const weeklyActivity = [
@@ -148,9 +164,9 @@ export default function StatsPage({ params }: StatsPageProps) {
     { day: "Fri", commits: 0, tasks: 0 },
     { day: "Sat", commits: 0, tasks: 0 },
     { day: "Sun", commits: 0, tasks: 0 },
-  ]
+  ];
 
-  const maxBarHeight = Math.max(...weeklyActivity.map((d) => d.commits), 1)
+  const maxBarHeight = Math.max(...weeklyActivity.map((d) => d.commits), 1);
 
   if (isLoading) {
     return (
@@ -171,7 +187,7 @@ export default function StatsPage({ params }: StatsPageProps) {
         </div>
         <Skeleton className="h-64 w-full" />
       </div>
-    )
+    );
   }
 
   if (projectError || !project) {
@@ -182,7 +198,7 @@ export default function StatsPage({ params }: StatsPageProps) {
           <Link href="/projects">Back to Projects</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   // Use fallback values if stats not loaded yet
@@ -228,7 +244,7 @@ export default function StatsPage({ params }: StatsPageProps) {
         documentation: 0,
       },
     },
-  }
+  };
 
   return (
     <div className="container mx-auto max-w-7xl p-6 space-y-6">
@@ -272,25 +288,37 @@ export default function StatsPage({ params }: StatsPageProps) {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Completion Rate
+            </CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{displayStats.overview.completionRate}%</div>
-            <Progress value={displayStats.overview.completionRate} className="mt-2 h-2" />
+            <div className="text-2xl font-bold">
+              {displayStats.overview.completionRate}%
+            </div>
+            <Progress
+              value={displayStats.overview.completionRate}
+              className="mt-2 h-2"
+            />
             <p className="text-xs text-muted-foreground mt-2">
-              {displayStats.overview.completedTickets} of {displayStats.overview.totalTickets} tickets
+              {displayStats.overview.completedTickets} of{" "}
+              {displayStats.overview.totalTickets} tickets
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Avg Cycle Time</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Avg Cycle Time
+            </CardTitle>
             <Timer className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{displayStats.overview.avgCycleTime}</div>
+            <div className="text-2xl font-bold">
+              {displayStats.overview.avgCycleTime}
+            </div>
             <div className="flex items-center gap-1 mt-2">
               <Badge variant="outline" className="text-green-600">
                 <TrendingDown className="mr-1 h-3 w-3" />
@@ -309,7 +337,9 @@ export default function StatsPage({ params }: StatsPageProps) {
             <Bot className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{displayStats.agents.active}</div>
+            <div className="text-2xl font-bold">
+              {displayStats.agents.active}
+            </div>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-xs text-muted-foreground">
                 {displayStats.agents.idle} idle
@@ -331,7 +361,9 @@ export default function StatsPage({ params }: StatsPageProps) {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${displayStats.cost.totalCost.toFixed(2)}</div>
+            <div className="text-2xl font-bold">
+              ${displayStats.cost.totalCost.toFixed(2)}
+            </div>
             <div className="flex items-center gap-1 mt-2">
               <Badge variant="outline" className="text-green-600">
                 <TrendingDown className="mr-1 h-3 w-3" />
@@ -373,7 +405,9 @@ export default function StatsPage({ params }: StatsPageProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Tickets by Phase</CardTitle>
-                <CardDescription>Distribution across workflow phases</CardDescription>
+                <CardDescription>
+                  Distribution across workflow phases
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -385,11 +419,21 @@ export default function StatsPage({ params }: StatsPageProps) {
                       />
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium">{phase.phase}</span>
-                          <span className="text-sm text-muted-foreground">{phase.count}</span>
+                          <span className="text-sm font-medium">
+                            {phase.phase}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {phase.count}
+                          </span>
                         </div>
                         <Progress
-                          value={displayStats.overview.totalTickets > 0 ? (phase.count / displayStats.overview.totalTickets) * 100 : 0}
+                          value={
+                            displayStats.overview.totalTickets > 0
+                              ? (phase.count /
+                                  displayStats.overview.totalTickets) *
+                                100
+                              : 0
+                          }
                           className="h-2"
                           style={
                             {
@@ -408,7 +452,9 @@ export default function StatsPage({ params }: StatsPageProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Status Summary</CardTitle>
-                <CardDescription>Current ticket status breakdown</CardDescription>
+                <CardDescription>
+                  Current ticket status breakdown
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4">
@@ -455,7 +501,9 @@ export default function StatsPage({ params }: StatsPageProps) {
                 </div>
                 <div className="mt-4 pt-4 border-t">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Velocity Trend</span>
+                    <span className="text-muted-foreground">
+                      Velocity Trend
+                    </span>
                     <Badge variant="outline" className="text-green-600">
                       <TrendingUp className="mr-1 h-3 w-3" />
                       {displayStats.overview.velocityTrend}
@@ -491,7 +539,9 @@ export default function StatsPage({ params }: StatsPageProps) {
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <Bot className="h-4 w-4" />
-                            <span className="font-medium">{agent.agent_id.slice(0, 8)}</span>
+                            <span className="font-medium">
+                              {agent.agent_id.slice(0, 8)}
+                            </span>
                             {i === 0 && (
                               <Badge variant="default" className="text-xs">
                                 <Zap className="mr-1 h-3 w-3" />
@@ -499,18 +549,32 @@ export default function StatsPage({ params }: StatsPageProps) {
                               </Badge>
                             )}
                           </div>
-                          <Badge variant={agent.status === "active" ? "default" : "secondary"}>
+                          <Badge
+                            variant={
+                              agent.status === "active"
+                                ? "default"
+                                : "secondary"
+                            }
+                          >
                             {agent.status}
                           </Badge>
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
-                            <span className="text-muted-foreground">Type: </span>
-                            <span className="font-medium">{agent.agent_type}</span>
+                            <span className="text-muted-foreground">
+                              Type:{" "}
+                            </span>
+                            <span className="font-medium">
+                              {agent.agent_type}
+                            </span>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Phase: </span>
-                            <span className="font-medium">{agent.phase_id?.replace("PHASE_", "") || "N/A"}</span>
+                            <span className="text-muted-foreground">
+                              Phase:{" "}
+                            </span>
+                            <span className="font-medium">
+                              {agent.phase_id?.replace("PHASE_", "") || "N/A"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -529,25 +593,42 @@ export default function StatsPage({ params }: StatsPageProps) {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Total Tasks Completed</span>
-                    <span className="text-2xl font-bold">{displayStats.agents.completedTasks}</span>
+                    <span className="text-2xl font-bold">
+                      {displayStats.agents.completedTasks}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Average Task Duration</span>
-                    <span className="text-lg font-medium">{displayStats.agents.avgTaskTime}</span>
+                    <span className="text-lg font-medium">
+                      {displayStats.agents.avgTaskTime}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Tasks in Queue</span>
                     <span className="text-lg font-medium">
-                      {displayStats.agents.totalTasks - displayStats.agents.completedTasks}
+                      {displayStats.agents.totalTasks -
+                        displayStats.agents.completedTasks}
                     </span>
                   </div>
                   <Progress
-                    value={displayStats.agents.totalTasks > 0 ? (displayStats.agents.completedTasks / displayStats.agents.totalTasks) * 100 : 0}
+                    value={
+                      displayStats.agents.totalTasks > 0
+                        ? (displayStats.agents.completedTasks /
+                            displayStats.agents.totalTasks) *
+                          100
+                        : 0
+                    }
                     className="h-3"
                   />
                   <p className="text-xs text-muted-foreground text-center">
-                    {displayStats.agents.totalTasks > 0 ? Math.round((displayStats.agents.completedTasks / displayStats.agents.totalTasks) * 100) : 0}%
-                    of tasks completed
+                    {displayStats.agents.totalTasks > 0
+                      ? Math.round(
+                          (displayStats.agents.completedTasks /
+                            displayStats.agents.totalTasks) *
+                            100,
+                        )
+                      : 0}
+                    % of tasks completed
                   </p>
                 </div>
               </CardContent>
@@ -561,24 +642,35 @@ export default function StatsPage({ params }: StatsPageProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Code Activity</CardTitle>
-                <CardDescription>Weekly commit and task activity</CardDescription>
+                <CardDescription>
+                  Weekly commit and task activity
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex items-end justify-between h-40 gap-2">
                   {weeklyActivity.map((day) => (
-                    <div key={day.day} className="flex-1 flex flex-col items-center gap-1">
+                    <div
+                      key={day.day}
+                      className="flex-1 flex flex-col items-center gap-1"
+                    >
                       <div
                         className="w-full bg-primary/80 rounded-t"
-                        style={{ height: `${(day.commits / maxBarHeight) * 100}%` }}
+                        style={{
+                          height: `${(day.commits / maxBarHeight) * 100}%`,
+                        }}
                       />
-                      <span className="text-xs text-muted-foreground">{day.day}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {day.day}
+                      </span>
                     </div>
                   ))}
                 </div>
                 <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t">
                   <div className="flex items-center gap-2">
                     <div className="h-3 w-3 rounded bg-primary/80" />
-                    <span className="text-sm text-muted-foreground">Commits</span>
+                    <span className="text-sm text-muted-foreground">
+                      Commits
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -596,23 +688,31 @@ export default function StatsPage({ params }: StatsPageProps) {
                       <GitCommit className="h-4 w-4" />
                       Total Commits
                     </div>
-                    <p className="text-2xl font-bold">{displayStats.code.totalCommits}</p>
+                    <p className="text-2xl font-bold">
+                      {displayStats.code.totalCommits}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <FileCode className="h-4 w-4" />
                       Files Changed
                     </div>
-                    <p className="text-2xl font-bold">{displayStats.code.filesChanged}</p>
+                    <p className="text-2xl font-bold">
+                      {displayStats.code.filesChanged}
+                    </p>
                   </div>
                   <div className="space-y-1">
-                    <div className="text-sm text-muted-foreground">Lines Added</div>
+                    <div className="text-sm text-muted-foreground">
+                      Lines Added
+                    </div>
                     <p className="text-xl font-bold text-green-600">
                       +{displayStats.code.linesAdded.toLocaleString()}
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <div className="text-sm text-muted-foreground">Lines Removed</div>
+                    <div className="text-sm text-muted-foreground">
+                      Lines Removed
+                    </div>
                     <p className="text-xl font-bold text-red-600">
                       -{displayStats.code.linesRemoved.toLocaleString()}
                     </p>
@@ -621,9 +721,14 @@ export default function StatsPage({ params }: StatsPageProps) {
                 <div className="mt-4 pt-4 border-t">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm">Test Coverage</span>
-                    <span className="font-medium">{displayStats.code.testCoverage}%</span>
+                    <span className="font-medium">
+                      {displayStats.code.testCoverage}%
+                    </span>
                   </div>
-                  <Progress value={displayStats.code.testCoverage} className="h-2" />
+                  <Progress
+                    value={displayStats.code.testCoverage}
+                    className="h-2"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -640,17 +745,23 @@ export default function StatsPage({ params }: StatsPageProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {Object.entries(displayStats.cost.breakdown).map(([key, value]) => (
-                    <div key={key} className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium capitalize">{key}</span>
-                          <span className="text-sm text-muted-foreground">{value}%</span>
+                  {Object.entries(displayStats.cost.breakdown).map(
+                    ([key, value]) => (
+                      <div key={key} className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium capitalize">
+                              {key}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              {value}%
+                            </span>
+                          </div>
+                          <Progress value={value} className="h-2" />
                         </div>
-                        <Progress value={value} className="h-2" />
                       </div>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -663,25 +774,35 @@ export default function StatsPage({ params }: StatsPageProps) {
               <CardContent>
                 <div className="space-y-4">
                   <div className="p-4 rounded-lg bg-muted/50">
-                    <div className="text-sm text-muted-foreground">Total Tokens Used</div>
+                    <div className="text-sm text-muted-foreground">
+                      Total Tokens Used
+                    </div>
                     <p className="text-2xl font-bold">
                       {(displayStats.cost.totalTokens / 1000000).toFixed(2)}M
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 rounded-lg bg-muted/50">
-                      <div className="text-sm text-muted-foreground">Total Cost</div>
-                      <p className="text-xl font-bold">${displayStats.cost.totalCost.toFixed(2)}</p>
+                      <div className="text-sm text-muted-foreground">
+                        Total Cost
+                      </div>
+                      <p className="text-xl font-bold">
+                        ${displayStats.cost.totalCost.toFixed(2)}
+                      </p>
                     </div>
                     <div className="p-4 rounded-lg bg-muted/50">
-                      <div className="text-sm text-muted-foreground">Cost/Ticket</div>
+                      <div className="text-sm text-muted-foreground">
+                        Cost/Ticket
+                      </div>
                       <p className="text-xl font-bold">
                         ${displayStats.cost.avgCostPerTicket.toFixed(2)}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between pt-4 border-t">
-                    <span className="text-sm text-muted-foreground">Cost Trend (vs last period)</span>
+                    <span className="text-sm text-muted-foreground">
+                      Cost Trend (vs last period)
+                    </span>
                     <Badge variant="outline" className="text-green-600">
                       <TrendingDown className="mr-1 h-3 w-3" />
                       {displayStats.cost.costTrend}
@@ -694,5 +815,5 @@ export default function StatsPage({ params }: StatsPageProps) {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

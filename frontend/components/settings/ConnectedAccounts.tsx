@@ -1,11 +1,17 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,21 +22,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Github, Mail, GitlabIcon, Loader2, Check, Link2, Link2Off, ExternalLink } from "lucide-react"
+} from "@/components/ui/alert-dialog";
+import {
+  Github,
+  Mail,
+  GitlabIcon,
+  Loader2,
+  Check,
+  Link2,
+  Link2Off,
+  ExternalLink,
+} from "lucide-react";
 import {
   getOAuthProviders,
   getConnectedProviders,
   disconnectProvider,
   startOAuthFlow,
-} from "@/lib/api/oauth"
-import type { OAuthProvider, ConnectedProvider } from "@/lib/api/types"
+} from "@/lib/api/oauth";
+import type { OAuthProvider, ConnectedProvider } from "@/lib/api/types";
 
 interface ProviderConfig {
-  name: string
-  icon: React.ComponentType<{ className?: string }>
-  description: string
-  scopes: string[]
+  name: string;
+  icon: React.ComponentType<{ className?: string }>;
+  description: string;
+  scopes: string[];
 }
 
 const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
@@ -52,81 +67,99 @@ const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     description: "Connect GitLab for repository access",
     scopes: ["Profile", "Email"],
   },
-}
+};
 
 export function ConnectedAccounts() {
-  const [availableProviders, setAvailableProviders] = useState<OAuthProvider[]>([])
-  const [connectedProviders, setConnectedProviders] = useState<ConnectedProvider[]>([])
-  const [loading, setLoading] = useState(true)
-  const [connecting, setConnecting] = useState<string | null>(null)
-  const [disconnecting, setDisconnecting] = useState<string | null>(null)
+  const [availableProviders, setAvailableProviders] = useState<OAuthProvider[]>(
+    [],
+  );
+  const [connectedProviders, setConnectedProviders] = useState<
+    ConnectedProvider[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
   // Fetch providers on mount
   useEffect(() => {
-    fetchProviders()
-  }, [])
+    fetchProviders();
+  }, []);
 
   const fetchProviders = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
       const [available, connected] = await Promise.all([
         getOAuthProviders(),
         getConnectedProviders().catch(() => ({ providers: [] })),
-      ])
-      setAvailableProviders(available.providers)
-      setConnectedProviders(connected.providers)
+      ]);
+      setAvailableProviders(available.providers);
+      setConnectedProviders(connected.providers);
     } catch (error) {
-      console.error("Failed to fetch providers:", error)
-      toast.error("Failed to load connected accounts")
+      console.error("Failed to fetch providers:", error);
+      toast.error("Failed to load connected accounts");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleConnect = async (provider: string) => {
-    setConnecting(provider)
+    setConnecting(provider);
     try {
       // Redirect to OAuth flow
-      startOAuthFlow(provider)
+      startOAuthFlow(provider);
     } catch (error) {
-      console.error("Failed to start OAuth flow:", error)
-      toast.error(`Failed to connect ${PROVIDER_CONFIGS[provider]?.name || provider}`)
-      setConnecting(null)
+      console.error("Failed to start OAuth flow:", error);
+      toast.error(
+        `Failed to connect ${PROVIDER_CONFIGS[provider]?.name || provider}`,
+      );
+      setConnecting(null);
     }
-  }
+  };
 
   const handleDisconnect = async (provider: string) => {
-    setDisconnecting(provider)
+    setDisconnecting(provider);
     try {
-      await disconnectProvider(provider)
-      setConnectedProviders((prev) => prev.filter((p) => p.provider !== provider))
-      toast.success(`${PROVIDER_CONFIGS[provider]?.name || provider} disconnected`)
+      await disconnectProvider(provider);
+      setConnectedProviders((prev) =>
+        prev.filter((p) => p.provider !== provider),
+      );
+      toast.success(
+        `${PROVIDER_CONFIGS[provider]?.name || provider} disconnected`,
+      );
     } catch (error: any) {
-      console.error("Failed to disconnect provider:", error)
-      toast.error(error?.message || `Failed to disconnect ${PROVIDER_CONFIGS[provider]?.name || provider}`)
+      console.error("Failed to disconnect provider:", error);
+      toast.error(
+        error?.message ||
+          `Failed to disconnect ${PROVIDER_CONFIGS[provider]?.name || provider}`,
+      );
     } finally {
-      setDisconnecting(null)
+      setDisconnecting(null);
     }
-  }
+  };
 
   const isConnected = (provider: string) => {
-    return connectedProviders.some((p) => p.provider === provider)
-  }
+    return connectedProviders.some((p) => p.provider === provider);
+  };
 
   const getConnectedInfo = (provider: string) => {
-    return connectedProviders.find((p) => p.provider === provider)
-  }
+    return connectedProviders.find((p) => p.provider === provider);
+  };
 
   if (loading) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Connected Accounts</CardTitle>
-          <CardDescription>Manage your connected OAuth providers</CardDescription>
+          <CardDescription>
+            Manage your connected OAuth providers
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
+            <div
+              key={i}
+              className="flex items-center justify-between p-4 border rounded-lg"
+            >
               <div className="flex items-center gap-4">
                 <Skeleton className="h-10 w-10 rounded-lg" />
                 <div className="space-y-2">
@@ -139,7 +172,7 @@ export function ConnectedAccounts() {
           ))}
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -147,7 +180,8 @@ export function ConnectedAccounts() {
       <CardHeader>
         <CardTitle>Connected Accounts</CardTitle>
         <CardDescription>
-          Connect third-party accounts to enable additional features like repository access
+          Connect third-party accounts to enable additional features like
+          repository access
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -157,11 +191,12 @@ export function ConnectedAccounts() {
             icon: Link2,
             description: `Connect your ${provider.name} account`,
             scopes: [],
-          }
-          const connected = isConnected(provider.name)
-          const connectedInfo = getConnectedInfo(provider.name)
-          const Icon = config.icon
-          const isLoading = connecting === provider.name || disconnecting === provider.name
+          };
+          const connected = isConnected(provider.name);
+          const connectedInfo = getConnectedInfo(provider.name);
+          const Icon = config.icon;
+          const isLoading =
+            connecting === provider.name || disconnecting === provider.name;
 
           return (
             <div
@@ -176,7 +211,9 @@ export function ConnectedAccounts() {
                     connected ? "bg-primary/20" : "bg-muted"
                   }`}
                 >
-                  <Icon className={`h-5 w-5 ${connected ? "text-primary" : "text-muted-foreground"}`} />
+                  <Icon
+                    className={`h-5 w-5 ${connected ? "text-primary" : "text-muted-foreground"}`}
+                  />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
@@ -201,7 +238,11 @@ export function ConnectedAccounts() {
                   {!connected && config.scopes.length > 0 && (
                     <div className="flex gap-1 mt-1 flex-wrap">
                       {config.scopes.map((scope) => (
-                        <Badge key={scope} variant="outline" className="text-xs">
+                        <Badge
+                          key={scope}
+                          variant="outline"
+                          className="text-xs"
+                        >
                           {scope}
                         </Badge>
                       ))}
@@ -227,7 +268,11 @@ export function ConnectedAccounts() {
                     )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={isLoading}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isLoading}
+                        >
                           {disconnecting === provider.name ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           ) : (
@@ -238,15 +283,20 @@ export function ConnectedAccounts() {
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Disconnect {config.name}?</AlertDialogTitle>
+                          <AlertDialogTitle>
+                            Disconnect {config.name}?
+                          </AlertDialogTitle>
                           <AlertDialogDescription>
-                            You will no longer be able to access {config.name} features like repository
-                            management. You can reconnect at any time.
+                            You will no longer be able to access {config.name}{" "}
+                            features like repository management. You can
+                            reconnect at any time.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDisconnect(provider.name)}>
+                          <AlertDialogAction
+                            onClick={() => handleDisconnect(provider.name)}
+                          >
                             Disconnect
                           </AlertDialogAction>
                         </AlertDialogFooter>
@@ -269,15 +319,16 @@ export function ConnectedAccounts() {
                 )}
               </div>
             </div>
-          )
+          );
         })}
 
         {availableProviders.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
-            No OAuth providers are configured. Contact your administrator to enable OAuth authentication.
+            No OAuth providers are configured. Contact your administrator to
+            enable OAuth authentication.
           </div>
         )}
       </CardContent>
     </Card>
-  )
+  );
 }

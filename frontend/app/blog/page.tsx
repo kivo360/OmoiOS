@@ -1,58 +1,69 @@
-import Link from 'next/link';
-import Image from 'next/image';
-import { getAllPosts, getFeaturedPosts, getAllCategories } from '@/lib/blog';
-import { Sparkles, BookOpen, Megaphone, Lightbulb, ArrowRight } from 'lucide-react';
-import type { Metadata } from 'next';
+import Link from "next/link";
+import Image from "next/image";
+import { getAllPosts, getFeaturedPosts, getAllCategories } from "@/lib/blog";
+import {
+  Sparkles,
+  BookOpen,
+  Megaphone,
+  Lightbulb,
+  ArrowRight,
+} from "lucide-react";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: 'Blog | OmoiOS',
+  title: "Blog | OmoiOS",
   description:
-    'Ship more without hiring more. Ideas on breaking the cycle of endless backlogs, burned-out engineers, and features that never ship.',
+    "Ship more without hiring more. Ideas on breaking the cycle of endless backlogs, burned-out engineers, and features that never ship.",
   openGraph: {
-    title: 'OmoiOS Blog',
+    title: "OmoiOS Blog",
     description:
-      'Ship more without hiring more. Ideas on breaking the cycle of endless backlogs, burned-out engineers, and features that never ship.',
-    type: 'website',
-    url: 'https://omoios.dev/blog',
+      "Ship more without hiring more. Ideas on breaking the cycle of endless backlogs, burned-out engineers, and features that never ship.",
+    type: "website",
+    url: "https://omoios.dev/blog",
   },
   alternates: {
-    canonical: 'https://omoios.dev/blog',
+    canonical: "https://omoios.dev/blog",
     types: {
-      'application/rss+xml': 'https://omoios.dev/feed.xml',
+      "application/rss+xml": "https://omoios.dev/feed.xml",
     },
   },
 };
 
 // Category icon and color mapping
-const categoryStyles: Record<string, { icon: typeof Sparkles; color: string; bg: string }> = {
+const categoryStyles: Record<
+  string,
+  { icon: typeof Sparkles; color: string; bg: string }
+> = {
   Announcements: {
     icon: Megaphone,
-    color: 'text-amber-500',
-    bg: 'bg-amber-500/10 hover:bg-amber-500/20',
+    color: "text-amber-500",
+    bg: "bg-amber-500/10 hover:bg-amber-500/20",
   },
   Tutorials: {
     icon: BookOpen,
-    color: 'text-blue-500',
-    bg: 'bg-blue-500/10 hover:bg-blue-500/20',
+    color: "text-blue-500",
+    bg: "bg-blue-500/10 hover:bg-blue-500/20",
   },
   Updates: {
     icon: Sparkles,
-    color: 'text-purple-500',
-    bg: 'bg-purple-500/10 hover:bg-purple-500/20',
+    color: "text-purple-500",
+    bg: "bg-purple-500/10 hover:bg-purple-500/20",
   },
   Tips: {
     icon: Lightbulb,
-    color: 'text-green-500',
-    bg: 'bg-green-500/10 hover:bg-green-500/20',
+    color: "text-green-500",
+    bg: "bg-green-500/10 hover:bg-green-500/20",
   },
 };
 
 function getCategoryStyle(category: string) {
-  return categoryStyles[category] || {
-    icon: Sparkles,
-    color: 'text-amber-500',
-    bg: 'bg-amber-500/10 hover:bg-amber-500/20',
-  };
+  return (
+    categoryStyles[category] || {
+      icon: Sparkles,
+      color: "text-amber-500",
+      bg: "bg-amber-500/10 hover:bg-amber-500/20",
+    }
+  );
 }
 
 export default function BlogIndex() {
@@ -83,14 +94,14 @@ export default function BlogIndex() {
               Ship More, Hire Less
             </div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-              Your Backlog Shouldn&apos;t{' '}
+              Your Backlog Shouldn&apos;t{" "}
               <span className="bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent">
                 Outpace Your Team
               </span>
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Ideas on breaking the cycle of endless hiring, burned-out engineers,
-              and features that never ship.
+              Ideas on breaking the cycle of endless hiring, burned-out
+              engineers, and features that never ship.
             </p>
           </div>
         </div>
@@ -108,25 +119,31 @@ export default function BlogIndex() {
             </div>
             <div className="grid gap-6 md:grid-cols-2">
               {featuredPosts.slice(0, 2).map((post, index) => {
-                const style = getCategoryStyle(post.data.category || '');
+                const style = getCategoryStyle(post.data.category || "");
                 const Icon = style.icon;
                 return (
                   <Link
                     key={post.url}
                     href={post.url}
                     className={`group relative block rounded-2xl border overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-amber-500/10 hover:-translate-y-1 ${
-                      index === 0 ? 'md:col-span-2' : ''
+                      index === 0 ? "md:col-span-2" : ""
                     }`}
                   >
                     {/* Gradient Border Effect */}
                     <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-amber-500/50 via-transparent to-orange-500/50 opacity-0 group-hover:opacity-100 transition-opacity -z-10 blur-xl" />
 
-                    <div className={`flex flex-col ${index === 0 ? 'md:flex-row' : ''}`}>
+                    <div
+                      className={`flex flex-col ${index === 0 ? "md:flex-row" : ""}`}
+                    >
                       {/* Image Section */}
                       {post.data.image ? (
-                        <div className={`relative bg-muted ${
-                          index === 0 ? 'aspect-video md:aspect-auto md:w-1/2' : 'aspect-video'
-                        }`}>
+                        <div
+                          className={`relative bg-muted ${
+                            index === 0
+                              ? "aspect-video md:aspect-auto md:w-1/2"
+                              : "aspect-video"
+                          }`}
+                        >
                           <Image
                             src={post.data.image}
                             alt={post.data.imageAlt || post.data.title}
@@ -136,9 +153,13 @@ export default function BlogIndex() {
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                         </div>
                       ) : (
-                        <div className={`relative bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-500/20 dark:to-orange-500/20 flex items-center justify-center ${
-                          index === 0 ? 'aspect-video md:aspect-auto md:w-1/2 md:min-h-[280px]' : 'aspect-video'
-                        }`}>
+                        <div
+                          className={`relative bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-500/20 dark:to-orange-500/20 flex items-center justify-center ${
+                            index === 0
+                              ? "aspect-video md:aspect-auto md:w-1/2 md:min-h-[280px]"
+                              : "aspect-video"
+                          }`}
+                        >
                           <Image
                             src="/omoios-mark.svg"
                             alt="OmoiOS"
@@ -150,16 +171,22 @@ export default function BlogIndex() {
                       )}
 
                       {/* Content Section */}
-                      <div className={`p-6 ${index === 0 ? 'md:w-1/2 md:p-8 md:flex md:flex-col md:justify-center' : ''}`}>
+                      <div
+                        className={`p-6 ${index === 0 ? "md:w-1/2 md:p-8 md:flex md:flex-col md:justify-center" : ""}`}
+                      >
                         {post.data.category && (
-                          <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${style.color}`}>
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-sm font-medium ${style.color}`}
+                          >
                             <Icon className="h-3.5 w-3.5" />
                             {post.data.category}
                           </span>
                         )}
-                        <h3 className={`font-bold mt-2 text-foreground group-hover:text-amber-500 transition-colors ${
-                          index === 0 ? 'text-2xl md:text-3xl' : 'text-xl'
-                        }`}>
+                        <h3
+                          className={`font-bold mt-2 text-foreground group-hover:text-amber-500 transition-colors ${
+                            index === 0 ? "text-2xl md:text-3xl" : "text-xl"
+                          }`}
+                        >
                           {post.data.title}
                         </h3>
                         <p className="text-muted-foreground mt-3 line-clamp-2">
@@ -167,11 +194,14 @@ export default function BlogIndex() {
                         </p>
                         <div className="mt-4 flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">
-                            {new Date(post.data.date).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                            })}
+                            {new Date(post.data.date).toLocaleDateString(
+                              "en-US",
+                              {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              },
+                            )}
                           </span>
                           <span className="inline-flex items-center gap-1 text-sm font-medium text-amber-500 group-hover:gap-2 transition-all">
                             Read more
@@ -221,12 +251,14 @@ export default function BlogIndex() {
           <h2 className="text-2xl font-bold mb-8">All Posts</h2>
           {posts.length === 0 ? (
             <div className="text-center py-16 rounded-2xl border border-dashed">
-              <p className="text-muted-foreground">No posts yet. Check back soon!</p>
+              <p className="text-muted-foreground">
+                No posts yet. Check back soon!
+              </p>
             </div>
           ) : (
             <div className="space-y-6">
               {posts.map((post) => {
-                const style = getCategoryStyle(post.data.category || '');
+                const style = getCategoryStyle(post.data.category || "");
                 const Icon = style.icon;
                 return (
                   <article
@@ -236,7 +268,9 @@ export default function BlogIndex() {
                     <Link href={post.url} className="flex gap-6">
                       <div className="flex-1 min-w-0">
                         {post.data.category && (
-                          <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${style.color}`}>
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-sm font-medium ${style.color}`}
+                          >
                             <Icon className="h-3.5 w-3.5" />
                             {post.data.category}
                           </span>
@@ -248,14 +282,19 @@ export default function BlogIndex() {
                           {post.data.description}
                         </p>
                         <div className="mt-4 flex items-center gap-4 text-sm text-muted-foreground">
-                          <span className="font-medium text-foreground/80">{post.data.author}</span>
+                          <span className="font-medium text-foreground/80">
+                            {post.data.author}
+                          </span>
                           <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
                           <time dateTime={String(post.data.date)}>
-                            {new Date(post.data.date).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                            })}
+                            {new Date(post.data.date).toLocaleDateString(
+                              "en-US",
+                              {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              },
+                            )}
                           </time>
                         </div>
                       </div>
@@ -293,7 +332,8 @@ export default function BlogIndex() {
           <div className="relative text-center">
             <h3 className="text-2xl font-bold mb-3">Stop Playing Catch-Up</h3>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Get insights on shipping faster without burning out your team. No spam, just signal.
+              Get insights on shipping faster without burning out your team. No
+              spam, just signal.
             </p>
             <Link
               href="/feed.xml"

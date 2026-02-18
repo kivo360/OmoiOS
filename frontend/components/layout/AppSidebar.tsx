@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Sidebar,
   SidebarContent,
@@ -14,10 +14,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
-} from "@/components/ui/sidebar"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
+} from "@/components/ui/sidebar";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Search,
   Plus,
@@ -27,27 +27,24 @@ import {
   FolderKanban,
   Box,
   BarChart3,
-} from "lucide-react"
+} from "lucide-react";
 
 const mainNavItems = [
   { title: "Command", href: "/command", icon: Plus },
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
   { title: "Projects", href: "/projects", icon: FolderKanban },
   { title: "Sandboxes", href: "/sandboxes", icon: Box },
-]
+];
 
 export function AppSidebar() {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   return (
     <Sidebar className="border-r border-sidebar-border">
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            className="h-9 pl-8 bg-background"
-          />
+          <Input placeholder="Search..." className="h-9 pl-8 bg-background" />
         </div>
       </SidebarHeader>
 
@@ -97,7 +94,10 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === "/organizations"}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === "/organizations"}
+                  >
                     <Link href="/organizations">
                       <LayoutDashboard className="h-4 w-4" />
                       <span>All Organizations</span>
@@ -131,5 +131,5 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

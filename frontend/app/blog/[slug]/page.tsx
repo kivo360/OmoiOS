@@ -1,10 +1,10 @@
-import { notFound } from 'next/navigation';
-import Link from 'next/link';
-import Image from 'next/image';
-import { InlineTOC } from 'fumadocs-ui/components/inline-toc';
-import defaultMdxComponents from 'fumadocs-ui/mdx';
-import { blog, getAllPosts } from '@/lib/blog';
-import type { Metadata } from 'next';
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import { InlineTOC } from "fumadocs-ui/components/inline-toc";
+import defaultMdxComponents from "fumadocs-ui/mdx";
+import { blog, getAllPosts } from "@/lib/blog";
+import type { Metadata } from "next";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -19,15 +19,15 @@ function BlogPostJsonLd({
 }) {
   if (!post) return null;
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://omoios.dev';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omoios.dev";
 
   const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'BlogPosting',
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
     headline: post.data.title,
     description: post.data.description,
     author: {
-      '@type': 'Person',
+      "@type": "Person",
       name: post.data.author,
     },
     datePublished: post.data.date,
@@ -35,16 +35,16 @@ function BlogPostJsonLd({
     url: url,
     image: post.data.image ? `${baseUrl}${post.data.image}` : undefined,
     publisher: {
-      '@type': 'Organization',
-      name: 'OmoiOS',
+      "@type": "Organization",
+      name: "OmoiOS",
       logo: {
-        '@type': 'ImageObject',
+        "@type": "ImageObject",
         url: `${baseUrl}/logo.png`,
       },
     },
     mainEntityOfPage: {
-      '@type': 'WebPage',
-      '@id': url,
+      "@type": "WebPage",
+      "@id": url,
     },
   };
 
@@ -63,7 +63,7 @@ export default async function BlogPost({ params }: PageProps) {
   if (!post || post.data.draft) notFound();
 
   const MDXContent = post.data.body;
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://omoios.dev';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omoios.dev";
   const postUrl = `${baseUrl}/blog/${slug}`;
 
   // Get related posts (same category, excluding current)
@@ -103,10 +103,10 @@ export default async function BlogPost({ params }: PageProps) {
                   dateTime={String(post.data.date)}
                   className="text-sm text-muted-foreground"
                 >
-                  {new Date(post.data.date).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
+                  {new Date(post.data.date).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
                   })}
                 </time>
               </div>
@@ -186,13 +186,15 @@ export function generateStaticParams() {
   }));
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const post = blog.getPage([slug]);
 
   if (!post) return {};
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://omoios.dev';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omoios.dev";
   const postUrl = `${baseUrl}/blog/${slug}`;
 
   return {
@@ -202,7 +204,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     openGraph: {
       title: post.data.title,
       description: post.data.description,
-      type: 'article',
+      type: "article",
       url: postUrl,
       publishedTime: String(post.data.date),
       authors: [post.data.author],
@@ -217,7 +219,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       tags: post.data.tags,
     },
     twitter: {
-      card: 'summary_large_image',
+      card: "summary_large_image",
       title: post.data.title,
       description: post.data.description,
       images: post.data.image ? [`${baseUrl}${post.data.image}`] : [],

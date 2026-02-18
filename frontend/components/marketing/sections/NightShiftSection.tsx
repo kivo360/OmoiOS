@@ -1,12 +1,12 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
-import { Moon } from "lucide-react"
-import { NightShiftLog } from "@/components/landing/NightShiftLog"
-import { cn } from "@/lib/utils"
+import { motion } from "framer-motion";
+import { Moon } from "lucide-react";
+import { NightShiftLog } from "@/components/landing/NightShiftLog";
+import { cn } from "@/lib/utils";
 
 interface NightShiftSectionProps {
-  className?: string
+  className?: string;
 }
 
 export function NightShiftSection({ className }: NightShiftSectionProps) {
@@ -31,8 +31,8 @@ export function NightShiftSection({ className }: NightShiftSectionProps) {
               Go to Bed. Wake Up to Done.
             </h2>
             <p className="mx-auto mt-4 max-w-lg text-lg text-landing-text-muted">
-              Describe what you need before you leave for the day.
-              Check your inbox in the morning for a PR ready to review.
+              Describe what you need before you leave for the day. Check your
+              inbox in the morning for a PR ready to review.
             </p>
           </motion.div>
 
@@ -60,13 +60,17 @@ export function NightShiftSection({ className }: NightShiftSectionProps) {
               { value: "1", label: "PR ready to merge" },
             ].map((stat) => (
               <div key={stat.label}>
-                <div className="text-2xl font-bold text-landing-text">{stat.value}</div>
-                <div className="text-sm text-landing-text-muted">{stat.label}</div>
+                <div className="text-2xl font-bold text-landing-text">
+                  {stat.value}
+                </div>
+                <div className="text-sm text-landing-text-muted">
+                  {stat.label}
+                </div>
               </div>
             ))}
           </motion.div>
         </div>
       </div>
     </section>
-  )
+  );
 }

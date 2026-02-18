@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { PanelLeftClose, PanelLeft } from "lucide-react"
-import { NavSection } from "./IconRail"
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { PanelLeftClose, PanelLeft } from "lucide-react";
+import { NavSection } from "./IconRail";
 import {
   AgentsPanel,
   ProjectsPanel,
@@ -17,14 +17,14 @@ import {
   PhasesPanel,
   HealthPanel,
   TasksPanel,
-} from "@/components/panels"
+} from "@/components/panels";
 
 interface ContextualPanelProps {
-  activeSection: NavSection
-  pathname?: string
-  isCollapsed?: boolean
-  onToggleCollapse?: () => void
-  className?: string
+  activeSection: NavSection;
+  pathname?: string;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  className?: string;
 }
 
 export function ContextualPanel({
@@ -39,42 +39,42 @@ export function ContextualPanel({
   const renderPanel = () => {
     // Project settings pages get Project Settings panel
     if (pathname.includes("/projects/") && pathname.includes("/settings")) {
-      return <ProjectSettingsPanel />
+      return <ProjectSettingsPanel />;
     }
 
     // Health pages get Health panel
     if (pathname.startsWith("/health")) {
-      return <HealthPanel />
+      return <HealthPanel />;
     }
 
     // Graph pages get Graph Filters
     if (pathname.startsWith("/graph")) {
-      return <GraphFiltersPanel />
+      return <GraphFiltersPanel />;
     }
 
     // Diagnostic pages get Diagnostic Context
     if (pathname.startsWith("/diagnostic")) {
-      return <DiagnosticContextPanel />
+      return <DiagnosticContextPanel />;
     }
 
     // Activity page gets Activity Filters
     if (pathname === "/activity" || pathname.startsWith("/activity")) {
-      return <ActivityFiltersPanel />
+      return <ActivityFiltersPanel />;
     }
 
     // Board pages can use Projects panel for project context
     if (pathname.startsWith("/board")) {
-      return <ProjectsPanel />
+      return <ProjectsPanel />;
     }
 
     // Phases pages get Phases panel
     if (pathname.startsWith("/phases")) {
-      return <PhasesPanel />
+      return <PhasesPanel />;
     }
 
     // Sandbox pages get Tasks panel
     if (pathname.startsWith("/sandbox")) {
-      return <TasksPanel pathname={pathname} />
+      return <TasksPanel pathname={pathname} />;
     }
 
     // Default: use activeSection-based panels
@@ -82,21 +82,21 @@ export function ContextualPanel({
       case "command":
       case "sandboxes":
         // Use TasksPanel for sandbox-first workflow
-        return <TasksPanel />
+        return <TasksPanel />;
       case "projects":
-        return <ProjectsPanel />
+        return <ProjectsPanel />;
       case "phases":
-        return <PhasesPanel />
+        return <PhasesPanel />;
       case "analytics":
-        return <AnalyticsPanel />
+        return <AnalyticsPanel />;
       case "settings":
-        return <SettingsPanel />
+        return <SettingsPanel />;
       case "organizations":
-        return <OrganizationsPanel />
+        return <OrganizationsPanel />;
       default:
-        return <TasksPanel />
+        return <TasksPanel />;
     }
-  }
+  };
 
   if (isCollapsed) {
     return (
@@ -111,14 +111,14 @@ export function ContextualPanel({
           <PanelLeft className="h-4 w-4" />
         </Button>
       </div>
-    )
+    );
   }
 
   return (
     <div
       className={cn(
         "relative flex h-full w-64 flex-col border-r bg-background transition-all duration-200",
-        className
+        className,
       )}
     >
       {/* Collapse Button */}
@@ -135,9 +135,7 @@ export function ContextualPanel({
       </div>
 
       {/* Panel Content */}
-      <div className="flex-1 overflow-hidden pt-1">
-        {renderPanel()}
-      </div>
+      <div className="flex-1 overflow-hidden pt-1">{renderPanel()}</div>
     </div>
-  )
+  );
 }

@@ -1,10 +1,16 @@
-"use client"
+"use client";
 
-import { Suspense } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { CheckCircle2 } from "lucide-react"
+import { Suspense } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { CheckCircle2 } from "lucide-react";
 
 function BillingSuccessContent() {
   return (
@@ -31,13 +37,17 @@ function BillingSuccessContent() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 export default function BillingSuccessPage() {
   return (
-    <Suspense fallback={<div className="container mx-auto max-w-md p-6">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="container mx-auto max-w-md p-6">Loading...</div>
+      }
+    >
       <BillingSuccessContent />
     </Suspense>
-  )
+  );
 }

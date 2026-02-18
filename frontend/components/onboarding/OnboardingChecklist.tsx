@@ -1,15 +1,19 @@
-"use client"
+"use client";
 
-import { cn } from "@/lib/utils"
-import { Check, Circle, Loader2, Lock } from "lucide-react"
-import { useOnboarding, type OnboardingStep, type ChecklistItemId } from "@/hooks/useOnboarding"
+import { cn } from "@/lib/utils";
+import { Check, Circle, Loader2, Lock } from "lucide-react";
+import {
+  useOnboarding,
+  type OnboardingStep,
+  type ChecklistItemId,
+} from "@/hooks/useOnboarding";
 
 export interface ChecklistItem {
-  id: string
-  label: string
-  description?: string
-  step?: OnboardingStep // If tied to an onboarding step
-  isPostOnboarding?: boolean // Post-onboarding tasks
+  id: string;
+  label: string;
+  description?: string;
+  step?: OnboardingStep; // If tied to an onboarding step
+  isPostOnboarding?: boolean; // Post-onboarding tasks
 }
 
 const CHECKLIST_ITEMS: ChecklistItem[] = [
@@ -63,28 +67,31 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: "Collaborate with your team",
     isPostOnboarding: true,
   },
-]
+];
 
 interface OnboardingChecklistProps {
-  className?: string
-  showPostOnboarding?: boolean
+  className?: string;
+  showPostOnboarding?: boolean;
 }
 
 export function OnboardingChecklist({
   className,
   showPostOnboarding = true,
 }: OnboardingChecklistProps) {
-  const { currentStep, completedSteps, completedChecklistItems, data } = useOnboarding()
+  const { currentStep, completedSteps, completedChecklistItems, data } =
+    useOnboarding();
 
   // Ensure arrays and objects have defaults to prevent undefined errors
-  const safeCompletedSteps = completedSteps || []
-  const safeCompletedChecklistItems = completedChecklistItems || []
-  const safeData = data || {}
+  const safeCompletedSteps = completedSteps || [];
+  const safeCompletedChecklistItems = completedChecklistItems || [];
+  const safeData = data || {};
 
-  const getItemStatus = (item: ChecklistItem): "completed" | "current" | "locked" | "pending" => {
+  const getItemStatus = (
+    item: ChecklistItem,
+  ): "completed" | "current" | "locked" | "pending" => {
     // Check if explicitly completed via completedChecklistItems
     if (safeCompletedChecklistItems.includes(item.id as ChecklistItemId)) {
-      return "completed"
+      return "completed";
     }
 
     // Post-onboarding items
@@ -92,55 +99,62 @@ export function OnboardingChecklist({
       if (item.id === "watch-agent" && safeData.firstSpecId) {
         // Available once spec is submitted, check if it's running
         if (safeData.firstSpecStatus === "running") {
-          return "current"
+          return "current";
         }
         if (safeData.firstSpecStatus === "completed") {
-          return "completed"
+          return "completed";
         }
-        return "pending"
+        return "pending";
       }
       if (item.id === "review-pr") {
         // Available after agent completes
         if (safeData.firstSpecStatus === "completed") {
-          return "pending"
+          return "pending";
         }
-        return "locked"
+        return "locked";
       }
       if (item.id === "invite-team") {
         // Available after onboarding wizard steps are done
         if (currentStep === "complete") {
-          return "pending"
+          return "pending";
         }
-        return "locked"
+        return "locked";
       }
-      return "locked"
+      return "locked";
     }
 
     // Onboarding steps
-    if (!item.step) return "pending"
+    if (!item.step) return "pending";
 
     if (safeCompletedSteps.includes(item.step)) {
-      return "completed"
+      return "completed";
     }
     if (currentStep === item.step) {
-      return "current"
+      return "current";
     }
 
     // Check if this step is before or after current
-    const steps: OnboardingStep[] = ["welcome", "github", "repo", "first-spec", "plan", "complete"]
-    const currentIndex = steps.indexOf(currentStep)
-    const itemIndex = steps.indexOf(item.step)
+    const steps: OnboardingStep[] = [
+      "welcome",
+      "github",
+      "repo",
+      "first-spec",
+      "plan",
+      "complete",
+    ];
+    const currentIndex = steps.indexOf(currentStep);
+    const itemIndex = steps.indexOf(item.step);
 
     if (itemIndex < currentIndex) {
-      return "completed"
+      return "completed";
     }
 
-    return "locked"
-  }
+    return "locked";
+  };
 
   const items = showPostOnboarding
     ? CHECKLIST_ITEMS
-    : CHECKLIST_ITEMS.filter((item) => !item.isPostOnboarding)
+    : CHECKLIST_ITEMS.filter((item) => !item.isPostOnboarding);
 
   return (
     <div className={cn("space-y-1", className)}>
@@ -149,28 +163,32 @@ export function OnboardingChecklist({
       </h3>
       <div className="space-y-1">
         {items.map((item, index) => {
-          const status = getItemStatus(item)
-          const showDivider = item.isPostOnboarding && !CHECKLIST_ITEMS[index - 1]?.isPostOnboarding
+          const status = getItemStatus(item);
+          const showDivider =
+            item.isPostOnboarding &&
+            !CHECKLIST_ITEMS[index - 1]?.isPostOnboarding;
 
           return (
             <div key={item.id}>
               {showDivider && (
                 <div className="my-3 border-t border-dashed pt-3">
-                  <span className="text-xs text-muted-foreground">After onboarding</span>
+                  <span className="text-xs text-muted-foreground">
+                    After onboarding
+                  </span>
                 </div>
               )}
               <ChecklistItemRow item={item} status={status} />
             </div>
-          )
+          );
         })}
       </div>
     </div>
-  )
+  );
 }
 
 interface ChecklistItemRowProps {
-  item: ChecklistItem
-  status: "completed" | "current" | "locked" | "pending"
+  item: ChecklistItem;
+  status: "completed" | "current" | "locked" | "pending";
 }
 
 function ChecklistItemRow({ item, status }: ChecklistItemRowProps) {
@@ -179,7 +197,7 @@ function ChecklistItemRow({ item, status }: ChecklistItemRowProps) {
       className={cn(
         "flex items-start gap-3 p-2 rounded-lg transition-colors",
         status === "current" && "bg-primary/5 border border-primary/20",
-        status === "locked" && "opacity-50"
+        status === "locked" && "opacity-50",
       )}
     >
       {/* Status icon */}
@@ -212,17 +230,19 @@ function ChecklistItemRow({ item, status }: ChecklistItemRowProps) {
           className={cn(
             "text-sm font-medium",
             status === "completed" && "text-muted-foreground line-through",
-            status === "locked" && "text-muted-foreground"
+            status === "locked" && "text-muted-foreground",
           )}
         >
           {item.label}
         </p>
         {item.description && (
-          <p className="text-xs text-muted-foreground truncate">{item.description}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {item.description}
+          </p>
         )}
       </div>
     </div>
-  )
+  );
 }
 
-export { CHECKLIST_ITEMS }
+export { CHECKLIST_ITEMS };

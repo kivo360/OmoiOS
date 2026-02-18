@@ -1,139 +1,181 @@
-"use client"
+"use client";
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { toast } from "sonner"
-import { PromptInput, ModelSelector, RepoSelector, Project, Repository, WorkflowModeSelector, getWorkflowModeConfig, type WorkflowMode } from "@/components/command"
-import { useProjects } from "@/hooks/useProjects"
-import { useConnectedRepositories } from "@/hooks/useGitHub"
-import { useGitHubRepos } from "@/hooks/useGitHubRepos"
-import { useCreateTicket } from "@/hooks/useTickets"
-import { useLaunchSpec } from "@/hooks/useSpecs"
-import { useEvents, type SystemEvent } from "@/hooks/useEvents"
-import { listTasks } from "@/lib/api/tasks"
-import { Loader2 } from "lucide-react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  PromptInput,
+  ModelSelector,
+  RepoSelector,
+  Project,
+  Repository,
+  WorkflowModeSelector,
+  getWorkflowModeConfig,
+  type WorkflowMode,
+} from "@/components/command";
+import { useProjects } from "@/hooks/useProjects";
+import { useConnectedRepositories } from "@/hooks/useGitHub";
+import { useGitHubRepos } from "@/hooks/useGitHubRepos";
+import { useCreateTicket } from "@/hooks/useTickets";
+import { useLaunchSpec } from "@/hooks/useSpecs";
+import { useEvents, type SystemEvent } from "@/hooks/useEvents";
+import { listTasks } from "@/lib/api/tasks";
+import { Loader2 } from "lucide-react";
 
 type LaunchState =
   | { status: "idle" }
   | { status: "creating_ticket"; prompt: string }
   | { status: "launching_spec"; prompt: string }
-  | { status: "waiting_for_sandbox"; ticketId: string; prompt: string; mode: WorkflowMode; projectId: string }
-  | { status: "redirecting"; destination: string }
+  | {
+      status: "waiting_for_sandbox";
+      ticketId: string;
+      prompt: string;
+      mode: WorkflowMode;
+      projectId: string;
+    }
+  | { status: "redirecting"; destination: string };
 
 // All event types the backend might send for sandbox creation
 const SANDBOX_EVENT_TYPES = [
-  "SANDBOX_CREATED",   // Original expected type
-  "SANDBOX_SPAWNED",   // Orchestrator worker sends this (uppercase)
-  "sandbox.spawned",   // DaytonaSpawner sends this (lowercase with dot)
-]
+  "SANDBOX_CREATED", // Original expected type
+  "SANDBOX_SPAWNED", // Orchestrator worker sends this (uppercase)
+  "sandbox.spawned", // DaytonaSpawner sends this (lowercase with dot)
+];
 
 export default function CommandCenterPage() {
-  const router = useRouter()
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
-  const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
-  const [selectedBranch, setSelectedBranch] = useState("main")
-  const [selectedModel, setSelectedModel] = useState("opus-4.5")
-  const [selectedMode, setSelectedMode] = useState<WorkflowMode>("quick")
-  const [launchState, setLaunchState] = useState<LaunchState>({ status: "idle" })
+  const router = useRouter();
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
+  const [selectedBranch, setSelectedBranch] = useState("main");
+  const [selectedModel, setSelectedModel] = useState("opus-4.5");
+  const [selectedMode, setSelectedMode] = useState<WorkflowMode>("quick");
+  const [launchState, setLaunchState] = useState<LaunchState>({
+    status: "idle",
+  });
 
   // Get mode configuration for dynamic UI
-  const modeConfig = getWorkflowModeConfig(selectedMode)
+  const modeConfig = getWorkflowModeConfig(selectedMode);
 
   // Fetch real data
-  const { data: projectsData } = useProjects({ status: "active" })
-  const { data: connectedRepos } = useConnectedRepositories()
-  const createTicketMutation = useCreateTicket()
-  const launchSpecMutation = useLaunchSpec()
+  const { data: projectsData } = useProjects({ status: "active" });
+  const { data: connectedRepos } = useConnectedRepositories();
+  const createTicketMutation = useCreateTicket();
+  const launchSpecMutation = useLaunchSpec();
 
   // Fetch ALL GitHub repos for the user (not just connected ones)
   // This allows selecting any repo, and the backend will auto-create a project
-  const { data: allGitHubRepos } = useGitHubRepos({ sort: "updated", per_page: 100 })
+  const { data: allGitHubRepos } = useGitHubRepos({
+    sort: "updated",
+    per_page: 100,
+  });
 
   // Transform API projects to component format
   const projects: Project[] = useMemo(() => {
-    if (!projectsData?.projects) return []
+    if (!projectsData?.projects) return [];
     return projectsData.projects.map((p) => ({
       id: p.id,
       name: p.name,
-      repo: p.github_owner && p.github_repo ? `${p.github_owner}/${p.github_repo}` : undefined,
+      repo:
+        p.github_owner && p.github_repo
+          ? `${p.github_owner}/${p.github_repo}`
+          : undefined,
       ticketCount: 0,
-    }))
-  }, [projectsData?.projects])
+    }));
+  }, [projectsData?.projects]);
 
   // Transform ALL GitHub repos to component format (not just connected ones)
   // This allows users to select any repo they have access to
   const repositories: Repository[] = useMemo(() => {
-    if (!allGitHubRepos) return []
+    if (!allGitHubRepos) return [];
     return allGitHubRepos.map((r) => ({
       fullName: r.full_name,
       isPrivate: r.private,
-    }))
-  }, [allGitHubRepos])
+    }));
+  }, [allGitHubRepos]);
 
   // Set default project when data loads (only on initial load, not when user clears selection)
-  const hasInitializedRef = useRef(false)
+  const hasInitializedRef = useRef(false);
   useEffect(() => {
     if (projects.length > 0 && !hasInitializedRef.current) {
-      hasInitializedRef.current = true
-      setSelectedProject(projects[0])
+      hasInitializedRef.current = true;
+      setSelectedProject(projects[0]);
     }
-  }, [projects])
+  }, [projects]);
 
   // Track if we've already redirected to prevent double redirects
-  const hasRedirectedRef = useRef(false)
+  const hasRedirectedRef = useRef(false);
 
   // Helper to handle successful sandbox detection
   // - quick mode: redirects to sandbox page to watch agent work
   // - spec_driven mode: redirects to board page to watch tasks/cards being created
-  const handleSandboxReady = useCallback((sandboxId: string) => {
-    if (hasRedirectedRef.current) return // Prevent double redirect
-    if (launchState.status !== "waiting_for_sandbox") return // Not in the right state
+  const handleSandboxReady = useCallback(
+    (sandboxId: string) => {
+      if (hasRedirectedRef.current) return; // Prevent double redirect
+      if (launchState.status !== "waiting_for_sandbox") return; // Not in the right state
 
-    hasRedirectedRef.current = true
-    const { mode, projectId } = launchState
+      hasRedirectedRef.current = true;
+      const { mode, projectId } = launchState;
 
-    if (mode === "quick") {
-      setLaunchState({ status: "redirecting", destination: `/sandbox/${sandboxId}` })
-      toast.success("Agent started! Redirecting to sandbox...")
-      router.push(`/sandbox/${sandboxId}`)
-    } else {
-      // spec_driven mode - redirect to board to watch tasks being created
-      setLaunchState({ status: "redirecting", destination: `/board/${projectId}` })
-      toast.success("Spec generation started! Redirecting to board...")
-      router.push(`/board/${projectId}`)
-    }
-  }, [router, launchState])
+      if (mode === "quick") {
+        setLaunchState({
+          status: "redirecting",
+          destination: `/sandbox/${sandboxId}`,
+        });
+        toast.success("Agent started! Redirecting to sandbox...");
+        router.push(`/sandbox/${sandboxId}`);
+      } else {
+        // spec_driven mode - redirect to board to watch tasks being created
+        setLaunchState({
+          status: "redirecting",
+          destination: `/board/${projectId}`,
+        });
+        toast.success("Spec generation started! Redirecting to board...");
+        router.push(`/board/${projectId}`);
+      }
+    },
+    [router, launchState],
+  );
 
   // Handle event from WebSocket that signals sandbox is ready
-  const handleEvent = useCallback((event: SystemEvent) => {
-    console.log("[Command] Received event:", event.event_type, event.entity_type, event.entity_id)
+  const handleEvent = useCallback(
+    (event: SystemEvent) => {
+      console.log(
+        "[Command] Received event:",
+        event.event_type,
+        event.entity_type,
+        event.entity_id,
+      );
 
-    // Look for sandbox-related events (check all known event types)
-    if (
-      event.entity_type === "sandbox" &&
-      SANDBOX_EVENT_TYPES.includes(event.event_type)
-    ) {
-      const sandboxId = event.entity_id || (event.payload?.sandbox_id as string)
-      if (sandboxId) {
-        handleSandboxReady(sandboxId)
-        return
+      // Look for sandbox-related events (check all known event types)
+      if (
+        event.entity_type === "sandbox" &&
+        SANDBOX_EVENT_TYPES.includes(event.event_type)
+      ) {
+        const sandboxId =
+          event.entity_id || (event.payload?.sandbox_id as string);
+        if (sandboxId) {
+          handleSandboxReady(sandboxId);
+          return;
+        }
       }
-    }
 
-    // Also check for task events that include sandbox_id
-    if (
-      event.entity_type === "task" &&
-      (event.event_type === "TASK_STARTED" || event.event_type === "TASK_SANDBOX_ASSIGNED") &&
-      event.payload?.sandbox_id
-    ) {
-      const sandboxId = event.payload.sandbox_id as string
-      handleSandboxReady(sandboxId)
-      return
-    }
-  }, [handleSandboxReady])
+      // Also check for task events that include sandbox_id
+      if (
+        event.entity_type === "task" &&
+        (event.event_type === "TASK_STARTED" ||
+          event.event_type === "TASK_SANDBOX_ASSIGNED") &&
+        event.payload?.sandbox_id
+      ) {
+        const sandboxId = event.payload.sandbox_id as string;
+        handleSandboxReady(sandboxId);
+        return;
+      }
+    },
+    [handleSandboxReady],
+  );
 
   // Subscribe to events when waiting for sandbox
-  const isWaitingForSandbox = launchState.status === "waiting_for_sandbox"
+  const isWaitingForSandbox = launchState.status === "waiting_for_sandbox";
   useEvents({
     enabled: isWaitingForSandbox,
     filters: isWaitingForSandbox
@@ -142,7 +184,7 @@ export default function CommandCenterPage() {
         }
       : undefined,
     onEvent: handleEvent,
-  })
+  });
 
   // Fallback polling for sandbox_id (in case WebSocket events are missed)
   // Also includes timeout after 60 seconds
@@ -150,59 +192,64 @@ export default function CommandCenterPage() {
     if (launchState.status !== "waiting_for_sandbox") {
       // Reset redirect flag when going back to idle
       if (launchState.status === "idle") {
-        hasRedirectedRef.current = false
+        hasRedirectedRef.current = false;
       }
-      return
+      return;
     }
 
-    const ticketId = launchState.ticketId
-    let pollCount = 0
-    const maxPolls = 20 // 20 polls * 3s = 60s timeout
+    const ticketId = launchState.ticketId;
+    let pollCount = 0;
+    const maxPolls = 20; // 20 polls * 3s = 60s timeout
 
     // Poll for tasks with sandbox_id every 3 seconds
     const pollInterval = setInterval(async () => {
-      pollCount++
-      console.log(`[Command] Polling for sandbox (attempt ${pollCount}/${maxPolls})...`)
+      pollCount++;
+      console.log(
+        `[Command] Polling for sandbox (attempt ${pollCount}/${maxPolls})...`,
+      );
 
       try {
         // Fetch recent tasks and look for one matching our ticket
-        const tasks = await listTasks({ limit: 20 })
+        const tasks = await listTasks({ limit: 20 });
         const matchingTask = tasks.find(
-          (task) => task.ticket_id === ticketId && task.sandbox_id
-        )
+          (task) => task.ticket_id === ticketId && task.sandbox_id,
+        );
 
         if (matchingTask?.sandbox_id) {
-          console.log("[Command] Found sandbox via polling:", matchingTask.sandbox_id)
-          clearInterval(pollInterval)
-          handleSandboxReady(matchingTask.sandbox_id)
-          return
+          console.log(
+            "[Command] Found sandbox via polling:",
+            matchingTask.sandbox_id,
+          );
+          clearInterval(pollInterval);
+          handleSandboxReady(matchingTask.sandbox_id);
+          return;
         }
       } catch (error) {
-        console.error("[Command] Polling error:", error)
+        console.error("[Command] Polling error:", error);
       }
 
       // Timeout after max polls
       if (pollCount >= maxPolls) {
-        clearInterval(pollInterval)
-        toast.error("Sandbox creation timed out. Please try again.")
-        setLaunchState({ status: "idle" })
+        clearInterval(pollInterval);
+        toast.error("Sandbox creation timed out. Please try again.");
+        setLaunchState({ status: "idle" });
       }
-    }, 3000)
+    }, 3000);
 
-    return () => clearInterval(pollInterval)
-  }, [launchState, handleSandboxReady])
+    return () => clearInterval(pollInterval);
+  }, [launchState, handleSandboxReady]);
 
   const handleSubmit = async (prompt: string) => {
     try {
       // Spec-driven mode: Use direct spec launch (bypass ticket creation)
       if (selectedMode === "spec_driven") {
-        setLaunchState({ status: "launching_spec", prompt })
+        setLaunchState({ status: "launching_spec", prompt });
 
         // Spec launch requires a project ID
         if (!selectedProject?.id) {
-          toast.error("Please select a project for spec-driven development.")
-          setLaunchState({ status: "idle" })
-          return
+          toast.error("Please select a project for spec-driven development.");
+          setLaunchState({ status: "idle" });
+          return;
         }
 
         const result = await launchSpecMutation.mutateAsync({
@@ -210,26 +257,29 @@ export default function CommandCenterPage() {
           description: prompt,
           project_id: selectedProject.id,
           auto_execute: true, // Start sandbox execution immediately
-        })
+        });
 
         // Redirect to spec detail page to watch the spec being built
-        setLaunchState({ status: "redirecting", destination: `/projects/${selectedProject.id}/specs/${result.spec_id}` })
-        toast.success("Spec generation started! Redirecting to spec...")
-        router.push(`/projects/${selectedProject.id}/specs/${result.spec_id}`)
-        return
+        setLaunchState({
+          status: "redirecting",
+          destination: `/projects/${selectedProject.id}/specs/${result.spec_id}`,
+        });
+        toast.success("Spec generation started! Redirecting to spec...");
+        router.push(`/projects/${selectedProject.id}/specs/${result.spec_id}`);
+        return;
       }
 
       // Quick mode: Use existing ticket-based flow
-      setLaunchState({ status: "creating_ticket", prompt })
+      setLaunchState({ status: "creating_ticket", prompt });
 
       // Parse github_owner and github_repo from selectedRepo (format: "owner/repo")
-      let github_owner: string | undefined
-      let github_repo: string | undefined
+      let github_owner: string | undefined;
+      let github_repo: string | undefined;
       if (selectedRepo && !selectedProject) {
-        const parts = selectedRepo.split("/")
+        const parts = selectedRepo.split("/");
         if (parts.length === 2) {
-          github_owner = parts[0]
-          github_repo = parts[1]
+          github_owner = parts[0];
+          github_repo = parts[1];
         }
       }
 
@@ -248,48 +298,47 @@ export default function CommandCenterPage() {
         phase_id: "PHASE_IMPLEMENTATION",
         workflow_mode: "quick" as const,
         auto_spawn_sandbox: true,
-      }
+      };
 
-      const result = await createTicketMutation.mutateAsync(payload)
+      const result = await createTicketMutation.mutateAsync(payload);
 
       // Check if we got a duplicate response instead of a ticket
       if ("is_duplicate" in result) {
-        toast.error("This looks like a duplicate request.")
-        setLaunchState({ status: "idle" })
-        return
+        toast.error("This looks like a duplicate request.");
+        setLaunchState({ status: "idle" });
+        return;
       }
 
       // Get project ID from ticket response or selected project
       // The backend may auto-create a project or the ticket may have one assigned
-      const projectId = result.project_id || selectedProject?.id || "all"
+      const projectId = result.project_id || selectedProject?.id || "all";
 
       // Quick mode waits for sandbox to spawn, then redirects to sandbox page
-      toast.info("Launching sandbox...")
+      toast.info("Launching sandbox...");
       setLaunchState({
         status: "waiting_for_sandbox",
         ticketId: result.id,
         prompt,
         mode: selectedMode,
         projectId,
-      })
-
+      });
     } catch (error) {
-      toast.error("Failed to launch. Please try again.")
-      setLaunchState({ status: "idle" })
+      toast.error("Failed to launch. Please try again.");
+      setLaunchState({ status: "idle" });
     }
-  }
+  };
 
   const handleProjectSelect = (project: Project) => {
-    setSelectedProject(project)
-    setSelectedRepo(null)
-  }
+    setSelectedProject(project);
+    setSelectedRepo(null);
+  };
 
   const handleRepoSelect = (repo: string) => {
-    setSelectedProject(null)
-    setSelectedRepo(repo)
-  }
+    setSelectedProject(null);
+    setSelectedRepo(repo);
+  };
 
-  const isLoading = launchState.status !== "idle"
+  const isLoading = launchState.status !== "idle";
 
   return (
     <div className="flex h-[calc(100vh-48px)] flex-col items-center justify-center bg-background px-4">
@@ -299,9 +348,7 @@ export default function CommandCenterPage() {
           <h1 className="mb-2 text-2xl font-semibold text-foreground">
             What would you like to build?
           </h1>
-          <p className="text-muted-foreground">
-            {modeConfig.helperText}
-          </p>
+          <p className="text-muted-foreground">{modeConfig.helperText}</p>
         </div>
 
         {/* Main Input */}
@@ -331,9 +378,8 @@ export default function CommandCenterPage() {
                   {launchState.destination.includes("/sandbox/")
                     ? "Redirecting to sandbox..."
                     : launchState.destination.includes("/specs/")
-                    ? "Redirecting to spec..."
-                    : "Redirecting to board..."
-                  }
+                      ? "Redirecting to spec..."
+                      : "Redirecting to board..."}
                 </span>
               )}
             </div>
@@ -390,5 +436,5 @@ export default function CommandCenterPage() {
         )}
       </div>
     </div>
-  )
+  );
 }

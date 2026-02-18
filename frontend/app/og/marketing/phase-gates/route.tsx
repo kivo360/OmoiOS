@@ -1,6 +1,6 @@
-import { ImageResponse } from "next/og"
+import { ImageResponse } from "next/og";
 
-export const runtime = "edge"
+export const runtime = "edge";
 
 // Color palette - warmer tones matching main OG image
 const colors = {
@@ -18,22 +18,22 @@ const colors = {
   textDim: "rgba(255, 236, 205, 0.50)",
   cardBg: "rgba(255, 208, 74, 0.06)",
   cardBorder: "rgba(255, 208, 74, 0.18)",
-}
+};
 
 function PhaseNode({
   label,
   status,
   isActive,
 }: {
-  label: string
-  status: "completed" | "active" | "pending"
-  isActive?: boolean
+  label: string;
+  status: "completed" | "active" | "pending";
+  isActive?: boolean;
 }) {
   const statusColors = {
     completed: colors.green,
     active: colors.gold,
     pending: colors.textDim,
-  }
+  };
 
   return (
     <div
@@ -56,9 +56,7 @@ function PhaseNode({
                 ? `linear-gradient(135deg, ${colors.gold} 0%, ${colors.orange} 100%)`
                 : "rgba(255, 208, 74, 0.08)",
           border:
-            status === "pending"
-              ? `2px solid ${colors.cardBorder}`
-              : "none",
+            status === "pending" ? `2px solid ${colors.cardBorder}` : "none",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -117,7 +115,7 @@ function PhaseNode({
         {label}
       </span>
     </div>
-  )
+  );
 }
 
 function GateIcon({ approved }: { approved: boolean }) {
@@ -163,8 +161,18 @@ function GateIcon({ approved }: { approved: boolean }) {
                 strokeWidth="2"
                 fill="none"
               />
-              <path d="M2 17l10 5 10-5" stroke={colors.gold} strokeWidth="2" fill="none" />
-              <path d="M2 12l10 5 10-5" stroke={colors.gold} strokeWidth="2" fill="none" />
+              <path
+                d="M2 17l10 5 10-5"
+                stroke={colors.gold}
+                strokeWidth="2"
+                fill="none"
+              />
+              <path
+                d="M2 12l10 5 10-5"
+                stroke={colors.gold}
+                strokeWidth="2"
+                fill="none"
+              />
             </svg>
           )}
         </div>
@@ -182,16 +190,20 @@ function GateIcon({ approved }: { approved: boolean }) {
         {approved ? "Approved" : "Gate"}
       </span>
     </div>
-  )
+  );
 }
 
-function ConnectorLine({ status }: { status: "completed" | "active" | "pending" }) {
+function ConnectorLine({
+  status,
+}: {
+  status: "completed" | "active" | "pending";
+}) {
   const lineColor =
     status === "completed"
       ? colors.green
       : status === "active"
         ? colors.gold
-        : colors.cardBorder
+        : colors.cardBorder;
   return (
     <div
       style={{
@@ -202,306 +214,294 @@ function ConnectorLine({ status }: { status: "completed" | "active" | "pending" 
         borderRadius: "2px",
       }}
     />
-  )
+  );
 }
 
 export async function GET() {
   const montserratRegular = fetch(
-    new URL("../../../../public/fonts/Montserrat-Regular.ttf", import.meta.url)
-  ).then((res) => res.arrayBuffer())
+    new URL("../../../../public/fonts/Montserrat-Regular.ttf", import.meta.url),
+  ).then((res) => res.arrayBuffer());
 
   const montserratLight = fetch(
-    new URL("../../../../public/fonts/Montserrat-Light.ttf", import.meta.url)
-  ).then((res) => res.arrayBuffer())
+    new URL("../../../../public/fonts/Montserrat-Light.ttf", import.meta.url),
+  ).then((res) => res.arrayBuffer());
 
   return new ImageResponse(
-    (
+    <div
+      style={{
+        height: "100%",
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        background: colors.bgGradient,
+        position: "relative",
+        padding: "50px 80px",
+      }}
+    >
+      {/* Texture */}
       <div
         style={{
-          height: "100%",
-          width: "100%",
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundImage:
+            "radial-gradient(rgba(255, 208, 74, 0.03) 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
           display: "flex",
-          flexDirection: "column",
-          background: colors.bgGradient,
-          position: "relative",
-          padding: "50px 80px",
+        }}
+      />
+
+      {/* Warm golden overlay - matching main OG image */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background:
+            "radial-gradient(ellipse 100% 80% at 30% 30%, rgba(255,200,50,0.12) 0%, transparent 50%)",
+          display: "flex",
+        }}
+      />
+
+      {/* Ambient glow */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background:
+            "radial-gradient(ellipse 60% 40% at 50% 45%, rgba(255, 208, 74, 0.08) 0%, transparent 60%)",
+          display: "flex",
+        }}
+      />
+
+      {/* Vignette */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background:
+            "radial-gradient(ellipse 120% 90% at 50% 50%, transparent 52%, rgba(0,0,0,0.5) 100%)",
+          display: "flex",
+        }}
+      />
+
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: "40px",
+          zIndex: 1,
         }}
       >
-        {/* Texture */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundImage:
-              "radial-gradient(rgba(255, 208, 74, 0.03) 1px, transparent 1px)",
-            backgroundSize: "32px 32px",
-            display: "flex",
-          }}
-        />
-
-        {/* Warm golden overlay - matching main OG image */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background:
-              "radial-gradient(ellipse 100% 80% at 30% 30%, rgba(255,200,50,0.12) 0%, transparent 50%)",
-            display: "flex",
-          }}
-        />
-
-        {/* Ambient glow */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background:
-              "radial-gradient(ellipse 60% 40% at 50% 45%, rgba(255, 208, 74, 0.08) 0%, transparent 60%)",
-            display: "flex",
-          }}
-        />
-
-        {/* Vignette */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background:
-              "radial-gradient(ellipse 120% 90% at 50% 50%, transparent 52%, rgba(0,0,0,0.5) 100%)",
-            display: "flex",
-          }}
-        />
-
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            marginBottom: "40px",
-            zIndex: 1,
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div
-              style={{
-                display: "flex",
-                fontSize: "36px",
-                fontFamily: "Montserrat",
-                fontWeight: 400,
-                color: colors.text,
-                marginBottom: "10px",
-              }}
-            >
-              Autonomy With Oversight
-            </div>
-            <div
-              style={{
-                display: "flex",
-                fontSize: "18px",
-                fontFamily: "Montserrat",
-                fontWeight: 300,
-                color: colors.textMuted,
-              }}
-            >
-              Approve at phase transitions, not every keystroke
-            </div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div
+            style={{
+              display: "flex",
+              fontSize: "36px",
+              fontFamily: "Montserrat",
+              fontWeight: 400,
+              color: colors.text,
+              marginBottom: "10px",
+            }}
+          >
+            Autonomy With Oversight
           </div>
-
-          {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <svg
-              width="36"
-              height="36"
-              viewBox="0 0 512 512"
-              fill="none"
-              style={{ marginRight: "10px" }}
-            >
-              <defs>
-                <linearGradient
-                  id="goldStroke"
-                  x1="120"
-                  y1="96"
-                  x2="392"
-                  y2="416"
-                  gradientUnits="userSpaceOnUse"
-                >
-                  <stop offset="0" stopColor="#FFE78A" />
-                  <stop offset="0.35" stopColor="#FFD04A" />
-                  <stop offset="1" stopColor="#FF8A2A" />
-                </linearGradient>
-              </defs>
-              <g stroke="url(#goldStroke)" strokeLinecap="round" strokeLinejoin="round">
-                <g strokeWidth="20">
-                  <circle cx="256" cy="256" r="112" fill="none" />
-                  <circle cx="368" cy="256" r="112" fill="none" />
-                  <circle cx="312" cy="352.99" r="112" fill="none" />
-                  <circle cx="200" cy="352.99" r="112" fill="none" />
-                  <circle cx="144" cy="256" r="112" fill="none" />
-                  <circle cx="200" cy="159.01" r="112" fill="none" />
-                  <circle cx="312" cy="159.01" r="112" fill="none" />
-                </g>
-              </g>
-            </svg>
-            <span
-              style={{
-                fontSize: "22px",
-                fontFamily: "Montserrat",
-                fontWeight: 400,
-                color: colors.text,
-              }}
-            >
-              OmoiOS
-            </span>
+          <div
+            style={{
+              display: "flex",
+              fontSize: "18px",
+              fontFamily: "Montserrat",
+              fontWeight: 300,
+              color: colors.textMuted,
+            }}
+          >
+            Approve at phase transitions, not every keystroke
           </div>
         </div>
 
-        {/* Main Phase Flow */}
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <svg
+            width="36"
+            height="36"
+            viewBox="0 0 512 512"
+            fill="none"
+            style={{ marginRight: "10px" }}
+          >
+            <defs>
+              <linearGradient
+                id="goldStroke"
+                x1="120"
+                y1="96"
+                x2="392"
+                y2="416"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0" stopColor="#FFE78A" />
+                <stop offset="0.35" stopColor="#FFD04A" />
+                <stop offset="1" stopColor="#FF8A2A" />
+              </linearGradient>
+            </defs>
+            <g
+              stroke="url(#goldStroke)"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <g strokeWidth="20">
+                <circle cx="256" cy="256" r="112" fill="none" />
+                <circle cx="368" cy="256" r="112" fill="none" />
+                <circle cx="312" cy="352.99" r="112" fill="none" />
+                <circle cx="200" cy="352.99" r="112" fill="none" />
+                <circle cx="144" cy="256" r="112" fill="none" />
+                <circle cx="200" cy="159.01" r="112" fill="none" />
+                <circle cx="312" cy="159.01" r="112" fill="none" />
+              </g>
+            </g>
+          </svg>
+          <span
+            style={{
+              fontSize: "22px",
+              fontFamily: "Montserrat",
+              fontWeight: 400,
+              color: colors.text,
+            }}
+          >
+            OmoiOS
+          </span>
+        </div>
+      </div>
+
+      {/* Main Phase Flow */}
+      <div
+        style={{
+          display: "flex",
+          flex: 1,
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1,
+        }}
+      >
+        {/* Phase pipeline */}
         <div
           style={{
             display: "flex",
-            flex: 1,
-            flexDirection: "column",
             alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1,
+            gap: "16px",
+            marginBottom: "50px",
           }}
         >
-          {/* Phase pipeline */}
+          <PhaseNode label="Requirements" status="completed" />
+          <ConnectorLine status="completed" />
+          <GateIcon approved={true} />
+          <ConnectorLine status="completed" />
+          <PhaseNode label="Design" status="completed" />
+          <ConnectorLine status="completed" />
+          <GateIcon approved={true} />
+          <ConnectorLine status="active" />
+          <PhaseNode label="Tasks" status="active" isActive />
+          <ConnectorLine status="pending" />
+          <GateIcon approved={false} />
+          <ConnectorLine status="pending" />
+          <PhaseNode label="Execution" status="pending" />
+        </div>
+
+        {/* Approval Dialog Card */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            width: "520px",
+            background: "rgba(0, 0, 0, 0.45)",
+            borderRadius: "20px",
+            padding: "28px",
+            border: `1px solid ${colors.gold}40`,
+            boxShadow: `0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 208, 74, 0.08)`,
+          }}
+        >
+          {/* Dialog header */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "16px",
-              marginBottom: "50px",
+              justifyContent: "space-between",
+              marginBottom: "20px",
             }}
           >
-            <PhaseNode label="Requirements" status="completed" />
-            <ConnectorLine status="completed" />
-            <GateIcon approved={true} />
-            <ConnectorLine status="completed" />
-            <PhaseNode label="Design" status="completed" />
-            <ConnectorLine status="completed" />
-            <GateIcon approved={true} />
-            <ConnectorLine status="active" />
-            <PhaseNode label="Tasks" status="active" isActive />
-            <ConnectorLine status="pending" />
-            <GateIcon approved={false} />
-            <ConnectorLine status="pending" />
-            <PhaseNode label="Execution" status="pending" />
-          </div>
-
-          {/* Approval Dialog Card */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              width: "520px",
-              background: "rgba(0, 0, 0, 0.45)",
-              borderRadius: "20px",
-              padding: "28px",
-              border: `1px solid ${colors.gold}40`,
-              boxShadow: `0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 208, 74, 0.08)`,
-            }}
-          >
-            {/* Dialog header */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "20px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div
-                  style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "18px",
-                    background: `linear-gradient(135deg, ${colors.gold} 0%, ${colors.orange} 100%)`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M12 2L2 7l10 5 10-5-10-5z"
-                      stroke="#1a150d"
-                      strokeWidth="2"
-                      fill="none"
-                    />
-                    <path d="M2 17l10 5 10-5" stroke="#1a150d" strokeWidth="2" fill="none" />
-                    <path d="M2 12l10 5 10-5" stroke="#1a150d" strokeWidth="2" fill="none" />
-                  </svg>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <span
-                    style={{
-                      fontSize: "16px",
-                      fontFamily: "Montserrat",
-                      fontWeight: 400,
-                      color: colors.text,
-                    }}
-                  >
-                    Phase Gate Approval
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      fontFamily: "Montserrat",
-                      fontWeight: 300,
-                      color: colors.textMuted,
-                    }}
-                  >
-                    Tasks → Execution
-                  </span>
-                </div>
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <div
                 style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "18px",
+                  background: `linear-gradient(135deg, ${colors.gold} 0%, ${colors.orange} 100%)`,
                   display: "flex",
-                  padding: "6px 12px",
-                  background: "rgba(255, 208, 74, 0.12)",
-                  borderRadius: "8px",
-                  border: `1px solid ${colors.cardBorder}`,
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M12 2L2 7l10 5 10-5-10-5z"
+                    stroke="#1a150d"
+                    strokeWidth="2"
+                    fill="none"
+                  />
+                  <path
+                    d="M2 17l10 5 10-5"
+                    stroke="#1a150d"
+                    strokeWidth="2"
+                    fill="none"
+                  />
+                  <path
+                    d="M2 12l10 5 10-5"
+                    stroke="#1a150d"
+                    strokeWidth="2"
+                    fill="none"
+                  />
+                </svg>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
                 <span
                   style={{
-                    fontSize: "11px",
+                    fontSize: "16px",
                     fontFamily: "Montserrat",
                     fontWeight: 400,
-                    color: colors.gold,
+                    color: colors.text,
                   }}
                 >
-                  Awaiting Review
+                  Phase Gate Approval
+                </span>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    fontFamily: "Montserrat",
+                    fontWeight: 300,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Tasks → Execution
                 </span>
               </div>
             </div>
-
-            {/* Summary */}
             <div
               style={{
                 display: "flex",
-                flexDirection: "column",
-                background: "rgba(255, 208, 74, 0.04)",
-                borderRadius: "12px",
-                padding: "16px",
-                marginBottom: "20px",
+                padding: "6px 12px",
+                background: "rgba(255, 208, 74, 0.12)",
+                borderRadius: "8px",
                 border: `1px solid ${colors.cardBorder}`,
               }}
             >
@@ -510,183 +510,207 @@ export async function GET() {
                   fontSize: "11px",
                   fontFamily: "Montserrat",
                   fontWeight: 400,
-                  color: colors.textDim,
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  marginBottom: "10px",
+                  color: colors.gold,
                 }}
               >
-                Phase Summary
+                Awaiting Review
               </span>
-              <div style={{ display: "flex", gap: "24px" }}>
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <span
-                    style={{
-                      fontSize: "24px",
-                      fontFamily: "Montserrat",
-                      fontWeight: 400,
-                      color: colors.gold,
-                    }}
-                  >
-                    12
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      fontFamily: "Montserrat",
-                      fontWeight: 300,
-                      color: colors.textMuted,
-                    }}
-                  >
-                    Tasks Created
-                  </span>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <span
-                    style={{
-                      fontSize: "24px",
-                      fontFamily: "Montserrat",
-                      fontWeight: 400,
-                      color: colors.green,
-                    }}
-                  >
-                    3
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      fontFamily: "Montserrat",
-                      fontWeight: 300,
-                      color: colors.textMuted,
-                    }}
-                  >
-                    Dependencies
-                  </span>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <span
-                    style={{
-                      fontSize: "24px",
-                      fontFamily: "Montserrat",
-                      fontWeight: 400,
-                      color: colors.purple,
-                    }}
-                  >
-                    2
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      fontFamily: "Montserrat",
-                      fontWeight: 300,
-                      color: colors.textMuted,
-                    }}
-                  >
-                    Agents Ready
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  flex: 1,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "14px",
-                  background: "rgba(255, 208, 74, 0.08)",
-                  borderRadius: "10px",
-                  border: `1px solid ${colors.cardBorder}`,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "14px",
-                    fontFamily: "Montserrat",
-                    fontWeight: 400,
-                    color: colors.textMuted,
-                  }}
-                >
-                  Request Changes
-                </span>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flex: 1,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  padding: "14px",
-                  background: `linear-gradient(135deg, ${colors.green} 0%, #3CB371 100%)`,
-                  borderRadius: "10px",
-                  boxShadow: `0 6px 20px rgba(80, 200, 120, 0.30)`,
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M20 6L9 17l-5-5"
-                    stroke="#fff"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span
-                  style={{
-                    fontSize: "14px",
-                    fontFamily: "Montserrat",
-                    fontWeight: 400,
-                    color: "#fff",
-                  }}
-                >
-                  Approve & Continue
-                </span>
-              </div>
             </div>
           </div>
-        </div>
 
-        {/* Bottom tagline */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            marginTop: "auto",
-            zIndex: 1,
-          }}
-        >
+          {/* Summary */}
           <div
             style={{
               display: "flex",
-              background: "rgba(255, 208, 74, 0.08)",
-              borderRadius: "999px",
-              padding: "10px 20px",
+              flexDirection: "column",
+              background: "rgba(255, 208, 74, 0.04)",
+              borderRadius: "12px",
+              padding: "16px",
+              marginBottom: "20px",
               border: `1px solid ${colors.cardBorder}`,
             }}
           >
             <span
               style={{
-                fontSize: "14px",
+                fontSize: "11px",
                 fontFamily: "Montserrat",
-                fontWeight: 300,
-                color: colors.textMuted,
+                fontWeight: 400,
+                color: colors.textDim,
+                textTransform: "uppercase",
+                letterSpacing: "1px",
+                marginBottom: "10px",
               }}
             >
-              Control where it matters, automation everywhere else
+              Phase Summary
             </span>
+            <div style={{ display: "flex", gap: "24px" }}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span
+                  style={{
+                    fontSize: "24px",
+                    fontFamily: "Montserrat",
+                    fontWeight: 400,
+                    color: colors.gold,
+                  }}
+                >
+                  12
+                </span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontFamily: "Montserrat",
+                    fontWeight: 300,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Tasks Created
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span
+                  style={{
+                    fontSize: "24px",
+                    fontFamily: "Montserrat",
+                    fontWeight: 400,
+                    color: colors.green,
+                  }}
+                >
+                  3
+                </span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontFamily: "Montserrat",
+                    fontWeight: 300,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Dependencies
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span
+                  style={{
+                    fontSize: "24px",
+                    fontFamily: "Montserrat",
+                    fontWeight: 400,
+                    color: colors.purple,
+                  }}
+                >
+                  2
+                </span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontFamily: "Montserrat",
+                    fontWeight: 300,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Agents Ready
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div
+            style={{
+              display: "flex",
+              gap: "12px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "14px",
+                background: "rgba(255, 208, 74, 0.08)",
+                borderRadius: "10px",
+                border: `1px solid ${colors.cardBorder}`,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "14px",
+                  fontFamily: "Montserrat",
+                  fontWeight: 400,
+                  color: colors.textMuted,
+                }}
+              >
+                Request Changes
+              </span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                padding: "14px",
+                background: `linear-gradient(135deg, ${colors.green} 0%, #3CB371 100%)`,
+                borderRadius: "10px",
+                boxShadow: `0 6px 20px rgba(80, 200, 120, 0.30)`,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M20 6L9 17l-5-5"
+                  stroke="#fff"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span
+                style={{
+                  fontSize: "14px",
+                  fontFamily: "Montserrat",
+                  fontWeight: 400,
+                  color: "#fff",
+                }}
+              >
+                Approve & Continue
+              </span>
+            </div>
           </div>
         </div>
       </div>
-    ),
+
+      {/* Bottom tagline */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          marginTop: "auto",
+          zIndex: 1,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            background: "rgba(255, 208, 74, 0.08)",
+            borderRadius: "999px",
+            padding: "10px 20px",
+            border: `1px solid ${colors.cardBorder}`,
+          }}
+        >
+          <span
+            style={{
+              fontSize: "14px",
+              fontFamily: "Montserrat",
+              fontWeight: 300,
+              color: colors.textMuted,
+            }}
+          >
+            Control where it matters, automation everywhere else
+          </span>
+        </div>
+      </div>
+    </div>,
     {
       width: 1200,
       height: 630,
@@ -704,6 +728,6 @@ export async function GET() {
           weight: 300,
         },
       ],
-    }
-  )
+    },
+  );
 }

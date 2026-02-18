@@ -1,12 +1,12 @@
-"use client"
+"use client";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 interface OmoiOSLogoProps {
-  className?: string
-  size?: "sm" | "md" | "lg" | "xl"
-  showText?: boolean
-  textClassName?: string
+  className?: string;
+  size?: "sm" | "md" | "lg" | "xl";
+  showText?: boolean;
+  textClassName?: string;
 }
 
 const sizeMap = {
@@ -14,7 +14,7 @@ const sizeMap = {
   md: { icon: "h-8 w-8", text: "text-base" },
   lg: { icon: "h-10 w-10", text: "text-lg" },
   xl: { icon: "h-12 w-12", text: "text-xl" },
-}
+};
 
 export function OmoiOSLogo({
   className,
@@ -22,7 +22,7 @@ export function OmoiOSLogo({
   showText = true,
   textClassName,
 }: OmoiOSLogoProps) {
-  const { icon, text } = sizeMap[size]
+  const { icon, text } = sizeMap[size];
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
@@ -32,18 +32,18 @@ export function OmoiOSLogo({
           className={cn(
             "font-semibold bg-gradient-to-r from-amber-200 via-yellow-400 to-orange-500 bg-clip-text text-transparent",
             text,
-            textClassName
+            textClassName,
           )}
         >
           OmoiOS
         </span>
       )}
     </div>
-  )
+  );
 }
 
 interface OmoiOSMarkProps {
-  className?: string
+  className?: string;
 }
 
 export function OmoiOSMark({ className }: OmoiOSMarkProps) {
@@ -115,5 +115,5 @@ export function OmoiOSMark({ className }: OmoiOSMarkProps) {
         </g>
       </g>
     </svg>
-  )
+  );
 }

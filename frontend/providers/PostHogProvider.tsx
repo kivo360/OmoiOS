@@ -1,25 +1,36 @@
-"use client"
+"use client";
 
-import { useEffect, Suspense, createContext, useContext, type ReactNode } from "react"
-import { usePathname, useSearchParams } from "next/navigation"
-import { initPostHog, capturePageView, isPostHogReady, posthog } from "@/lib/analytics/posthog"
+import {
+  useEffect,
+  Suspense,
+  createContext,
+  useContext,
+  type ReactNode,
+} from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+  initPostHog,
+  capturePageView,
+  isPostHogReady,
+  posthog,
+} from "@/lib/analytics/posthog";
 
 // ============================================================================
 // Context for PostHog
 // ============================================================================
 
 interface PostHogContextValue {
-  isReady: boolean
-  capture: typeof posthog.capture
-  identify: typeof posthog.identify
-  reset: typeof posthog.reset
-  setPersonProperties: typeof posthog.setPersonProperties
-  getFeatureFlag: typeof posthog.getFeatureFlag
-  isFeatureEnabled: typeof posthog.isFeatureEnabled
-  onFeatureFlags: typeof posthog.onFeatureFlags
+  isReady: boolean;
+  capture: typeof posthog.capture;
+  identify: typeof posthog.identify;
+  reset: typeof posthog.reset;
+  setPersonProperties: typeof posthog.setPersonProperties;
+  getFeatureFlag: typeof posthog.getFeatureFlag;
+  isFeatureEnabled: typeof posthog.isFeatureEnabled;
+  onFeatureFlags: typeof posthog.onFeatureFlags;
 }
 
-const PostHogContext = createContext<PostHogContextValue | null>(null)
+const PostHogContext = createContext<PostHogContextValue | null>(null);
 
 // ============================================================================
 // Page View Tracker Component
@@ -30,22 +41,22 @@ const PostHogContext = createContext<PostHogContextValue | null>(null)
  * Separated into its own component because useSearchParams requires Suspense
  */
 function PageViewTracker(): null {
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!isPostHogReady()) return
+    if (!isPostHogReady()) return;
 
     // Construct full URL with search params
     const url = searchParams?.toString()
       ? `${pathname}?${searchParams.toString()}`
-      : pathname
+      : pathname;
 
     // Capture pageview with full URL
-    capturePageView(window.location.origin + url)
-  }, [pathname, searchParams])
+    capturePageView(window.location.origin + url);
+  }, [pathname, searchParams]);
 
-  return null
+  return null;
 }
 
 // ============================================================================
@@ -53,57 +64,57 @@ function PageViewTracker(): null {
 // ============================================================================
 
 interface PostHogProviderProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export function PostHogProvider({ children }: PostHogProviderProps) {
   // Initialize PostHog on mount
   useEffect(() => {
-    initPostHog()
-  }, [])
+    initPostHog();
+  }, []);
 
   // Create context value with bound methods
   const contextValue: PostHogContextValue = {
     isReady: isPostHogReady(),
     capture: (...args) => {
       if (isPostHogReady()) {
-        return posthog.capture(...args)
+        return posthog.capture(...args);
       }
     },
     identify: (...args) => {
       if (isPostHogReady()) {
-        posthog.identify(...args)
+        posthog.identify(...args);
       }
     },
     reset: (...args) => {
       if (isPostHogReady()) {
-        posthog.reset(...args)
+        posthog.reset(...args);
       }
     },
     setPersonProperties: (...args) => {
       if (isPostHogReady()) {
-        posthog.setPersonProperties(...args)
+        posthog.setPersonProperties(...args);
       }
     },
     getFeatureFlag: (...args) => {
       if (isPostHogReady()) {
-        return posthog.getFeatureFlag(...args)
+        return posthog.getFeatureFlag(...args);
       }
-      return undefined
+      return undefined;
     },
     isFeatureEnabled: (...args) => {
       if (isPostHogReady()) {
-        return posthog.isFeatureEnabled(...args)
+        return posthog.isFeatureEnabled(...args);
       }
-      return undefined
+      return undefined;
     },
     onFeatureFlags: (...args) => {
       if (isPostHogReady()) {
-        return posthog.onFeatureFlags(...args)
+        return posthog.onFeatureFlags(...args);
       }
-      return () => {}
+      return () => {};
     },
-  }
+  };
 
   return (
     <PostHogContext.Provider value={contextValue}>
@@ -113,7 +124,7 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
       </Suspense>
       {children}
     </PostHogContext.Provider>
-  )
+  );
 }
 
 // ============================================================================
@@ -125,7 +136,7 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
  * Provides type-safe access to PostHog methods
  */
 export function usePostHog(): PostHogContextValue {
-  const context = useContext(PostHogContext)
+  const context = useContext(PostHogContext);
 
   if (!context) {
     // Return a no-op context if used outside provider
@@ -139,8 +150,8 @@ export function usePostHog(): PostHogContextValue {
       getFeatureFlag: () => undefined,
       isFeatureEnabled: () => undefined,
       onFeatureFlags: () => () => {},
-    }
+    };
   }
 
-  return context
+  return context;
 }

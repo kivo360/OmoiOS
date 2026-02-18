@@ -1,41 +1,41 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { FileCode, ChevronDown, ChevronUp, Download } from "lucide-react"
-import { LineChanges } from "./LineChanges"
-import { cn } from "@/lib/utils"
+import { useState } from "react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { FileCode, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { LineChanges } from "./LineChanges";
+import { cn } from "@/lib/utils";
 
 interface FileEditedEvent {
-  event_type: "agent.file_edited" | "SANDBOX_agent.file_edited"
+  event_type: "agent.file_edited" | "SANDBOX_agent.file_edited";
   event_data: {
-    turn?: number
-    tool_use_id?: string
-    file_path: string
-    change_type: "created" | "modified"
-    lines_added: number
-    lines_removed: number
-    diff_preview: string
-    full_diff?: string
-    full_diff_available?: boolean
-    full_diff_size?: number
-  }
+    turn?: number;
+    tool_use_id?: string;
+    file_path: string;
+    change_type: "created" | "modified";
+    lines_added: number;
+    lines_removed: number;
+    diff_preview: string;
+    full_diff?: string;
+    full_diff_available?: boolean;
+    full_diff_size?: number;
+  };
 }
 
 interface FileChangeCardProps {
-  event: FileEditedEvent
-  className?: string
+  event: FileEditedEvent;
+  className?: string;
 }
 
 export function FileChangeCard({ event, className }: FileChangeCardProps) {
-  const [expanded, setExpanded] = useState(false)
-  const [loadingFullDiff, setLoadingFullDiff] = useState(false)
+  const [expanded, setExpanded] = useState(false);
+  const [loadingFullDiff, setLoadingFullDiff] = useState(false);
   const [fullDiff, setFullDiff] = useState<string | null>(
-    event.event_data.full_diff || null
-  )
+    event.event_data.full_diff || null,
+  );
 
   const {
     file_path,
@@ -45,14 +45,14 @@ export function FileChangeCard({ event, className }: FileChangeCardProps) {
     diff_preview,
     full_diff_available,
     full_diff_size,
-  } = event.event_data
+  } = event.event_data;
 
-  const needsFullDiff = full_diff_available && !fullDiff && !loadingFullDiff
-  const displayDiff = expanded && fullDiff ? fullDiff : diff_preview
+  const needsFullDiff = full_diff_available && !fullDiff && !loadingFullDiff;
+  const displayDiff = expanded && fullDiff ? fullDiff : diff_preview;
 
   const loadFullDiff = async () => {
     if (needsFullDiff && event.event_data.tool_use_id) {
-      setLoadingFullDiff(true)
+      setLoadingFullDiff(true);
       try {
         // TODO: Implement API endpoint for fetching full diff
         // For now, we'll use the preview if full diff isn't available
@@ -61,28 +61,28 @@ export function FileChangeCard({ event, className }: FileChangeCardProps) {
         // )
         // const data = await response.json()
         // setFullDiff(data.diff)
-        setLoadingFullDiff(false)
+        setLoadingFullDiff(false);
       } catch (error) {
-        console.error("Failed to load full diff:", error)
-        setLoadingFullDiff(false)
+        console.error("Failed to load full diff:", error);
+        setLoadingFullDiff(false);
       }
     }
-  }
+  };
 
   const handleExpand = () => {
     if (!expanded) {
-      setExpanded(true)
+      setExpanded(true);
       if (needsFullDiff) {
-        loadFullDiff()
+        loadFullDiff();
       }
     } else {
-      setExpanded(false)
+      setExpanded(false);
     }
-  }
+  };
 
   // Extract filename from path
-  const filename = file_path.split("/").pop() || file_path
-  const fileExtension = filename.split(".").pop() || ""
+  const filename = file_path.split("/").pop() || file_path;
+  const fileExtension = filename.split(".").pop() || "";
 
   return (
     <Card className={cn("w-full", className)}>
@@ -149,5 +149,5 @@ export function FileChangeCard({ event, className }: FileChangeCardProps) {
         </CardContent>
       )}
     </Card>
-  )
+  );
 }

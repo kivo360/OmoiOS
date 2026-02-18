@@ -1,35 +1,47 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Search, Filter, GitBranch, CheckCircle2, Clock, AlertCircle, XCircle } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { useState } from "react";
+import {
+  Search,
+  Filter,
+  GitBranch,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  XCircle,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import { ChevronDown } from "lucide-react"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface FilterSectionProps {
-  title: string
-  children: React.ReactNode
-  defaultOpen?: boolean
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
 }
 
-function FilterSection({ title, children, defaultOpen = true }: FilterSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
+function FilterSection({
+  title,
+  children,
+  defaultOpen = true,
+}: FilterSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -38,7 +50,7 @@ function FilterSection({ title, children, defaultOpen = true }: FilterSectionPro
         <ChevronDown
           className={cn(
             "h-4 w-4 text-muted-foreground transition-transform",
-            isOpen && "rotate-180"
+            isOpen && "rotate-180",
           )}
         />
       </CollapsibleTrigger>
@@ -46,7 +58,7 @@ function FilterSection({ title, children, defaultOpen = true }: FilterSectionPro
         {children}
       </CollapsibleContent>
     </Collapsible>
-  )
+  );
 }
 
 export function GraphFiltersPanel() {
@@ -55,15 +67,15 @@ export function GraphFiltersPanel() {
     inProgress: true,
     completed: true,
     blocked: true,
-  })
+  });
 
-  const [phaseFilter, setPhaseFilter] = useState("all")
-  const [priorityFilter, setPriorityFilter] = useState("all")
-  const [assigneeFilter, setAssigneeFilter] = useState("all")
+  const [phaseFilter, setPhaseFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
 
   const toggleStatus = (status: keyof typeof statusFilters) => {
-    setStatusFilters((prev) => ({ ...prev, [status]: !prev[status] }))
-  }
+    setStatusFilters((prev) => ({ ...prev, [status]: !prev[status] }));
+  };
 
   const clearFilters = () => {
     setStatusFilters({
@@ -71,11 +83,11 @@ export function GraphFiltersPanel() {
       inProgress: true,
       completed: true,
       blocked: true,
-    })
-    setPhaseFilter("all")
-    setPriorityFilter("all")
-    setAssigneeFilter("all")
-  }
+    });
+    setPhaseFilter("all");
+    setPriorityFilter("all");
+    setAssigneeFilter("all");
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -87,10 +99,7 @@ export function GraphFiltersPanel() {
         </div>
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search tickets..."
-            className="pl-8 h-9"
-          />
+          <Input placeholder="Search tickets..." className="pl-8 h-9" />
         </div>
       </div>
 
@@ -106,7 +115,10 @@ export function GraphFiltersPanel() {
                   checked={statusFilters.pending}
                   onCheckedChange={() => toggleStatus("pending")}
                 />
-                <Label htmlFor="pending" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="pending"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                   Pending
                 </Label>
@@ -117,7 +129,10 @@ export function GraphFiltersPanel() {
                   checked={statusFilters.inProgress}
                   onCheckedChange={() => toggleStatus("inProgress")}
                 />
-                <Label htmlFor="inProgress" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="inProgress"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <AlertCircle className="h-3.5 w-3.5 text-blue-500" />
                   In Progress
                 </Label>
@@ -128,7 +143,10 @@ export function GraphFiltersPanel() {
                   checked={statusFilters.completed}
                   onCheckedChange={() => toggleStatus("completed")}
                 />
-                <Label htmlFor="completed" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="completed"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
                   Completed
                 </Label>
@@ -139,7 +157,10 @@ export function GraphFiltersPanel() {
                   checked={statusFilters.blocked}
                   onCheckedChange={() => toggleStatus("blocked")}
                 />
-                <Label htmlFor="blocked" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="blocked"
+                  className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                >
                   <XCircle className="h-3.5 w-3.5 text-red-500" />
                   Blocked
                 </Label>
@@ -200,19 +221,28 @@ export function GraphFiltersPanel() {
             <div className="space-y-2">
               <div className="flex items-center space-x-2">
                 <Checkbox id="showTickets" defaultChecked />
-                <Label htmlFor="showTickets" className="text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="showTickets"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   Tickets
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox id="showTasks" defaultChecked />
-                <Label htmlFor="showTasks" className="text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="showTasks"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   Tasks
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox id="showDiscoveries" defaultChecked />
-                <Label htmlFor="showDiscoveries" className="text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="showDiscoveries"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   Discoveries
                 </Label>
               </div>
@@ -233,5 +263,5 @@ export function GraphFiltersPanel() {
         </Button>
       </div>
     </div>
-  )
+  );
 }

@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { useTheme } from 'next-themes';
+import { useEffect, useRef, useState } from "react";
+import { useTheme } from "next-themes";
 
 interface MermaidProps {
   chart: string;
@@ -9,53 +9,53 @@ interface MermaidProps {
 
 // Theme configurations
 const darkTheme = {
-  background: '#0a0a0a',
-  primaryColor: '#292524',
-  primaryTextColor: '#fafaf9',
-  primaryBorderColor: '#f59e0b',
-  secondaryColor: '#1c1917',
-  secondaryTextColor: '#e7e5e4',
-  secondaryBorderColor: '#78716c',
-  tertiaryColor: '#171717',
-  tertiaryTextColor: '#a8a29e',
-  tertiaryBorderColor: '#57534e',
-  lineColor: '#78716c',
-  textColor: '#fafaf9',
-  mainBkg: '#1c1917',
-  nodeBkg: '#292524',
-  nodeBorder: '#f59e0b',
-  clusterBkg: '#0a0a0a',
-  clusterBorder: '#f59e0b',
-  edgeLabelBackground: '#1c1917',
-  fontSize: '14px',
+  background: "#0a0a0a",
+  primaryColor: "#292524",
+  primaryTextColor: "#fafaf9",
+  primaryBorderColor: "#f59e0b",
+  secondaryColor: "#1c1917",
+  secondaryTextColor: "#e7e5e4",
+  secondaryBorderColor: "#78716c",
+  tertiaryColor: "#171717",
+  tertiaryTextColor: "#a8a29e",
+  tertiaryBorderColor: "#57534e",
+  lineColor: "#78716c",
+  textColor: "#fafaf9",
+  mainBkg: "#1c1917",
+  nodeBkg: "#292524",
+  nodeBorder: "#f59e0b",
+  clusterBkg: "#0a0a0a",
+  clusterBorder: "#f59e0b",
+  edgeLabelBackground: "#1c1917",
+  fontSize: "14px",
 };
 
 const lightTheme = {
-  background: '#ffffff',
-  primaryColor: '#fef3c7',
-  primaryTextColor: '#1c1917',
-  primaryBorderColor: '#d97706',
-  secondaryColor: '#fffbeb',
-  secondaryTextColor: '#292524',
-  secondaryBorderColor: '#b45309',
-  tertiaryColor: '#fefce8',
-  tertiaryTextColor: '#44403c',
-  tertiaryBorderColor: '#92400e',
-  lineColor: '#78716c',
-  textColor: '#1c1917',
-  mainBkg: '#fffbeb',
-  nodeBkg: '#fef3c7',
-  nodeBorder: '#d97706',
-  clusterBkg: '#ffffff',
-  clusterBorder: '#d97706',
-  edgeLabelBackground: '#fffbeb',
-  fontSize: '14px',
+  background: "#ffffff",
+  primaryColor: "#fef3c7",
+  primaryTextColor: "#1c1917",
+  primaryBorderColor: "#d97706",
+  secondaryColor: "#fffbeb",
+  secondaryTextColor: "#292524",
+  secondaryBorderColor: "#b45309",
+  tertiaryColor: "#fefce8",
+  tertiaryTextColor: "#44403c",
+  tertiaryBorderColor: "#92400e",
+  lineColor: "#78716c",
+  textColor: "#1c1917",
+  mainBkg: "#fffbeb",
+  nodeBkg: "#fef3c7",
+  nodeBorder: "#d97706",
+  clusterBkg: "#ffffff",
+  clusterBorder: "#d97706",
+  edgeLabelBackground: "#fffbeb",
+  fontSize: "14px",
 };
 
 // Inner component that actually renders mermaid
 function MermaidRenderer({ chart, theme }: { chart: string; theme: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [svg, setSvg] = useState<string>('');
+  const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,19 +63,19 @@ function MermaidRenderer({ chart, theme }: { chart: string; theme: string }) {
 
     const renderDiagram = async () => {
       try {
-        const mermaid = (await import('mermaid')).default;
-        const isDark = theme === 'dark';
+        const mermaid = (await import("mermaid")).default;
+        const isDark = theme === "dark";
         const themeVars = isDark ? darkTheme : lightTheme;
 
         mermaid.initialize({
           startOnLoad: false,
-          theme: 'base',
-          securityLevel: 'loose',
-          fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+          theme: "base",
+          securityLevel: "loose",
+          fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
           themeVariables: themeVars,
           flowchart: {
             htmlLabels: true,
-            curve: 'basis',
+            curve: "basis",
             padding: 20,
             nodeSpacing: 50,
             rankSpacing: 70,
@@ -91,7 +91,9 @@ function MermaidRenderer({ chart, theme }: { chart: string; theme: string }) {
         }
       } catch (err) {
         if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Failed to render diagram');
+          setError(
+            err instanceof Error ? err.message : "Failed to render diagram",
+          );
         }
       }
     };
@@ -148,7 +150,7 @@ export function Mermaid({ chart }: MermaidProps) {
     );
   }
 
-  const theme = resolvedTheme || 'dark';
+  const theme = resolvedTheme || "dark";
 
   // Key forces complete remount when theme changes
   return <MermaidRenderer key={theme} chart={chart} theme={theme} />;

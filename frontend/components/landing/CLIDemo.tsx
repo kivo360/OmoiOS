@@ -1,16 +1,19 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Terminal, Copy, Check } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Terminal, Copy, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface CLIDemoProps {
-  className?: string
+  className?: string;
 }
 
 const cliSequence = [
-  { type: "command", text: '$ omi task "Add Stripe checkout to the billing page"' },
+  {
+    type: "command",
+    text: '$ omi task "Add Stripe checkout to the billing page"',
+  },
   { type: "output", text: "" },
   { type: "output", text: "✓ Analyzing requirements...", delay: 500 },
   { type: "output", text: "✓ Created Ticket FEAT-201", delay: 800 },
@@ -30,83 +33,97 @@ const cliSequence = [
   { type: "agent", text: "Agent-3: Writing integration tests", delay: 200 },
   { type: "agent", text: "Agent-4: Updating billing page layout", delay: 200 },
   { type: "output", text: "" },
-  { type: "progress", text: "[████████████████████░░░░] 78% complete", delay: 1000 },
+  {
+    type: "progress",
+    text: "[████████████████████░░░░] 78% complete",
+    delay: 1000,
+  },
   { type: "output", text: "" },
   { type: "success", text: "✓ All tasks completed successfully!", delay: 1500 },
-  { type: "success", text: "✓ PR #203 opened: 'Add Stripe checkout flow'", delay: 500 },
-  { type: "link", text: "  → https://github.com/your-org/repo/pull/203", delay: 300 },
-]
+  {
+    type: "success",
+    text: "✓ PR #203 opened: 'Add Stripe checkout flow'",
+    delay: 500,
+  },
+  {
+    type: "link",
+    text: "  → https://github.com/your-org/repo/pull/203",
+    delay: 300,
+  },
+];
 
 export function CLIDemo({ className }: CLIDemoProps) {
-  const [visibleLines, setVisibleLines] = useState<number>(0)
-  const [copied, setCopied] = useState(false)
-  const [isTyping, setIsTyping] = useState(false)
-  const [typedCommand, setTypedCommand] = useState("")
+  const [visibleLines, setVisibleLines] = useState<number>(0);
+  const [copied, setCopied] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typedCommand, setTypedCommand] = useState("");
 
   useEffect(() => {
     // Type out the command first
-    const command = cliSequence[0].text
-    let charIndex = 0
+    const command = cliSequence[0].text;
+    let charIndex = 0;
 
-    setIsTyping(true)
+    setIsTyping(true);
     const typeInterval = setInterval(() => {
       if (charIndex <= command.length) {
-        setTypedCommand(command.slice(0, charIndex))
-        charIndex++
+        setTypedCommand(command.slice(0, charIndex));
+        charIndex++;
       } else {
-        clearInterval(typeInterval)
-        setIsTyping(false)
-        setVisibleLines(1)
+        clearInterval(typeInterval);
+        setIsTyping(false);
+        setVisibleLines(1);
 
         // Then show subsequent lines with delays
-        let lineIndex = 1
+        let lineIndex = 1;
         const showNextLine = () => {
           if (lineIndex < cliSequence.length) {
-            const delay = cliSequence[lineIndex].delay || 100
+            const delay = cliSequence[lineIndex].delay || 100;
             setTimeout(() => {
-              setVisibleLines(lineIndex + 1)
-              lineIndex++
-              showNextLine()
-            }, delay)
+              setVisibleLines(lineIndex + 1);
+              lineIndex++;
+              showNextLine();
+            }, delay);
           }
-        }
-        setTimeout(showNextLine, 500)
+        };
+        setTimeout(showNextLine, 500);
       }
-    }, 40)
+    }, 40);
 
-    return () => clearInterval(typeInterval)
-  }, [])
+    return () => clearInterval(typeInterval);
+  }, []);
 
   const copyCommand = () => {
-    navigator.clipboard.writeText('omi task "Add Stripe checkout to the billing page"')
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+    navigator.clipboard.writeText(
+      'omi task "Add Stripe checkout to the billing page"',
+    );
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const getLineColor = (type: string) => {
     switch (type) {
       case "command":
-        return "text-white"
+        return "text-white";
       case "output":
-        return "text-[#00FF41]"
+        return "text-[#00FF41]";
       case "agent":
-        return "text-[#0366D6]"
+        return "text-[#0366D6]";
       case "progress":
-        return "text-[#FFD93D]"
+        return "text-[#FFD93D]";
       case "success":
-        return "text-[#00FF41]"
+        return "text-[#00FF41]";
       case "link":
-        return "text-[#A855F7]"
+        return "text-[#A855F7]";
       default:
-        return "text-[#999]"
+        return "text-[#999]";
     }
-  }
+  };
 
   return (
     <div
       className={cn(
         "overflow-hidden rounded-xl border border-[#333] bg-[#0D0D0D]",
-        className
+        className,
       )}
     >
       {/* Terminal Header */}
@@ -190,5 +207,5 @@ export function CLIDemo({ className }: CLIDemoProps) {
         )}
       </div>
     </div>
-  )
+  );
 }

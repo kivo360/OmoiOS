@@ -1,5 +1,5 @@
-import { PrototypeWorkspace } from "@/components/prototype/PrototypeWorkspace"
+import { PrototypeWorkspace } from "@/components/prototype/PrototypeWorkspace";
 
 export default function PrototypePage() {
-  return <PrototypeWorkspace />
+  return <PrototypeWorkspace />;
 }

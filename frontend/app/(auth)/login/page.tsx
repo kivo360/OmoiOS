@@ -1,64 +1,64 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { CardDescription, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { Github, Mail, Loader2 } from "lucide-react"
-import { useAuth } from "@/hooks/useAuth"
-import { login as apiLogin, getCurrentUser } from "@/lib/api/auth"
-import { ApiError } from "@/lib/api/client"
-import { startOAuthFlow } from "@/lib/api/oauth"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CardDescription, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Github, Mail, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { login as apiLogin, getCurrentUser } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
+import { startOAuthFlow } from "@/lib/api/oauth";
 
 export default function LoginPage() {
-  const router = useRouter()
-  const { login } = useAuth()
-  
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
+  const router = useRouter();
+  const { login } = useAuth();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
     try {
       // Login and get tokens
-      await apiLogin({ email, password })
-      
+      await apiLogin({ email, password });
+
       // Fetch user data
-      const user = await getCurrentUser()
-      
+      const user = await getCurrentUser();
+
       // Update auth context
-      login(user)
-      
+      login(user);
+
       // Redirect to command center
-      router.push("/command")
+      router.push("/command");
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setError(err.message);
       } else {
-        setError("An unexpected error occurred. Please try again.")
+        setError("An unexpected error occurred. Please try again.");
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleOAuth = (provider: "github" | "google") => {
     try {
-      startOAuthFlow(provider)
+      startOAuthFlow(provider);
     } catch (error) {
-      console.error(`Failed to start OAuth flow for ${provider}:`, error)
-      setError(`Failed to start ${provider} authentication. Please try again.`)
+      console.error(`Failed to start OAuth flow for ${provider}:`, error);
+      setError(`Failed to start ${provider} authentication. Please try again.`);
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -131,9 +131,9 @@ export default function LoginPage() {
           type="button"
           variant="outline"
           onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            handleOAuth("github")
+            e.preventDefault();
+            e.stopPropagation();
+            handleOAuth("github");
           }}
           disabled={isLoading}
         >
@@ -144,9 +144,9 @@ export default function LoginPage() {
           type="button"
           variant="outline"
           onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            handleOAuth("google")
+            e.preventDefault();
+            e.stopPropagation();
+            handleOAuth("google");
           }}
           disabled={isLoading}
         >
@@ -162,5 +162,5 @@ export default function LoginPage() {
         </Link>
       </div>
     </div>
-  )
+  );
 }

@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { Github, Twitter, Linkedin, MessageCircle } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { OmoiOSLogo } from "@/components/ui/omoios-logo"
+import Link from "next/link";
+import { Github, Twitter, Linkedin, MessageCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { OmoiOSLogo } from "@/components/ui/omoios-logo";
 
 const footerLinks = {
   product: [
@@ -30,22 +30,28 @@ const footerLinks = {
   //   { label: "Security", href: "/security" },
   //   { label: "DPA", href: "/dpa" },
   // ],
-}
+};
 
 const socialLinks = [
   { icon: Github, href: "https://github.com/kivo360/OmoiOS", label: "GitHub" },
   { icon: Twitter, href: "https://twitter.com/omoios", label: "Twitter" },
-  { icon: Linkedin, href: "https://linkedin.com/company/omoios", label: "LinkedIn" },
+  {
+    icon: Linkedin,
+    href: "https://linkedin.com/company/omoios",
+    label: "LinkedIn",
+  },
   { icon: MessageCircle, href: "https://discord.gg/omoios", label: "Discord" },
-]
+];
 
 interface FooterSectionProps {
-  className?: string
+  className?: string;
 }
 
 export function FooterSection({ className }: FooterSectionProps) {
   return (
-    <footer className={cn("border-t border-gray-800 bg-landing-bg-dark", className)}>
+    <footer
+      className={cn("border-t border-gray-800 bg-landing-bg-dark", className)}
+    >
       <div className="container mx-auto px-4 py-12 md:py-16">
         {/* Main Footer Content */}
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
@@ -55,8 +61,8 @@ export function FooterSection({ className }: FooterSectionProps) {
               <OmoiOSLogo size="md" />
             </Link>
             <p className="mt-4 max-w-xs text-sm text-gray-400">
-              Autonomous engineering execution. Turn feature requests into shipped code
-              while you focus on what matters.
+              Autonomous engineering execution. Turn feature requests into
+              shipped code while you focus on what matters.
             </p>
 
             {/* Social Links */}
@@ -101,11 +107,9 @@ export function FooterSection({ className }: FooterSectionProps) {
           <p className="text-sm text-gray-500">
             © {new Date().getFullYear()} OmoiOS. All rights reserved.
           </p>
-          <p className="text-sm text-gray-500">
-            Built with autonomy in mind.
-          </p>
+          <p className="text-sm text-gray-500">Built with autonomy in mind.</p>
         </div>
       </div>
     </footer>
-  )
+  );
 }

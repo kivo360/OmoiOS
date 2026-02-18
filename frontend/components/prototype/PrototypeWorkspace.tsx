@@ -1,18 +1,18 @@
-"use client"
+"use client";
 
-import { useState, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { useState, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Loader2,
   Play,
@@ -20,49 +20,49 @@ import {
   Download,
   Square,
   AlertCircle,
-} from "lucide-react"
-import { PreviewPanel } from "@/components/preview/PreviewPanel"
-import { usePrototype } from "@/hooks/usePrototype"
-import type { PrototypeSession } from "@/lib/api/prototype"
-import type { PreviewSession } from "@/lib/api/types"
+} from "lucide-react";
+import { PreviewPanel } from "@/components/preview/PreviewPanel";
+import { usePrototype } from "@/hooks/usePrototype";
+import type { PrototypeSession } from "@/lib/api/prototype";
+import type { PreviewSession } from "@/lib/api/types";
 
 const FRAMEWORKS = [
   { value: "react-vite", label: "React + Vite + TypeScript" },
   { value: "next", label: "Next.js + TypeScript + Tailwind" },
   { value: "vue-vite", label: "Vue + Vite + TypeScript" },
-]
+];
 
 function statusLabel(status: string): string {
   switch (status) {
     case "creating":
-      return "Creating..."
+      return "Creating...";
     case "ready":
-      return "Ready"
+      return "Ready";
     case "prompting":
-      return "Generating..."
+      return "Generating...";
     case "exporting":
-      return "Exporting..."
+      return "Exporting...";
     case "stopped":
-      return "Stopped"
+      return "Stopped";
     case "failed":
-      return "Failed"
+      return "Failed";
     default:
-      return status
+      return status;
   }
 }
 
 function statusColor(status: string): string {
   switch (status) {
     case "ready":
-      return "default"
+      return "default";
     case "creating":
     case "prompting":
     case "exporting":
-      return "secondary"
+      return "secondary";
     case "failed":
-      return "destructive"
+      return "destructive";
     default:
-      return "outline"
+      return "outline";
   }
 }
 
@@ -71,7 +71,7 @@ function statusColor(status: string): string {
  * so we can reuse PreviewPanel.
  */
 function toPreviewSession(session: PrototypeSession): PreviewSession | null {
-  if (!session.preview_id) return null
+  if (!session.preview_id) return null;
   return {
     id: session.preview_id,
     sandbox_id: session.sandbox_id || "",
@@ -85,14 +85,14 @@ function toPreviewSession(session: PrototypeSession): PreviewSession | null {
     created_at: session.created_at,
     ready_at: null,
     stopped_at: null,
-  }
+  };
 }
 
 export function PrototypeWorkspace() {
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [framework, setFramework] = useState("react-vite")
-  const [promptInput, setPromptInput] = useState("")
-  const [exportUrl, setExportUrl] = useState("")
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [framework, setFramework] = useState("react-vite");
+  const [promptInput, setPromptInput] = useState("");
+  const [exportUrl, setExportUrl] = useState("");
 
   const {
     session,
@@ -105,47 +105,47 @@ export function PrototypeWorkspace() {
     isExporting,
     endSession,
     isEnding,
-  } = usePrototype(sessionId)
+  } = usePrototype(sessionId);
 
   const handleStart = useCallback(async () => {
     try {
-      const newSession = await startSession(framework)
-      setSessionId(newSession.id)
+      const newSession = await startSession(framework);
+      setSessionId(newSession.id);
     } catch {
       // Error handled by mutation state
     }
-  }, [framework, startSession])
+  }, [framework, startSession]);
 
   const handlePrompt = useCallback(async () => {
-    if (!promptInput.trim() || !sessionId) return
+    if (!promptInput.trim() || !sessionId) return;
     try {
-      await applyPrompt(promptInput.trim())
-      setPromptInput("")
+      await applyPrompt(promptInput.trim());
+      setPromptInput("");
     } catch {
       // Error handled by mutation state
     }
-  }, [promptInput, sessionId, applyPrompt])
+  }, [promptInput, sessionId, applyPrompt]);
 
   const handleExport = useCallback(async () => {
-    if (!exportUrl.trim() || !sessionId) return
+    if (!exportUrl.trim() || !sessionId) return;
     try {
-      await exportToRepo({ repoUrl: exportUrl.trim() })
+      await exportToRepo({ repoUrl: exportUrl.trim() });
     } catch {
       // Error handled by mutation state
     }
-  }, [exportUrl, sessionId, exportToRepo])
+  }, [exportUrl, sessionId, exportToRepo]);
 
   const handleEnd = useCallback(() => {
-    endSession()
-    setSessionId(null)
-  }, [endSession])
+    endSession();
+    setSessionId(null);
+  }, [endSession]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handlePrompt()
+      e.preventDefault();
+      handlePrompt();
     }
-  }
+  };
 
   // No active session — show framework selector
   if (!sessionId) {
@@ -191,11 +191,11 @@ export function PrototypeWorkspace() {
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   // Active session — split view
-  const preview = session ? toPreviewSession(session) : null
+  const preview = session ? toPreviewSession(session) : null;
 
   return (
     <div className="flex h-[calc(100vh-48px)] flex-col">
@@ -204,8 +204,18 @@ export function PrototypeWorkspace() {
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold">Prototype</h1>
           {session && (
-            <Badge variant={statusColor(session.status) as "default" | "secondary" | "destructive" | "outline"}>
-              {session.status === "creating" || session.status === "prompting" || session.status === "exporting" ? (
+            <Badge
+              variant={
+                statusColor(session.status) as
+                  | "default"
+                  | "secondary"
+                  | "destructive"
+                  | "outline"
+              }
+            >
+              {session.status === "creating" ||
+              session.status === "prompting" ||
+              session.status === "exporting" ? (
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" />
               ) : null}
               {statusLabel(session.status)}
@@ -360,5 +370,5 @@ export function PrototypeWorkspace() {
         </div>
       </div>
     </div>
-  )
+  );
 }

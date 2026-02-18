@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { Suspense } from "react"
-import { OnboardingWizard } from "@/components/onboarding"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Suspense } from "react";
+import { OnboardingWizard } from "@/components/onboarding";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function OnboardingSkeleton() {
   return (
@@ -27,7 +27,7 @@ function OnboardingSkeleton() {
         <Skeleton className="h-12 w-full" />
       </div>
     </div>
-  )
+  );
 }
 
 export default function OnboardingPage() {
@@ -35,5 +35,5 @@ export default function OnboardingPage() {
     <Suspense fallback={<OnboardingSkeleton />}>
       <OnboardingWizard />
     </Suspense>
-  )
+  );
 }

@@ -8,24 +8,28 @@
  * - localStorage quota exceeded
  */
 
-import { createJSONStorage, type PersistStorage, type StorageValue } from 'zustand/middleware'
+import {
+  createJSONStorage,
+  type PersistStorage,
+  type StorageValue,
+} from "zustand/middleware";
 
 // In-memory fallback when localStorage is not available
-const memoryStorage = new Map<string, string>()
+const memoryStorage = new Map<string, string>();
 
 /**
  * Check if localStorage is available and accessible
  */
 export function isLocalStorageAvailable(): boolean {
-  if (typeof window === 'undefined') return false
+  if (typeof window === "undefined") return false;
 
   try {
-    const testKey = '__storage_test__'
-    window.localStorage.setItem(testKey, testKey)
-    window.localStorage.removeItem(testKey)
-    return true
+    const testKey = "__storage_test__";
+    window.localStorage.setItem(testKey, testKey);
+    window.localStorage.removeItem(testKey);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
@@ -33,13 +37,13 @@ export function isLocalStorageAvailable(): boolean {
  * Safe localStorage getter - returns null if storage is blocked
  */
 export function safeGetItem(key: string): string | null {
-  if (typeof window === 'undefined') return null
+  if (typeof window === "undefined") return null;
 
   try {
-    return localStorage.getItem(key)
+    return localStorage.getItem(key);
   } catch {
     // Fallback to memory storage
-    return memoryStorage.get(key) ?? null
+    return memoryStorage.get(key) ?? null;
   }
 }
 
@@ -47,13 +51,13 @@ export function safeGetItem(key: string): string | null {
  * Safe localStorage setter - silently fails if storage is blocked
  */
 export function safeSetItem(key: string, value: string): void {
-  if (typeof window === 'undefined') return
+  if (typeof window === "undefined") return;
 
   try {
-    localStorage.setItem(key, value)
+    localStorage.setItem(key, value);
   } catch {
     // Fallback to memory storage
-    memoryStorage.set(key, value)
+    memoryStorage.set(key, value);
   }
 }
 
@@ -61,13 +65,13 @@ export function safeSetItem(key: string, value: string): void {
  * Safe localStorage remover - silently fails if storage is blocked
  */
 export function safeRemoveItem(key: string): void {
-  if (typeof window === 'undefined') return
+  if (typeof window === "undefined") return;
 
   try {
-    localStorage.removeItem(key)
+    localStorage.removeItem(key);
   } catch {
     // Fallback to memory storage
-    memoryStorage.delete(key)
+    memoryStorage.delete(key);
   }
 }
 
@@ -87,15 +91,15 @@ export function safeRemoveItem(key: string): void {
 export function createSafeStorage<T>(): PersistStorage<T> {
   const storage = createJSONStorage<T>(() => ({
     getItem: (name: string): string | null => {
-      return safeGetItem(name)
+      return safeGetItem(name);
     },
     setItem: (name: string, value: string): void => {
-      safeSetItem(name, value)
+      safeSetItem(name, value);
     },
     removeItem: (name: string): void => {
-      safeRemoveItem(name)
+      safeRemoveItem(name);
     },
-  }))
+  }));
 
   // createJSONStorage can return undefined if window is undefined during SSR
   // In that case, provide a no-op storage that won't crash
@@ -104,8 +108,8 @@ export function createSafeStorage<T>(): PersistStorage<T> {
       getItem: () => null,
       setItem: () => {},
       removeItem: () => {},
-    }
+    };
   }
 
-  return storage
+  return storage;
 }

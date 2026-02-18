@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -9,12 +9,12 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarSeparator,
-} from "@/components/ui/sidebar"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { AgentCard, AgentStatus } from "@/components/custom"
-import { TimeGroupHeader } from "@/components/custom"
+} from "@/components/ui/sidebar";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { AgentCard, AgentStatus } from "@/components/custom";
+import { TimeGroupHeader } from "@/components/custom";
 import {
   Search,
   Plus,
@@ -22,31 +22,31 @@ import {
   HelpCircle,
   Filter,
   SlidersHorizontal,
-} from "lucide-react"
+} from "lucide-react";
 
 export interface RecentAgent {
-  id: string
-  taskName: string
-  status: AgentStatus
-  timeAgo: string
-  additions?: number
-  deletions?: number
-  repoName?: string
-  createdAt: Date
+  id: string;
+  taskName: string;
+  status: AgentStatus;
+  timeAgo: string;
+  additions?: number;
+  deletions?: number;
+  repoName?: string;
+  createdAt: Date;
 }
 
 interface RecentAgentsSidebarProps {
-  agents?: RecentAgent[]
-  onNewAgent?: () => void
+  agents?: RecentAgent[];
+  onNewAgent?: () => void;
 }
 
 function groupAgentsByTime(agents: RecentAgent[]) {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const thisWeek = new Date(today)
-  thisWeek.setDate(thisWeek.getDate() - 7)
-  const thisMonth = new Date(today)
-  thisMonth.setDate(thisMonth.getDate() - 30)
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const thisWeek = new Date(today);
+  thisWeek.setDate(thisWeek.getDate() - 7);
+  const thisMonth = new Date(today);
+  thisMonth.setDate(thisMonth.getDate() - 30);
 
   const groups = {
     today: [] as RecentAgent[],
@@ -54,40 +54,40 @@ function groupAgentsByTime(agents: RecentAgent[]) {
     thisMonth: [] as RecentAgent[],
     older: [] as RecentAgent[],
     errored: [] as RecentAgent[],
-  }
+  };
 
   agents.forEach((agent) => {
     if (agent.status === "failed") {
-      groups.errored.push(agent)
-      return
+      groups.errored.push(agent);
+      return;
     }
 
-    const agentDate = new Date(agent.createdAt)
+    const agentDate = new Date(agent.createdAt);
     if (agentDate >= today) {
-      groups.today.push(agent)
+      groups.today.push(agent);
     } else if (agentDate >= thisWeek) {
-      groups.thisWeek.push(agent)
+      groups.thisWeek.push(agent);
     } else if (agentDate >= thisMonth) {
-      groups.thisMonth.push(agent)
+      groups.thisMonth.push(agent);
     } else {
-      groups.older.push(agent)
+      groups.older.push(agent);
     }
-  })
+  });
 
-  return groups
+  return groups;
 }
 
 export function RecentAgentsSidebar({
   agents = [],
   onNewAgent,
 }: RecentAgentsSidebarProps) {
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState("");
 
   const filteredAgents = agents.filter((agent) =>
-    agent.taskName.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+    agent.taskName.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
-  const groupedAgents = groupAgentsByTime(filteredAgents)
+  const groupedAgents = groupAgentsByTime(filteredAgents);
 
   return (
     <Sidebar variant="sidebar" className="border-r border-sidebar-border">
@@ -210,5 +210,5 @@ export function RecentAgentsSidebar({
         </div>
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

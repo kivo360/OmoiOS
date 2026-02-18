@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { CardTitle, CardDescription } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
+import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { CardTitle, CardDescription } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import {
   CheckCircle,
   ArrowRight,
@@ -12,19 +12,19 @@ import {
   Mail,
   ExternalLink,
   Clock,
-} from "lucide-react"
-import { useOnboarding } from "@/hooks/useOnboarding"
+} from "lucide-react";
+import { useOnboarding } from "@/hooks/useOnboarding";
 
 export function CompleteStep() {
-  const { data, completeOnboarding, isLoading } = useOnboarding()
+  const { data, completeOnboarding, isLoading } = useOnboarding();
 
   // Auto-complete onboarding after a short delay to show success state
   useEffect(() => {
     const timer = setTimeout(() => {
       // Don't auto-redirect, let user click
-    }, 2000)
-    return () => clearTimeout(timer)
-  }, [])
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="space-y-8 text-center">
@@ -66,7 +66,9 @@ export function CompleteStep() {
 
       {/* Notification prompt */}
       <div className="space-y-3 p-4 rounded-lg border bg-card">
-        <p className="text-sm font-medium">Get notified when your PR is ready</p>
+        <p className="text-sm font-medium">
+          Get notified when your PR is ready
+        </p>
         <div className="flex gap-2 justify-center">
           <Button
             variant="outline"
@@ -74,7 +76,7 @@ export function CompleteStep() {
             onClick={() => {
               // Request notification permission
               if ("Notification" in window) {
-                Notification.requestPermission()
+                Notification.requestPermission();
               }
             }}
           >
@@ -109,7 +111,12 @@ export function CompleteStep() {
 
       {/* CTA */}
       <div className="space-y-3 pt-4">
-        <Button size="lg" onClick={completeOnboarding} disabled={isLoading} className="w-full">
+        <Button
+          size="lg"
+          onClick={completeOnboarding}
+          disabled={isLoading}
+          className="w-full"
+        >
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -133,5 +140,5 @@ export function CompleteStep() {
         </p>
       </div>
     </div>
-  )
+  );
 }

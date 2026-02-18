@@ -1,29 +1,35 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { 
-  Search, 
-  Plus, 
-  MoreHorizontal, 
+} from "@/components/ui/dropdown-menu";
+import {
+  Search,
+  Plus,
+  MoreHorizontal,
   FolderGit2,
   Bot,
   Ticket,
@@ -32,58 +38,64 @@ import {
   Trash2,
   Archive,
   AlertCircle,
-} from "lucide-react"
-import { useProjects, useDeleteProject } from "@/hooks/useProjects"
-import { toast } from "sonner"
+} from "lucide-react";
+import { useProjects, useDeleteProject } from "@/hooks/useProjects";
+import { toast } from "sonner";
 
 export default function ProjectsPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   // Fetch projects from API
   const { data, isLoading, error } = useProjects({
     status: statusFilter === "all" ? undefined : statusFilter,
-  })
+  });
 
-  const deleteProject = useDeleteProject()
+  const deleteProject = useDeleteProject();
 
   // Filter projects by search query (status filter is handled by API)
   const filteredProjects = useMemo(() => {
-    if (!data?.projects) return []
-    
+    if (!data?.projects) return [];
+
     return data.projects.filter((project) => {
-      const matchesSearch = 
+      const matchesSearch =
         project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (project.github_repo?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
-      return matchesSearch
-    })
-  }, [data?.projects, searchQuery])
+        (project.github_repo
+          ?.toLowerCase()
+          .includes(searchQuery.toLowerCase()) ??
+          false);
+      return matchesSearch;
+    });
+  }, [data?.projects, searchQuery]);
 
   const handleDelete = async (projectId: string, projectName: string) => {
     try {
-      await deleteProject.mutateAsync(projectId)
-      toast.success(`Project "${projectName}" archived`)
+      await deleteProject.mutateAsync(projectId);
+      toast.success(`Project "${projectName}" archived`);
     } catch {
-      toast.error("Failed to archive project")
+      toast.error("Failed to archive project");
     }
-  }
+  };
 
   const formatTimeAgo = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
 
-  const getRepoDisplay = (project: { github_owner?: string | null; github_repo?: string | null }) => {
+  const getRepoDisplay = (project: {
+    github_owner?: string | null;
+    github_repo?: string | null;
+  }) => {
     if (project.github_owner && project.github_repo) {
-      return `${project.github_owner}/${project.github_repo}`
+      return `${project.github_owner}/${project.github_repo}`;
     }
-    return null
-  }
+    return null;
+  };
 
   // Loading state
   if (isLoading) {
@@ -92,7 +104,9 @@ export default function ProjectsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Projects</h1>
-            <p className="text-muted-foreground">Manage your projects and specifications</p>
+            <p className="text-muted-foreground">
+              Manage your projects and specifications
+            </p>
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -110,7 +124,7 @@ export default function ProjectsPage() {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -119,13 +133,15 @@ export default function ProjectsPage() {
       <div className="container mx-auto p-6">
         <Card className="p-12 text-center">
           <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
-          <h3 className="mt-4 text-lg font-semibold">Failed to load projects</h3>
+          <h3 className="mt-4 text-lg font-semibold">
+            Failed to load projects
+          </h3>
           <p className="mt-2 text-sm text-muted-foreground">
             {error instanceof Error ? error.message : "An error occurred"}
           </p>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -134,7 +150,9 @@ export default function ProjectsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Projects</h1>
-          <p className="text-muted-foreground">Manage your projects and specifications</p>
+          <p className="text-muted-foreground">
+            Manage your projects and specifications
+          </p>
         </div>
         <Button asChild>
           <Link href="/projects/new">
@@ -170,14 +188,20 @@ export default function ProjectsPage() {
       {/* Projects Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {filteredProjects.map((project) => (
-          <Card key={project.id} className="hover:border-primary/50 transition-colors">
+          <Card
+            key={project.id}
+            className="hover:border-primary/50 transition-colors"
+          >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <FolderGit2 className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <CardTitle className="text-base">
-                      <Link href={`/projects/${project.id}`} className="hover:underline">
+                      <Link
+                        href={`/projects/${project.id}`}
+                        className="hover:underline"
+                      >
                         {project.name}
                       </Link>
                     </CardTitle>
@@ -200,7 +224,9 @@ export default function ProjectsPage() {
                         <Settings className="mr-2 h-4 w-4" /> Settings
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleDelete(project.id, project.name)}>
+                    <DropdownMenuItem
+                      onClick={() => handleDelete(project.id, project.name)}
+                    >
                       <Archive className="mr-2 h-4 w-4" /> Archive
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -213,7 +239,7 @@ export default function ProjectsPage() {
                   {project.description}
                 </p>
               )}
-              
+
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 {project.github_connected && (
                   <Badge variant="outline" className="text-xs">
@@ -227,8 +253,10 @@ export default function ProjectsPage() {
                   <Clock className="h-3 w-3" />
                   <span>{formatTimeAgo(project.updated_at)}</span>
                 </div>
-                <Badge 
-                  variant={project.status === "active" ? "default" : "secondary"}
+                <Badge
+                  variant={
+                    project.status === "active" ? "default" : "secondary"
+                  }
                 >
                   {project.status}
                 </Badge>
@@ -256,5 +284,5 @@ export default function ProjectsPage() {
         </Card>
       )}
     </div>
-  )
+  );
 }

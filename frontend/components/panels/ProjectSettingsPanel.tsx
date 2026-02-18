@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import {
   Settings,
   Columns3,
@@ -12,13 +12,13 @@ import {
   ArrowLeft,
   Check,
   AlertCircle,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Extract project ID from pathname
 function getProjectIdFromPath(pathname: string): string | null {
-  const match = pathname.match(/\/projects\/([^/]+)/)
-  return match ? match[1] : null
+  const match = pathname.match(/\/projects\/([^/]+)/);
+  return match ? match[1] : null;
 }
 
 const settingsItems = [
@@ -46,12 +46,12 @@ const settingsItems = [
     icon: GitBranch,
     description: "Repository integration",
   },
-]
+];
 
 export function ProjectSettingsPanel() {
-  const pathname = usePathname()
-  const projectId = getProjectIdFromPath(pathname)
-  const basePath = `/projects/${projectId}/settings`
+  const pathname = usePathname();
+  const projectId = getProjectIdFromPath(pathname);
+  const basePath = `/projects/${projectId}/settings`;
 
   return (
     <div className="flex h-full flex-col">
@@ -71,9 +71,9 @@ export function ProjectSettingsPanel() {
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-1">
           {settingsItems.map((item) => {
-            const href = `${basePath}${item.href}`
-            const isActive = pathname === href
-            
+            const href = `${basePath}${item.href}`;
+            const isActive = pathname === href;
+
             return (
               <Link
                 key={item.href}
@@ -82,7 +82,7 @@ export function ProjectSettingsPanel() {
                   "flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors",
                   isActive
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground",
                 )}
               >
                 <item.icon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -93,7 +93,7 @@ export function ProjectSettingsPanel() {
                   </p>
                 </div>
               </Link>
-            )
+            );
           })}
         </div>
       </ScrollArea>
@@ -120,5 +120,5 @@ export function ProjectSettingsPanel() {
         </div>
       </div>
     </div>
-  )
+  );
 }

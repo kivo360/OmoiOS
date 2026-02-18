@@ -1,35 +1,54 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Plus, Users, Check, Settings, Building2, AlertCircle } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { useOrganizations } from "@/hooks/useOrganizations"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Plus,
+  Users,
+  Check,
+  Settings,
+  Building2,
+  AlertCircle,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useOrganizations } from "@/hooks/useOrganizations";
 
 export function OrganizationsPanel() {
-  const pathname = usePathname()
-  const { data: organizations, isLoading, error } = useOrganizations()
+  const pathname = usePathname();
+  const { data: organizations, isLoading, error } = useOrganizations();
 
   // Extract org ID from path if viewing a specific org
   // Exclude "new" since that's the create organization page, not a valid org ID
-  const orgIdMatch = pathname.match(/\/organizations\/([^/]+)/)
-  const extractedId = orgIdMatch?.[1]
-  const isValidOrgId = extractedId && extractedId !== "new"
-  const firstOrg = organizations?.[0]
-  const currentOrgId = isValidOrgId ? extractedId : firstOrg?.id
+  const orgIdMatch = pathname.match(/\/organizations\/([^/]+)/);
+  const extractedId = orgIdMatch?.[1];
+  const isValidOrgId = extractedId && extractedId !== "new";
+  const firstOrg = organizations?.[0];
+  const currentOrgId = isValidOrgId ? extractedId : firstOrg?.id;
 
   const quickLinks = currentOrgId
     ? [
-        { href: `/organizations/${currentOrgId}`, label: "Overview", icon: Building2 },
-        { href: `/organizations/${currentOrgId}/members`, label: "Members", icon: Users },
-        { href: `/organizations/${currentOrgId}/settings`, label: "Settings", icon: Settings },
+        {
+          href: `/organizations/${currentOrgId}`,
+          label: "Overview",
+          icon: Building2,
+        },
+        {
+          href: `/organizations/${currentOrgId}/members`,
+          label: "Members",
+          icon: Users,
+        },
+        {
+          href: `/organizations/${currentOrgId}/settings`,
+          label: "Settings",
+          icon: Settings,
+        },
       ]
-    : []
+    : [];
 
   return (
     <div className="flex h-full flex-col">
@@ -37,7 +56,9 @@ export function OrganizationsPanel() {
       <div className="border-b p-3 space-y-3">
         <div>
           <h3 className="font-semibold">Organizations</h3>
-          <p className="text-xs text-muted-foreground">Switch or manage teams</p>
+          <p className="text-xs text-muted-foreground">
+            Switch or manage teams
+          </p>
         </div>
         <Button className="w-full" size="sm" asChild>
           <Link href="/organizations/new">
@@ -53,7 +74,7 @@ export function OrganizationsPanel() {
             Quick Access
           </p>
           {quickLinks.map((link) => {
-            const isActive = pathname === link.href
+            const isActive = pathname === link.href;
             return (
               <Link
                 key={link.href}
@@ -62,13 +83,13 @@ export function OrganizationsPanel() {
                   "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
                   isActive
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )}
               >
                 <link.icon className="h-4 w-4" />
                 {link.label}
               </Link>
-            )
+            );
           })}
         </div>
       )}
@@ -96,14 +117,14 @@ export function OrganizationsPanel() {
             </div>
           ) : (
             organizations?.map((org) => {
-              const isCurrentOrg = org.id === currentOrgId
+              const isCurrentOrg = org.id === currentOrgId;
               return (
                 <Link
                   key={org.id}
                   href={`/organizations/${org.id}`}
                   className={cn(
                     "flex items-center gap-3 rounded-md p-2 transition-colors",
-                    isCurrentOrg ? "bg-accent" : "hover:bg-accent"
+                    isCurrentOrg ? "bg-accent" : "hover:bg-accent",
                   )}
                 >
                   <Avatar className="h-8 w-8">
@@ -113,7 +134,9 @@ export function OrganizationsPanel() {
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{org.name}</span>
+                      <span className="text-sm font-medium truncate">
+                        {org.name}
+                      </span>
                       {isCurrentOrg && (
                         <Check className="h-3 w-3 text-success shrink-0" />
                       )}
@@ -125,7 +148,7 @@ export function OrganizationsPanel() {
                     </div>
                   </div>
                 </Link>
-              )
+              );
             })
           )}
         </div>
@@ -141,5 +164,5 @@ export function OrganizationsPanel() {
         </Link>
       </div>
     </div>
-  )
+  );
 }

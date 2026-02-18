@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listProjectSpecs,
   createSpec,
@@ -29,7 +29,7 @@ import {
   unlinkTicketsFromSpec,
   getLinkedTickets,
   exportSpec,
-} from "@/lib/api/specs"
+} from "@/lib/api/specs";
 import type {
   Spec,
   SpecListResponse,
@@ -59,18 +59,22 @@ import type {
   LinkTicketsResponse,
   LinkedTicketsResponse,
   SpecExportFormat,
-} from "@/lib/api/specs"
+} from "@/lib/api/specs";
 
 export const specsKeys = {
   all: ["specs"] as const,
-  project: (projectId: string) => [...specsKeys.all, "project", projectId] as const,
+  project: (projectId: string) =>
+    [...specsKeys.all, "project", projectId] as const,
   detail: (specId: string) => [...specsKeys.all, "detail", specId] as const,
   versions: (specId: string) => [...specsKeys.all, "versions", specId] as const,
-  executionStatus: (specId: string) => [...specsKeys.all, "execution", specId] as const,
-  criteriaStatus: (specId: string) => [...specsKeys.all, "criteria", specId] as const,
+  executionStatus: (specId: string) =>
+    [...specsKeys.all, "execution", specId] as const,
+  criteriaStatus: (specId: string) =>
+    [...specsKeys.all, "criteria", specId] as const,
   events: (specId: string) => [...specsKeys.all, "events", specId] as const,
-  linkedTickets: (specId: string) => [...specsKeys.all, "linked-tickets", specId] as const,
-}
+  linkedTickets: (specId: string) =>
+    [...specsKeys.all, "linked-tickets", specId] as const,
+};
 
 /**
  * Hook to list specs for a project
@@ -91,17 +95,22 @@ export const specsKeys = {
 export function useProjectSpecs(
   projectId: string | undefined,
   options?: {
-    status?: string
-    refetchInterval?: number | false | ((query: { state: { data: SpecListResponse | undefined } }) => number | false)
-  }
+    status?: string;
+    refetchInterval?:
+      | number
+      | false
+      | ((query: {
+          state: { data: SpecListResponse | undefined };
+        }) => number | false);
+  },
 ) {
-  const { status, refetchInterval } = options || {}
+  const { status, refetchInterval } = options || {};
   return useQuery<SpecListResponse>({
     queryKey: specsKeys.project(projectId!),
     queryFn: () => listProjectSpecs(projectId!, { status }),
     enabled: !!projectId,
     refetchInterval: refetchInterval as any, // TanStack Query supports function callback
-  })
+  });
 }
 
 /**
@@ -126,11 +135,14 @@ export function useProjectSpecs(
 export function useSpec(
   specId: string | undefined,
   options?: {
-    enabled?: boolean
-    refetchInterval?: number | false | ((query: { state: { data: Spec | undefined } }) => number | false)
-    refetchOnWindowFocus?: boolean
-    staleTime?: number
-  }
+    enabled?: boolean;
+    refetchInterval?:
+      | number
+      | false
+      | ((query: { state: { data: Spec | undefined } }) => number | false);
+    refetchOnWindowFocus?: boolean;
+    staleTime?: number;
+  },
 ) {
   return useQuery<Spec>({
     queryKey: specsKeys.detail(specId!),
@@ -139,218 +151,227 @@ export function useSpec(
     refetchInterval: options?.refetchInterval as any, // TanStack Query supports function callback
     refetchOnWindowFocus: options?.refetchOnWindowFocus,
     staleTime: options?.staleTime,
-  })
+  });
 }
 
 /**
  * Hook to create a spec
  */
 export function useCreateSpec() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<Spec, Error, SpecCreate>({
     mutationFn: createSpec,
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.project(data.project_id) })
+      queryClient.invalidateQueries({
+        queryKey: specsKeys.project(data.project_id),
+      });
     },
-  })
+  });
 }
 
 /**
  * Hook to update a spec
  */
 export function useUpdateSpec(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<Spec, Error, SpecUpdate>({
     mutationFn: (data) => updateSpec(specId, data),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
-      queryClient.invalidateQueries({ queryKey: specsKeys.project(data.project_id) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
+      queryClient.invalidateQueries({
+        queryKey: specsKeys.project(data.project_id),
+      });
     },
-  })
+  });
 }
 
 /**
  * Hook to delete a spec
  */
 export function useDeleteSpec() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<void, Error, { specId: string; projectId: string }>({
     mutationFn: ({ specId }) => deleteSpec(specId),
     onSuccess: (_, { projectId }) => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.project(projectId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to add a requirement
  */
 export function useAddRequirement(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<Requirement, Error, RequirementCreate>({
     mutationFn: (data) => addRequirement(specId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to update a requirement
  */
 export function useUpdateRequirement(specId: string, reqId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<Requirement, Error, RequirementUpdate>({
     mutationFn: (data) => updateRequirement(specId, reqId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to delete a requirement
  */
 export function useDeleteRequirement(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<void, Error, string>({
     mutationFn: (reqId) => deleteRequirement(specId, reqId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to add a criterion
  */
 export function useAddCriterion(specId: string, reqId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<AcceptanceCriterion, Error, CriterionCreate>({
     mutationFn: (data) => addCriterion(specId, reqId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to update a criterion
  */
 export function useUpdateCriterion(specId: string, reqId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
-  return useMutation<AcceptanceCriterion, Error, { criterionId: string; data: CriterionUpdate }>({
-    mutationFn: ({ criterionId, data }) => updateCriterion(specId, reqId, criterionId, data),
+  return useMutation<
+    AcceptanceCriterion,
+    Error,
+    { criterionId: string; data: CriterionUpdate }
+  >({
+    mutationFn: ({ criterionId, data }) =>
+      updateCriterion(specId, reqId, criterionId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to update design
  */
 export function useUpdateDesign(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<DesignArtifact, Error, DesignArtifact>({
     mutationFn: (design) => updateDesign(specId, design),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to approve requirements
  */
 export function useApproveRequirements(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<{ message: string }, Error, void>({
     mutationFn: () => approveRequirements(specId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to approve design
  */
 export function useApproveDesign(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<{ message: string }, Error, void>({
     mutationFn: () => approveDesign(specId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to add a task
  */
 export function useAddTask(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<SpecTask, Error, TaskCreate>({
     mutationFn: (data) => addTask(specId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to update a task
  */
 export function useUpdateTask(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<SpecTask, Error, { taskId: string; data: TaskUpdate }>({
     mutationFn: ({ taskId, data }) => updateTask(specId, taskId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to delete a task
  */
 export function useDeleteTask(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<void, Error, string>({
     mutationFn: (taskId) => deleteTask(specId, taskId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
  * Hook to delete a criterion
  */
 export function useDeleteCriterion(specId: string, reqId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<void, Error, string>({
     mutationFn: (criterionId) => deleteCriterion(specId, reqId, criterionId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
@@ -361,7 +382,7 @@ export function useSpecVersions(specId: string | undefined, limit?: number) {
     queryKey: specsKeys.versions(specId!),
     queryFn: () => listSpecVersions(specId!, limit),
     enabled: !!specId,
-  })
+  });
 }
 
 // ============================================================================
@@ -373,17 +394,23 @@ export function useSpecVersions(specId: string | undefined, limit?: number) {
  * Converts pending SpecTasks to executable Tasks and queues them for Daytona sandboxes.
  */
 export function useExecuteSpecTasks(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
-  return useMutation<ExecuteTasksResponse, Error, ExecuteTasksRequest | undefined>({
+  return useMutation<
+    ExecuteTasksResponse,
+    Error,
+    ExecuteTasksRequest | undefined
+  >({
     mutationFn: (request) => executeSpecTasks(specId, request),
     onSuccess: () => {
       // Invalidate spec detail to refresh task statuses
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
       // Invalidate execution status
-      queryClient.invalidateQueries({ queryKey: specsKeys.executionStatus(specId) })
+      queryClient.invalidateQueries({
+        queryKey: specsKeys.executionStatus(specId),
+      });
     },
-  })
+  });
 }
 
 /**
@@ -397,16 +424,16 @@ export function useExecuteSpecTasks(specId: string) {
 export function useExecutionStatus(
   specId: string | undefined,
   options?: {
-    enabled?: boolean
-    refetchInterval?: number | false
-  }
+    enabled?: boolean;
+    refetchInterval?: number | false;
+  },
 ) {
   return useQuery<ExecutionStatusResponse>({
     queryKey: specsKeys.executionStatus(specId!),
     queryFn: () => getExecutionStatus(specId!),
     enabled: options?.enabled ?? !!specId,
     refetchInterval: options?.refetchInterval,
-  })
+  });
 }
 
 /**
@@ -420,16 +447,16 @@ export function useExecutionStatus(
 export function useCriteriaStatus(
   specId: string | undefined,
   options?: {
-    enabled?: boolean
-    refetchInterval?: number | false
-  }
+    enabled?: boolean;
+    refetchInterval?: number | false;
+  },
 ) {
   return useQuery<CriteriaStatusResponse>({
     queryKey: specsKeys.criteriaStatus(specId!),
     queryFn: () => getCriteriaStatus(specId!),
     enabled: options?.enabled ?? !!specId,
     refetchInterval: options?.refetchInterval,
-  })
+  });
 }
 
 // ============================================================================
@@ -441,15 +468,15 @@ export function useCriteriaStatus(
  * Creates a branch in the project's GitHub repository for the spec's work.
  */
 export function useCreateSpecBranch(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<CreateBranchResponse, Error, void>({
     mutationFn: () => createSpecBranch(specId),
     onSuccess: () => {
       // Invalidate spec detail to refresh branch_name
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 /**
@@ -457,15 +484,15 @@ export function useCreateSpecBranch(specId: string) {
  * Optionally force PR creation even if some tasks aren't completed.
  */
 export function useCreateSpecPR(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<CreatePRResponse, Error, { force?: boolean } | undefined>({
     mutationFn: (options) => createSpecPR(specId, options?.force),
     onSuccess: () => {
       // Invalidate spec detail to refresh PR tracking fields
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
     },
-  })
+  });
 }
 
 // ============================================================================
@@ -480,15 +507,17 @@ export function useCreateSpecPR(specId: string) {
  * @returns Mutation with spec_id and sandbox_id for navigation
  */
 export function useLaunchSpec() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<SpecLaunchResponse, Error, SpecLaunchRequest>({
     mutationFn: launchSpec,
     onSuccess: (data, variables) => {
       // Invalidate project specs list to show the new spec
-      queryClient.invalidateQueries({ queryKey: specsKeys.project(variables.project_id) })
+      queryClient.invalidateQueries({
+        queryKey: specsKeys.project(variables.project_id),
+      });
     },
-  })
+  });
 }
 
 // ============================================================================
@@ -519,22 +548,22 @@ export function useLaunchSpec() {
 export function useSpecEvents(
   specId: string | undefined,
   options?: {
-    enabled?: boolean
-    refetchInterval?: number | false
-    limit?: number
-    eventType?: string
-  }
+    enabled?: boolean;
+    refetchInterval?: number | false;
+    limit?: number;
+    eventType?: string;
+  },
 ) {
-  const params: GetSpecEventsParams = {}
-  if (options?.limit) params.limit = options.limit
-  if (options?.eventType) params.event_type = options.eventType
+  const params: GetSpecEventsParams = {};
+  if (options?.limit) params.limit = options.limit;
+  if (options?.eventType) params.event_type = options.eventType;
 
   return useQuery<SpecEventsResponse>({
     queryKey: [...specsKeys.events(specId!), params],
     queryFn: () => getSpecEvents(specId!, params),
     enabled: options?.enabled ?? !!specId,
     refetchInterval: options?.refetchInterval,
-  })
+  });
 }
 
 // ============================================================================
@@ -549,13 +578,13 @@ export function useSpecEvents(
  */
 export function useLinkedTickets(
   specId: string | undefined,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean },
 ) {
   return useQuery<LinkedTicketsResponse>({
     queryKey: specsKeys.linkedTickets(specId!),
     queryFn: () => getLinkedTickets(specId!),
     enabled: options?.enabled ?? !!specId,
-  })
+  });
 }
 
 /**
@@ -563,17 +592,19 @@ export function useLinkedTickets(
  * Associates one or more tickets with this specification.
  */
 export function useLinkTickets(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<LinkTicketsResponse, Error, string[]>({
     mutationFn: (ticketIds) => linkTicketsToSpec(specId, ticketIds),
     onSuccess: () => {
       // Invalidate spec detail to refresh linked_tickets count
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
       // Invalidate linked tickets list
-      queryClient.invalidateQueries({ queryKey: specsKeys.linkedTickets(specId) })
+      queryClient.invalidateQueries({
+        queryKey: specsKeys.linkedTickets(specId),
+      });
     },
-  })
+  });
 }
 
 /**
@@ -581,17 +612,23 @@ export function useLinkTickets(specId: string) {
  * Removes the association between tickets and this specification.
  */
 export function useUnlinkTickets(specId: string) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
-  return useMutation<{ spec_id: string; unlinked_count: number }, Error, string[]>({
+  return useMutation<
+    { spec_id: string; unlinked_count: number },
+    Error,
+    string[]
+  >({
     mutationFn: (ticketIds) => unlinkTicketsFromSpec(specId, ticketIds),
     onSuccess: () => {
       // Invalidate spec detail to refresh linked_tickets count
-      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) });
       // Invalidate linked tickets list
-      queryClient.invalidateQueries({ queryKey: specsKeys.linkedTickets(specId) })
+      queryClient.invalidateQueries({
+        queryKey: specsKeys.linkedTickets(specId),
+      });
     },
-  })
+  });
 }
 
 // ============================================================================
@@ -603,7 +640,11 @@ export function useUnlinkTickets(specId: string) {
  * Returns the spec data in JSON or Markdown format.
  */
 export function useExportSpec() {
-  return useMutation<unknown, Error, { specId: string; format: SpecExportFormat }>({
+  return useMutation<
+    unknown,
+    Error,
+    { specId: string; format: SpecExportFormat }
+  >({
     mutationFn: ({ specId, format }) => exportSpec(specId, format),
-  })
+  });
 }

@@ -1,21 +1,21 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { cn } from "@/lib/utils"
-import { LineChanges } from "./LineChanges"
-import { Loader2, Check, X, AlertCircle } from "lucide-react"
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { LineChanges } from "./LineChanges";
+import { Loader2, Check, X, AlertCircle } from "lucide-react";
 
-export type AgentStatus = "running" | "completed" | "failed" | "blocked"
+export type AgentStatus = "running" | "completed" | "failed" | "blocked";
 
 interface AgentCardProps {
-  id: string
-  taskName: string
-  status: AgentStatus
-  timeAgo: string
-  additions?: number
-  deletions?: number
-  repoName?: string
-  className?: string
+  id: string;
+  taskName: string;
+  status: AgentStatus;
+  timeAgo: string;
+  additions?: number;
+  deletions?: number;
+  repoName?: string;
+  className?: string;
 }
 
 const statusConfig = {
@@ -39,7 +39,7 @@ const statusConfig = {
     iconClass: "text-warning",
     label: "Blocked",
   },
-}
+};
 
 export function AgentCard({
   id,
@@ -51,15 +51,15 @@ export function AgentCard({
   repoName,
   className,
 }: AgentCardProps) {
-  const { icon: StatusIcon, iconClass } = statusConfig[status]
-  const hasChanges = additions > 0 || deletions > 0
+  const { icon: StatusIcon, iconClass } = statusConfig[status];
+  const hasChanges = additions > 0 || deletions > 0;
 
   return (
     <Link
       href={`/agents/${id}`}
       className={cn(
         "block rounded-md p-2 transition-colors duration-150 hover:bg-accent",
-        className
+        className,
       )}
     >
       {/* Row 1: Status + Task Name + Time */}
@@ -70,7 +70,9 @@ export function AgentCard({
             {taskName}
           </p>
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground">{timeAgo}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {timeAgo}
+        </span>
       </div>
 
       {/* Row 2: Line Changes + Repo */}
@@ -82,11 +84,9 @@ export function AgentCard({
           {hasChanges && repoName && (
             <span className="text-muted-foreground/50">•</span>
           )}
-          {repoName && (
-            <span className="truncate">{repoName}</span>
-          )}
+          {repoName && <span className="truncate">{repoName}</span>}
         </div>
       )}
     </Link>
-  )
+  );
 }

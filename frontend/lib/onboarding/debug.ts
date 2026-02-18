@@ -16,30 +16,30 @@ import {
   type OnboardingServerStatus,
   type OnboardingLocalState,
   type SyncResult,
-} from "./sync"
-import { useOnboardingStore } from "@/hooks/useOnboarding"
+} from "./sync";
+import { useOnboardingStore } from "@/hooks/useOnboarding";
 
 // Debug interface exposed on window
 interface OnboardingDebugTools {
-  getState: () => OnboardingLocalState | null
-  getStoreState: () => ReturnType<typeof useOnboardingStore.getState>
-  getServerState: () => Promise<OnboardingServerStatus>
-  reset: () => Promise<void>
-  complete: () => Promise<void>
-  skipToStep: (step: string) => void
-  clearLocal: () => void
-  sync: () => Promise<SyncResult>
-  getCookie: () => boolean
-  setCookie: (value: boolean) => void
-  help: () => void
+  getState: () => OnboardingLocalState | null;
+  getStoreState: () => ReturnType<typeof useOnboardingStore.getState>;
+  getServerState: () => Promise<OnboardingServerStatus>;
+  reset: () => Promise<void>;
+  complete: () => Promise<void>;
+  skipToStep: (step: string) => void;
+  clearLocal: () => void;
+  sync: () => Promise<SyncResult>;
+  getCookie: () => boolean;
+  setCookie: (value: boolean) => void;
+  help: () => void;
 }
 
 declare global {
   interface Window {
     omoiosDebug?: {
-      onboarding?: OnboardingDebugTools
-      [key: string]: unknown
-    }
+      onboarding?: OnboardingDebugTools;
+      [key: string]: unknown;
+    };
   }
 }
 
@@ -48,38 +48,38 @@ declare global {
  * Only enabled in development or when debug flag is set.
  */
 export function initOnboardingDebug(): void {
-  if (typeof window === "undefined") return
+  if (typeof window === "undefined") return;
 
   // Only enable in development or with debug flag
   const isDebugEnabled =
     process.env.NODE_ENV === "development" ||
-    localStorage.getItem("omoios_debug") === "true"
+    localStorage.getItem("omoios_debug") === "true";
 
-  if (!isDebugEnabled) return
+  if (!isDebugEnabled) return;
 
   // Initialize debug namespace
-  window.omoiosDebug = window.omoiosDebug || {}
+  window.omoiosDebug = window.omoiosDebug || {};
 
   window.omoiosDebug.onboarding = {
     /**
      * Get current localStorage onboarding state (raw)
      */
     getState: () => {
-      return getLocalOnboardingState()
+      return getLocalOnboardingState();
     },
 
     /**
      * Get current Zustand store state (React state)
      */
     getStoreState: () => {
-      return useOnboardingStore.getState()
+      return useOnboardingStore.getState();
     },
 
     /**
      * Fetch current server onboarding state
      */
     getServerState: async () => {
-      return fetchOnboardingStatus()
+      return fetchOnboardingStatus();
     },
 
     /**
@@ -87,15 +87,17 @@ export function initOnboardingDebug(): void {
      */
     reset: async () => {
       try {
-        await resetOnboardingServer()
+        await resetOnboardingServer();
         // Reset Zustand store
-        useOnboardingStore.getState().reset()
+        useOnboardingStore.getState().reset();
         // Clear cookie
-        setOnboardingCookie(false)
-        console.log("Onboarding reset successfully. UI should update automatically.")
+        setOnboardingCookie(false);
+        console.log(
+          "Onboarding reset successfully. UI should update automatically.",
+        );
       } catch (error) {
-        console.error("Failed to reset onboarding:", error)
-        throw error
+        console.error("Failed to reset onboarding:", error);
+        throw error;
       }
     },
 
@@ -104,18 +106,20 @@ export function initOnboardingDebug(): void {
      */
     complete: async () => {
       try {
-        const response = await completeOnboardingServer({})
+        const response = await completeOnboardingServer({});
         // Update Zustand store
-        const store = useOnboardingStore.getState()
-        store.setIsOnboardingComplete(true)
-        store.setCurrentStep("complete")
-        store.setSyncVersion(response.sync_version)
+        const store = useOnboardingStore.getState();
+        store.setIsOnboardingComplete(true);
+        store.setCurrentStep("complete");
+        store.setSyncVersion(response.sync_version);
         // Set cookie
-        setOnboardingCookie(true)
-        console.log("Onboarding marked complete. UI should update automatically.")
+        setOnboardingCookie(true);
+        console.log(
+          "Onboarding marked complete. UI should update automatically.",
+        );
       } catch (error) {
-        console.error("Failed to complete onboarding:", error)
-        throw error
+        console.error("Failed to complete onboarding:", error);
+        throw error;
       }
     },
 
@@ -123,47 +127,47 @@ export function initOnboardingDebug(): void {
      * Skip to a specific onboarding step (updates Zustand store)
      */
     skipToStep: (step: string) => {
-      const store = useOnboardingStore.getState()
-      store.setCurrentStep(step as Parameters<typeof store.setCurrentStep>[0])
-      console.log(`Skipped to step: ${step}. UI should update automatically.`)
+      const store = useOnboardingStore.getState();
+      store.setCurrentStep(step as Parameters<typeof store.setCurrentStep>[0]);
+      console.log(`Skipped to step: ${step}. UI should update automatically.`);
     },
 
     /**
      * Clear localStorage state only (doesn't affect server or Zustand)
      */
     clearLocal: () => {
-      clearLocalOnboardingState()
-      setOnboardingCookie(false)
-      console.log("Local storage cleared. Refresh the page to see changes.")
+      clearLocalOnboardingState();
+      setOnboardingCookie(false);
+      console.log("Local storage cleared. Refresh the page to see changes.");
     },
 
     /**
      * Force sync with server
      */
     sync: async () => {
-      const result = await detectAndHealInconsistencies()
+      const result = await detectAndHealInconsistencies();
       // If healed, also update Zustand store
       if (result.status === "healed" || result.status === "synced") {
-        const serverState = await fetchOnboardingStatus()
-        useOnboardingStore.getState().syncFromServer(serverState)
+        const serverState = await fetchOnboardingStatus();
+        useOnboardingStore.getState().syncFromServer(serverState);
       }
-      console.log("Sync result:", result)
-      return result
+      console.log("Sync result:", result);
+      return result;
     },
 
     /**
      * Get current onboarding cookie value
      */
     getCookie: () => {
-      return document.cookie.includes("omoios_onboarding_completed=true")
+      return document.cookie.includes("omoios_onboarding_completed=true");
     },
 
     /**
      * Set onboarding cookie directly
      */
     setCookie: (value: boolean) => {
-      setOnboardingCookie(value)
-      console.log(`Onboarding cookie set to: ${value}`)
+      setOnboardingCookie(value);
+      console.log(`Onboarding cookie set to: ${value}`);
     },
 
     /**
@@ -189,9 +193,11 @@ Steps: welcome, github, repo, first-spec, plan, complete
 To enable debug tools in production:
   localStorage.setItem("omoios_debug", "true")
   location.reload()
-      `)
+      `);
     },
-  }
+  };
 
-  console.log("Onboarding debug tools enabled. Type: omoiosDebug.onboarding.help()")
+  console.log(
+    "Onboarding debug tools enabled. Type: omoiosDebug.onboarding.help()",
+  );
 }

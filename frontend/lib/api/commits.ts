@@ -2,19 +2,19 @@
  * Commits API functions
  */
 
-import { apiRequest } from "./client"
+import { apiRequest } from "./client";
 import type {
   Commit,
   CommitListResponse,
   CommitDiffResponse,
   LinkCommitRequest,
-} from "./types"
+} from "./types";
 
 /**
  * Get commit details by SHA
  */
 export async function getCommit(commitSha: string): Promise<Commit> {
-  return apiRequest<Commit>(`/api/v1/commits/${commitSha}`)
+  return apiRequest<Commit>(`/api/v1/commits/${commitSha}`);
 }
 
 /**
@@ -22,18 +22,18 @@ export async function getCommit(commitSha: string): Promise<Commit> {
  */
 export async function getTicketCommits(
   ticketId: string,
-  params?: { limit?: number; offset?: number }
+  params?: { limit?: number; offset?: number },
 ): Promise<CommitListResponse> {
-  const searchParams = new URLSearchParams()
-  if (params?.limit) searchParams.set("limit", String(params.limit))
-  if (params?.offset) searchParams.set("offset", String(params.offset))
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
 
-  const query = searchParams.toString()
+  const query = searchParams.toString();
   const url = query
     ? `/api/v1/commits/ticket/${ticketId}?${query}`
-    : `/api/v1/commits/ticket/${ticketId}`
+    : `/api/v1/commits/ticket/${ticketId}`;
 
-  return apiRequest<CommitListResponse>(url)
+  return apiRequest<CommitListResponse>(url);
 }
 
 /**
@@ -41,18 +41,18 @@ export async function getTicketCommits(
  */
 export async function getAgentCommits(
   agentId: string,
-  params?: { limit?: number; offset?: number }
+  params?: { limit?: number; offset?: number },
 ): Promise<CommitListResponse> {
-  const searchParams = new URLSearchParams()
-  if (params?.limit) searchParams.set("limit", String(params.limit))
-  if (params?.offset) searchParams.set("offset", String(params.offset))
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
 
-  const query = searchParams.toString()
+  const query = searchParams.toString();
   const url = query
     ? `/api/v1/commits/agent/${agentId}?${query}`
-    : `/api/v1/commits/agent/${agentId}`
+    : `/api/v1/commits/agent/${agentId}`;
 
-  return apiRequest<CommitListResponse>(url)
+  return apiRequest<CommitListResponse>(url);
 }
 
 /**
@@ -60,12 +60,12 @@ export async function getAgentCommits(
  */
 export async function linkCommitToTicket(
   ticketId: string,
-  data: LinkCommitRequest
+  data: LinkCommitRequest,
 ): Promise<Commit> {
   return apiRequest<Commit>(`/api/v1/commits/ticket/${ticketId}/link`, {
     method: "POST",
     body: data,
-  })
+  });
 }
 
 /**
@@ -73,10 +73,10 @@ export async function linkCommitToTicket(
  */
 export async function getCommitDiff(
   commitSha: string,
-  filePath?: string
+  filePath?: string,
 ): Promise<CommitDiffResponse> {
   const url = filePath
     ? `/api/v1/commits/${commitSha}/diff?file_path=${encodeURIComponent(filePath)}`
-    : `/api/v1/commits/${commitSha}/diff`
-  return apiRequest<CommitDiffResponse>(url)
+    : `/api/v1/commits/${commitSha}/diff`;
+  return apiRequest<CommitDiffResponse>(url);
 }

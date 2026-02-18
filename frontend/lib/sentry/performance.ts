@@ -4,7 +4,7 @@
  * Provides utilities for custom transactions, spans, and Web Vitals tracking.
  */
 
-import * as Sentry from "@sentry/nextjs"
+import * as Sentry from "@sentry/nextjs";
 
 // ============================================================================
 // Types
@@ -17,15 +17,15 @@ export type TransactionName =
   | "project-creation"
   | "agent-execution"
   | "search"
-  | string
+  | string;
 
 interface SpanOptions {
   /** Operation name (e.g., "http.client", "db.query") */
-  op: string
+  op: string;
   /** Description of the operation */
-  description?: string
+  description?: string;
   /** Additional data to attach to the span */
-  data?: Record<string, string | number | boolean | undefined>
+  data?: Record<string, string | number | boolean | undefined>;
 }
 
 // ============================================================================
@@ -47,13 +47,13 @@ interface SpanOptions {
 export function startTransaction(
   name: TransactionName,
   description?: string,
-  op: string = "user.flow"
+  op: string = "user.flow",
 ): Sentry.Span | undefined {
   return Sentry.startInactiveSpan({
     name,
     op,
     attributes: description ? { description } : undefined,
-  })
+  });
 }
 
 /**
@@ -71,7 +71,7 @@ export function startTransaction(
  */
 export async function measureOperation<T>(
   options: SpanOptions,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
   return Sentry.startSpan(
     {
@@ -80,9 +80,9 @@ export async function measureOperation<T>(
       attributes: options.data,
     },
     async () => {
-      return await fn()
-    }
-  )
+      return await fn();
+    },
+  );
 }
 
 /**
@@ -97,16 +97,16 @@ export function measureOperationSync<T>(options: SpanOptions, fn: () => T): T {
     },
     (span) => {
       try {
-        const result = fn()
-        span.end()
-        return result
+        const result = fn();
+        span.end();
+        return result;
       } catch (error) {
-        span.setStatus({ code: 2, message: "error" }) // UNSET = 0, OK = 1, ERROR = 2
-        span.end()
-        throw error
+        span.setStatus({ code: 2, message: "error" }); // UNSET = 0, OK = 1, ERROR = 2
+        span.end();
+        throw error;
       }
-    }
-  )
+    },
+  );
 }
 
 // ============================================================================
@@ -114,22 +114,25 @@ export function measureOperationSync<T>(options: SpanOptions, fn: () => T): T {
 // ============================================================================
 
 interface FlowStep {
-  name: string
-  startedAt: number
+  name: string;
+  startedAt: number;
 }
 
 interface FlowTracker {
   /** Start a new step in the flow */
-  startStep: (stepName: string) => void
+  startStep: (stepName: string) => void;
   /** Complete the current step */
-  completeStep: () => void
+  completeStep: () => void;
   /** Complete the entire flow */
-  finish: (status?: "ok" | "error" | "cancelled") => void
+  finish: (status?: "ok" | "error" | "cancelled") => void;
   /** Add custom data to the flow */
-  setData: (key: string, value: unknown) => void
+  setData: (key: string, value: unknown) => void;
 }
 
-const activeFlows = new Map<string, { span: Sentry.Span; currentStep: FlowStep | null; steps: FlowStep[] }>()
+const activeFlows = new Map<
+  string,
+  { span: Sentry.Span; currentStep: FlowStep | null; steps: FlowStep[] }
+>();
 
 /**
  * Track a multi-step user flow (e.g., onboarding, checkout)
@@ -149,28 +152,31 @@ const activeFlows = new Map<string, { span: Sentry.Span; currentStep: FlowStep |
  * flow.finish("ok")
  * ```
  */
-export function trackUserFlow(flowName: TransactionName, description?: string): FlowTracker {
-  const span = startTransaction(flowName, description)
-  const flowId = `${flowName}-${Date.now()}`
+export function trackUserFlow(
+  flowName: TransactionName,
+  description?: string,
+): FlowTracker {
+  const span = startTransaction(flowName, description);
+  const flowId = `${flowName}-${Date.now()}`;
 
   if (span) {
-    activeFlows.set(flowId, { span, currentStep: null, steps: [] })
+    activeFlows.set(flowId, { span, currentStep: null, steps: [] });
   }
 
   return {
     startStep(stepName: string) {
-      const flow = activeFlows.get(flowId)
-      if (!flow) return
+      const flow = activeFlows.get(flowId);
+      if (!flow) return;
 
       // Complete previous step if any
       if (flow.currentStep) {
-        this.completeStep()
+        this.completeStep();
       }
 
       flow.currentStep = {
         name: stepName,
         startedAt: Date.now(),
-      }
+      };
 
       // Add breadcrumb for the step
       Sentry.addBreadcrumb({
@@ -178,53 +184,59 @@ export function trackUserFlow(flowName: TransactionName, description?: string): 
         message: `Started step: ${stepName}`,
         level: "info",
         data: { flow: flowName, step: stepName },
-      })
+      });
     },
 
     completeStep() {
-      const flow = activeFlows.get(flowId)
-      if (!flow || !flow.currentStep) return
+      const flow = activeFlows.get(flowId);
+      if (!flow || !flow.currentStep) return;
 
-      const duration = Date.now() - flow.currentStep.startedAt
-      flow.steps.push({ ...flow.currentStep })
+      const duration = Date.now() - flow.currentStep.startedAt;
+      flow.steps.push({ ...flow.currentStep });
 
       // Add step timing data to span
-      flow.span.setAttribute(`step.${flow.currentStep.name}.duration_ms`, duration)
+      flow.span.setAttribute(
+        `step.${flow.currentStep.name}.duration_ms`,
+        duration,
+      );
 
-      flow.currentStep = null
+      flow.currentStep = null;
     },
 
     finish(status: "ok" | "error" | "cancelled" = "ok") {
-      const flow = activeFlows.get(flowId)
-      if (!flow) return
+      const flow = activeFlows.get(flowId);
+      if (!flow) return;
 
       // Complete any pending step
       if (flow.currentStep) {
-        this.completeStep()
+        this.completeStep();
       }
 
       // Set final status
       if (status === "ok") {
-        flow.span.setStatus({ code: 1 }) // OK
+        flow.span.setStatus({ code: 1 }); // OK
       } else {
-        flow.span.setStatus({ code: 2, message: status }) // ERROR
+        flow.span.setStatus({ code: 2, message: status }); // ERROR
       }
 
       // Add summary data
-      flow.span.setAttribute("steps.count", flow.steps.length)
-      flow.span.setAttribute("steps.names", flow.steps.map((s) => s.name).join(","))
+      flow.span.setAttribute("steps.count", flow.steps.length);
+      flow.span.setAttribute(
+        "steps.names",
+        flow.steps.map((s) => s.name).join(","),
+      );
 
-      flow.span.end()
-      activeFlows.delete(flowId)
+      flow.span.end();
+      activeFlows.delete(flowId);
     },
 
     setData(key: string, value: unknown) {
-      const flow = activeFlows.get(flowId)
-      if (!flow) return
+      const flow = activeFlows.get(flowId);
+      if (!flow) return;
 
-      flow.span.setAttribute(key, value as string | number | boolean)
+      flow.span.setAttribute(key, value as string | number | boolean);
     },
-  }
+  };
 }
 
 // ============================================================================
@@ -237,7 +249,7 @@ export function trackUserFlow(flowName: TransactionName, description?: string): 
 export async function trackAPICall<T>(
   method: string,
   endpoint: string,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
   return measureOperation(
     {
@@ -248,8 +260,8 @@ export async function trackAPICall<T>(
         "http.url": endpoint,
       },
     },
-    fn
-  )
+    fn,
+  );
 }
 
 // ============================================================================
@@ -257,9 +269,9 @@ export async function trackAPICall<T>(
 // ============================================================================
 
 interface WebVitalsMetric {
-  name: "CLS" | "FCP" | "FID" | "INP" | "LCP" | "TTFB"
-  value: number
-  rating: "good" | "needs-improvement" | "poor"
+  name: "CLS" | "FCP" | "FID" | "INP" | "LCP" | "TTFB";
+  value: number;
+  rating: "good" | "needs-improvement" | "poor";
 }
 
 /**
@@ -276,10 +288,14 @@ export function reportWebVital(metric: WebVitalsMetric): void {
       value: metric.value,
       rating: metric.rating,
     },
-  })
+  });
 
   // Set as measurement for the current transaction
-  Sentry.setMeasurement(metric.name, metric.value, metric.name === "CLS" ? "" : "millisecond")
+  Sentry.setMeasurement(
+    metric.name,
+    metric.value,
+    metric.name === "CLS" ? "" : "millisecond",
+  );
 }
 
 // ============================================================================
@@ -288,9 +304,9 @@ export function reportWebVital(metric: WebVitalsMetric): void {
 
 interface PerformanceBudget {
   /** Maximum allowed value */
-  max: number
+  max: number;
   /** Unit of measurement */
-  unit: "ms" | "bytes" | "count"
+  unit: "ms" | "bytes" | "count";
 }
 
 const DEFAULT_BUDGETS: Record<string, PerformanceBudget> = {
@@ -300,7 +316,7 @@ const DEFAULT_BUDGETS: Record<string, PerformanceBudget> = {
   LCP: { max: 2500, unit: "ms" },
   FID: { max: 100, unit: "ms" },
   CLS: { max: 0.1, unit: "count" },
-}
+};
 
 /**
  * Check if a metric exceeds its performance budget
@@ -308,15 +324,15 @@ const DEFAULT_BUDGETS: Record<string, PerformanceBudget> = {
 export function checkPerformanceBudget(
   metricName: string,
   value: number,
-  customBudget?: PerformanceBudget
+  customBudget?: PerformanceBudget,
 ): { exceeded: boolean; budget: number; actual: number } {
-  const budget = customBudget || DEFAULT_BUDGETS[metricName]
+  const budget = customBudget || DEFAULT_BUDGETS[metricName];
 
   if (!budget) {
-    return { exceeded: false, budget: 0, actual: value }
+    return { exceeded: false, budget: 0, actual: value };
   }
 
-  const exceeded = value > budget.max
+  const exceeded = value > budget.max;
 
   if (exceeded) {
     Sentry.addBreadcrumb({
@@ -329,10 +345,10 @@ export function checkPerformanceBudget(
         actual: value,
         unit: budget.unit,
       },
-    })
+    });
   }
 
-  return { exceeded, budget: budget.max, actual: value }
+  return { exceeded, budget: budget.max, actual: value };
 }
 
 // ============================================================================
@@ -350,42 +366,41 @@ export function useRenderTracking(componentName: string): void {
       category: "render",
       message: `Rendered: ${componentName}`,
       level: "debug",
-    })
+    });
   }
 }
 
 /**
  * Create a performance-monitored callback
  */
-export function createTrackedCallback<T extends (...args: unknown[]) => unknown>(
-  name: string,
-  callback: T
-): T {
+export function createTrackedCallback<
+  T extends (...args: unknown[]) => unknown,
+>(name: string, callback: T): T {
   return ((...args: unknown[]) => {
-    const start = performance.now()
-    const result = callback(...args)
+    const start = performance.now();
+    const result = callback(...args);
 
     // Handle async callbacks
     if (result instanceof Promise) {
       return result.finally(() => {
-        const duration = performance.now() - start
+        const duration = performance.now() - start;
         Sentry.addBreadcrumb({
           category: "callback",
           message: `${name} completed`,
           level: "debug",
           data: { duration_ms: duration.toFixed(2) },
-        })
-      })
+        });
+      });
     }
 
-    const duration = performance.now() - start
+    const duration = performance.now() - start;
     Sentry.addBreadcrumb({
       category: "callback",
       message: `${name} completed`,
       level: "debug",
       data: { duration_ms: duration.toFixed(2) },
-    })
+    });
 
-    return result
-  }) as T
+    return result;
+  }) as T;
 }

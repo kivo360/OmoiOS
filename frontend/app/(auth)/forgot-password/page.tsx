@@ -1,39 +1,39 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { CardDescription, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Loader2, Mail } from "lucide-react"
-import { forgotPassword } from "@/lib/api/auth"
-import { ApiError } from "@/lib/api/client"
+import { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CardDescription, CardTitle } from "@/components/ui/card";
+import { ArrowLeft, Loader2, Mail } from "lucide-react";
+import { forgotPassword } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSubmitted, setIsSubmitted] = useState(false)
-  const [error, setError] = useState("")
+  const [email, setEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
     try {
-      await forgotPassword({ email })
-      setIsSubmitted(true)
+      await forgotPassword({ email });
+      setIsSubmitted(true);
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setError(err.message);
       } else {
-        setError("Failed to send reset email. Please try again.")
+        setError("Failed to send reset email. Please try again.");
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   if (isSubmitted) {
     return (
@@ -64,7 +64,7 @@ export default function ForgotPasswordPage() {
           </Link>
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -113,5 +113,5 @@ export default function ForgotPasswordPage() {
         </Link>
       </div>
     </div>
-  )
+  );
 }

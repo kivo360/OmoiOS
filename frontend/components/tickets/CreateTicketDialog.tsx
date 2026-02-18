@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useCreateTicket, useCheckDuplicates } from "@/hooks/useTickets"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { useState } from "react";
+import { useCreateTicket, useCheckDuplicates } from "@/hooks/useTickets";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -13,22 +13,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { AlertCircle, Loader2 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+} from "@/components/ui/select";
+import { AlertCircle, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface CreateTicketDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  projectId: string
-  defaultPhase?: string
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  projectId: string;
+  defaultPhase?: string;
 }
 
 const PRIORITIES = [
@@ -36,7 +36,7 @@ const PRIORITIES = [
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
   { value: "critical", label: "Critical" },
-]
+];
 
 const PHASES = [
   { value: "PHASE_BACKLOG", label: "Backlog" },
@@ -45,7 +45,7 @@ const PHASES = [
   { value: "PHASE_IMPLEMENTATION", label: "Implementation" },
   { value: "PHASE_TESTING", label: "Testing" },
   { value: "PHASE_DEPLOYMENT", label: "Deployment" },
-]
+];
 
 export function CreateTicketDialog({
   open,
@@ -53,34 +53,34 @@ export function CreateTicketDialog({
   projectId,
   defaultPhase = "PHASE_BACKLOG",
 }: CreateTicketDialogProps) {
-  const [title, setTitle] = useState("")
-  const [description, setDescription] = useState("")
-  const [priority, setPriority] = useState("medium")
-  const [phase, setPhase] = useState(defaultPhase)
-  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null)
-  const [forceCreate, setForceCreate] = useState(false)
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [phase, setPhase] = useState(defaultPhase);
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [forceCreate, setForceCreate] = useState(false);
 
-  const createTicket = useCreateTicket()
-  const checkDuplicates = useCheckDuplicates()
+  const createTicket = useCreateTicket();
+  const checkDuplicates = useCheckDuplicates();
 
   const resetForm = () => {
-    setTitle("")
-    setDescription("")
-    setPriority("medium")
-    setPhase(defaultPhase)
-    setDuplicateWarning(null)
-    setForceCreate(false)
-  }
+    setTitle("");
+    setDescription("");
+    setPriority("medium");
+    setPhase(defaultPhase);
+    setDuplicateWarning(null);
+    setForceCreate(false);
+  };
 
   const handleClose = () => {
-    resetForm()
-    onOpenChange(false)
-  }
+    resetForm();
+    onOpenChange(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    if (!title.trim()) return
+    if (!title.trim()) return;
 
     // Check for duplicates first (unless force creating)
     if (!forceCreate && !duplicateWarning) {
@@ -89,14 +89,14 @@ export function CreateTicketDialog({
           title: title.trim(),
           description: description.trim() || undefined,
           similarityThreshold: 0.7,
-        })
+        });
 
         if (result.is_duplicate && result.candidates.length > 0) {
-          const topMatch = result.candidates[0]
+          const topMatch = result.candidates[0];
           setDuplicateWarning(
-            `Similar ticket found: "${topMatch.title}" (${Math.round(topMatch.similarity_score * 100)}% match)`
-          )
-          return
+            `Similar ticket found: "${topMatch.title}" (${Math.round(topMatch.similarity_score * 100)}% match)`,
+          );
+          return;
         }
       } catch {
         // If duplicate check fails, proceed with creation
@@ -112,20 +112,20 @@ export function CreateTicketDialog({
         phase_id: phase,
         project_id: projectId,
         force_create: forceCreate,
-      })
+      });
 
-      handleClose()
+      handleClose();
     } catch {
       // Error is handled by mutation
     }
-  }
+  };
 
   const handleForceCreate = () => {
-    setForceCreate(true)
-    setDuplicateWarning(null)
-  }
+    setForceCreate(true);
+    setDuplicateWarning(null);
+  };
 
-  const isLoading = createTicket.isPending || checkDuplicates.isPending
+  const isLoading = createTicket.isPending || checkDuplicates.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -146,9 +146,9 @@ export function CreateTicketDialog({
                 id="title"
                 value={title}
                 onChange={(e) => {
-                  setTitle(e.target.value)
-                  setDuplicateWarning(null)
-                  setForceCreate(false)
+                  setTitle(e.target.value);
+                  setDuplicateWarning(null);
+                  setForceCreate(false);
                 }}
                 placeholder="Brief summary of the work"
                 disabled={isLoading}
@@ -173,7 +173,11 @@ export function CreateTicketDialog({
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="priority">Priority</Label>
-                <Select value={priority} onValueChange={setPriority} disabled={isLoading}>
+                <Select
+                  value={priority}
+                  onValueChange={setPriority}
+                  disabled={isLoading}
+                >
                   <SelectTrigger id="priority">
                     <SelectValue placeholder="Select priority" />
                   </SelectTrigger>
@@ -189,7 +193,11 @@ export function CreateTicketDialog({
 
               <div className="grid gap-2">
                 <Label htmlFor="phase">Phase</Label>
-                <Select value={phase} onValueChange={setPhase} disabled={isLoading}>
+                <Select
+                  value={phase}
+                  onValueChange={setPhase}
+                  disabled={isLoading}
+                >
                   <SelectTrigger id="phase">
                     <SelectValue placeholder="Select phase" />
                   </SelectTrigger>
@@ -236,7 +244,12 @@ export function CreateTicketDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              disabled={isLoading}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={isLoading || !title.trim()}>
@@ -247,5 +260,5 @@ export function CreateTicketDialog({
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

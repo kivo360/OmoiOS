@@ -2,42 +2,48 @@
  * Prototype API client for rapid prototyping mode
  */
 
-import { api } from "./client"
+import { api } from "./client";
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface PromptHistoryItem {
-  prompt: string
-  response_summary: string
-  timestamp: string
+  prompt: string;
+  response_summary: string;
+  timestamp: string;
 }
 
 export interface PrototypeSession {
-  id: string
-  user_id: string
-  framework: string
-  sandbox_id: string | null
-  preview_id: string | null
-  status: "creating" | "ready" | "prompting" | "exporting" | "stopped" | "failed"
-  preview_url: string | null
-  prompt_history: PromptHistoryItem[]
-  error_message: string | null
-  created_at: string
+  id: string;
+  user_id: string;
+  framework: string;
+  sandbox_id: string | null;
+  preview_id: string | null;
+  status:
+    | "creating"
+    | "ready"
+    | "prompting"
+    | "exporting"
+    | "stopped"
+    | "failed";
+  preview_url: string | null;
+  prompt_history: PromptHistoryItem[];
+  error_message: string | null;
+  created_at: string;
 }
 
 export interface PromptResponse {
-  prompt: string
-  response_summary: string
-  timestamp: string
+  prompt: string;
+  response_summary: string;
+  timestamp: string;
 }
 
 export interface ExportResponse {
-  repo_url: string
-  branch: string
-  commit_message: string
-  timestamp: string
+  repo_url: string;
+  branch: string;
+  commit_message: string;
+  timestamp: string;
 }
 
 // ============================================================================
@@ -47,15 +53,17 @@ export interface ExportResponse {
 /**
  * Start a new prototype session
  */
-export async function startSession(framework: string): Promise<PrototypeSession> {
-  return api.post<PrototypeSession>("/api/v1/prototype/session", { framework })
+export async function startSession(
+  framework: string,
+): Promise<PrototypeSession> {
+  return api.post<PrototypeSession>("/api/v1/prototype/session", { framework });
 }
 
 /**
  * Get prototype session status
  */
 export async function getSession(sessionId: string): Promise<PrototypeSession> {
-  return api.get<PrototypeSession>(`/api/v1/prototype/session/${sessionId}`)
+  return api.get<PrototypeSession>(`/api/v1/prototype/session/${sessionId}`);
 }
 
 /**
@@ -63,12 +71,12 @@ export async function getSession(sessionId: string): Promise<PrototypeSession> {
  */
 export async function applyPrompt(
   sessionId: string,
-  prompt: string
+  prompt: string,
 ): Promise<PromptResponse> {
   return api.post<PromptResponse>(
     `/api/v1/prototype/session/${sessionId}/prompt`,
-    { prompt }
-  )
+    { prompt },
+  );
 }
 
 /**
@@ -78,19 +86,19 @@ export async function exportToRepo(
   sessionId: string,
   repoUrl: string,
   branch: string = "prototype",
-  commitMessage: string = "Export prototype"
+  commitMessage: string = "Export prototype",
 ): Promise<ExportResponse> {
   return api.post<ExportResponse>(
     `/api/v1/prototype/session/${sessionId}/export`,
-    { repo_url: repoUrl, branch, commit_message: commitMessage }
-  )
+    { repo_url: repoUrl, branch, commit_message: commitMessage },
+  );
 }
 
 /**
  * End a prototype session
  */
 export async function endSession(sessionId: string): Promise<void> {
-  await api.delete(`/api/v1/prototype/session/${sessionId}`)
+  await api.delete(`/api/v1/prototype/session/${sessionId}`);
 }
 
 // ============================================================================
@@ -103,6 +111,6 @@ export const prototypeApi = {
   applyPrompt,
   exportToRepo,
   endSession,
-}
+};
 
-export default prototypeApi
+export default prototypeApi;

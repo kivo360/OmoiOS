@@ -1,71 +1,75 @@
-"use client"
+"use client";
 
-import { useState, useEffect, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { CardDescription, CardTitle } from "@/components/ui/card"
-import { Mail, CheckCircle, Loader2, ArrowLeft } from "lucide-react"
-import { verifyEmail as apiVerifyEmail, resendVerification } from "@/lib/api/auth"
-import { ApiError } from "@/lib/api/client"
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { CardDescription, CardTitle } from "@/components/ui/card";
+import { Mail, CheckCircle, Loader2, ArrowLeft } from "lucide-react";
+import {
+  verifyEmail as apiVerifyEmail,
+  resendVerification,
+} from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
 
 function VerifyEmailContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const email = searchParams.get("email")
-  const token = searchParams.get("token")
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const email = searchParams.get("email");
+  const token = searchParams.get("token");
 
-  const [isVerifying, setIsVerifying] = useState(false)
-  const [isVerified, setIsVerified] = useState(false)
-  const [isResending, setIsResending] = useState(false)
-  const [error, setError] = useState("")
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [error, setError] = useState("");
 
   // If token is present, verify automatically
   useEffect(() => {
     if (token) {
-      handleVerifyEmail(token)
+      handleVerifyEmail(token);
     }
-  }, [token])
+  }, [token]);
 
   const handleVerifyEmail = async (verifyToken: string) => {
-    setIsVerifying(true)
-    setError("")
+    setIsVerifying(true);
+    setError("");
 
     try {
-      await apiVerifyEmail(verifyToken)
-      setIsVerified(true)
+      await apiVerifyEmail(verifyToken);
+      setIsVerified(true);
       setTimeout(() => {
-        router.push("/onboarding")
-      }, 2000)
+        router.push("/onboarding");
+      }, 2000);
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setError(err.message);
       } else {
-        setError("Verification failed. Please try again.")
+        setError("Verification failed. Please try again.");
       }
     } finally {
-      setIsVerifying(false)
+      setIsVerifying(false);
     }
-  }
+  };
 
   const resendEmail = async () => {
-    if (!email) return
-    setIsResending(true)
-    setError("")
+    if (!email) return;
+    setIsResending(true);
+    setError("");
 
     try {
-      await resendVerification(email)
+      await resendVerification(email);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setError(err.message);
       } else {
-        const message = err instanceof Error ? err.message : "Failed to resend email"
-        setError(message)
+        const message =
+          err instanceof Error ? err.message : "Failed to resend email";
+        setError(message);
       }
     } finally {
-      setIsResending(false)
+      setIsResending(false);
     }
-  }
+  };
 
   if (isVerifying) {
     return (
@@ -78,7 +82,7 @@ function VerifyEmailContent() {
           </CardDescription>
         </div>
       </div>
-    )
+    );
   }
 
   if (isVerified) {
@@ -97,7 +101,7 @@ function VerifyEmailContent() {
           <Link href="/onboarding">Continue to onboarding</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -149,13 +153,19 @@ function VerifyEmailContent() {
         </Link>
       </div>
     </div>
-  )
+  );
 }
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div className="text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+        </div>
+      }
+    >
       <VerifyEmailContent />
     </Suspense>
-  )
+  );
 }

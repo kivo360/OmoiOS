@@ -2,7 +2,7 @@
  * React Query hooks for Tickets API
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listTickets,
   getTicket,
@@ -18,8 +18,8 @@ import {
   getTicketContext,
   spawnPhaseTasks,
   batchSpawnPhaseTasks,
-} from "@/lib/api/tickets"
-import type { SpawnPhaseTasksResponse } from "@/lib/api/tickets"
+} from "@/lib/api/tickets";
+import type { SpawnPhaseTasksResponse } from "@/lib/api/tickets";
 import type {
   Ticket,
   TicketCreate,
@@ -27,7 +27,7 @@ import type {
   TicketListResponse,
   TicketTransitionRequest,
   DuplicateCheckResponse,
-} from "@/lib/api/types"
+} from "@/lib/api/types";
 
 // Query keys
 export const ticketKeys = {
@@ -38,7 +38,7 @@ export const ticketKeys = {
   detail: (id: string) => [...ticketKeys.details(), id] as const,
   context: (id: string) => [...ticketKeys.detail(id), "context"] as const,
   pendingCount: () => [...ticketKeys.all, "pending-count"] as const,
-}
+};
 
 /**
  * Hook to fetch list of tickets with filtering
@@ -47,7 +47,7 @@ export function useTickets(params?: TicketListParams) {
   return useQuery<TicketListResponse>({
     queryKey: ticketKeys.list(params ?? {}),
     queryFn: () => listTickets(params),
-  })
+  });
 }
 
 /**
@@ -61,7 +61,7 @@ export function useCheckDuplicates() {
   >({
     mutationFn: ({ title, description, similarityThreshold }) =>
       checkDuplicates(title, description, similarityThreshold),
-  })
+  });
 }
 
 /**
@@ -72,7 +72,7 @@ export function useTicket(ticketId: string | undefined) {
     queryKey: ticketKeys.detail(ticketId!),
     queryFn: () => getTicket(ticketId!),
     enabled: !!ticketId,
-  })
+  });
 }
 
 /**
@@ -83,7 +83,7 @@ export function useTicketContext(ticketId: string | undefined) {
     queryKey: ticketKeys.context(ticketId!),
     queryFn: () => getTicketContext(ticketId!),
     enabled: !!ticketId,
-  })
+  });
 }
 
 /**
@@ -94,50 +94,50 @@ export function usePendingReviewCount() {
     queryKey: ticketKeys.pendingCount(),
     queryFn: getPendingReviewCount,
     refetchInterval: 30000, // Refresh every 30 seconds
-  })
+  });
 }
 
 /**
  * Hook to create a new ticket
  */
 export function useCreateTicket() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data: TicketCreate) => createTicket(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.pendingCount() })
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.pendingCount() });
     },
-  })
+  });
 }
 
 /**
  * Hook to transition ticket status
  */
 export function useTransitionTicket() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
       ticketId,
       data,
     }: {
-      ticketId: string
-      data: TicketTransitionRequest
+      ticketId: string;
+      data: TicketTransitionRequest;
     }) => transitionTicket(ticketId, data),
     onSuccess: (_, { ticketId }) => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
     },
-  })
+  });
 }
 
 /**
  * Hook to block a ticket
  */
 export function useBlockTicket() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
@@ -145,83 +145,87 @@ export function useBlockTicket() {
       blockerType,
       suggestedRemediation,
     }: {
-      ticketId: string
-      blockerType: string
-      suggestedRemediation?: string
+      ticketId: string;
+      blockerType: string;
+      suggestedRemediation?: string;
     }) => blockTicket(ticketId, blockerType, suggestedRemediation),
     onSuccess: (_, { ticketId }) => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
     },
-  })
+  });
 }
 
 /**
  * Hook to unblock a ticket
  */
 export function useUnblockTicket() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (ticketId: string) => unblockTicket(ticketId),
     onSuccess: (_, ticketId) => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
     },
-  })
+  });
 }
 
 /**
  * Hook to progress ticket to next phase
  */
 export function useProgressTicket() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (ticketId: string) => progressTicket(ticketId),
     onSuccess: (_, ticketId) => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
     },
-  })
+  });
 }
 
 /**
  * Hook to approve a pending ticket
  */
 export function useApproveTicket() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (ticketId: string) => approveTicket(ticketId),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(result.ticket_id) })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.pendingCount() })
+      queryClient.invalidateQueries({
+        queryKey: ticketKeys.detail(result.ticket_id),
+      });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.pendingCount() });
     },
-  })
+  });
 }
 
 /**
  * Hook to reject a pending ticket
  */
 export function useRejectTicket() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
       ticketId,
       rejectionReason,
     }: {
-      ticketId: string
-      rejectionReason: string
+      ticketId: string;
+      rejectionReason: string;
     }) => rejectTicket(ticketId, rejectionReason),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(result.ticket_id) })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.pendingCount() })
+      queryClient.invalidateQueries({
+        queryKey: ticketKeys.detail(result.ticket_id),
+      });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.pendingCount() });
     },
-  })
+  });
 }
 
 /**
@@ -229,7 +233,7 @@ export function useRejectTicket() {
  * This triggers the phase progression workflow
  */
 export function useSpawnPhaseTasks() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<
     SpawnPhaseTasksResponse,
@@ -238,12 +242,14 @@ export function useSpawnPhaseTasks() {
   >({
     mutationFn: ({ ticketId, phaseId }) => spawnPhaseTasks(ticketId, phaseId),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(result.ticket_id) })
-      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      queryClient.invalidateQueries({
+        queryKey: ticketKeys.detail(result.ticket_id),
+      });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
       // Also invalidate board since tasks were spawned
-      queryClient.invalidateQueries({ queryKey: ["board"] })
+      queryClient.invalidateQueries({ queryKey: ["board"] });
     },
-  })
+  });
 }
 
 /**
@@ -251,13 +257,13 @@ export function useSpawnPhaseTasks() {
  * Used for "Start Processing" button on board
  */
 export function useBatchSpawnPhaseTasks() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation<SpawnPhaseTasksResponse[], Error, string[]>({
     mutationFn: (ticketIds) => batchSpawnPhaseTasks(ticketIds),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: ["board"] })
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ["board"] });
     },
-  })
+  });
 }

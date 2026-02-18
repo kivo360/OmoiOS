@@ -1,12 +1,18 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { ArrowRight, Sparkles, Clock, Loader2, AlertCircle } from "lucide-react"
-import { useOnboarding } from "@/hooks/useOnboarding"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  ArrowRight,
+  Sparkles,
+  Clock,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
+import { useOnboarding } from "@/hooks/useOnboarding";
 
 const SUGGESTION_CHIPS = [
   "Add form validation to the contact form",
@@ -15,24 +21,25 @@ const SUGGESTION_CHIPS = [
   "Fix the broken link in the footer",
   "Add loading states to buttons",
   "Improve mobile navigation",
-]
+];
 
 export function FirstSpecStep() {
-  const { data, submitFirstSpec, isLoading, error, clearError, nextStep } = useOnboarding()
-  const [specText, setSpecText] = useState(data.firstSpecText || "")
+  const { data, submitFirstSpec, isLoading, error, clearError, nextStep } =
+    useOnboarding();
+  const [specText, setSpecText] = useState(data.firstSpecText || "");
 
   const handleSubmit = async () => {
-    if (!specText.trim()) return
-    await submitFirstSpec(specText.trim())
-  }
+    if (!specText.trim()) return;
+    await submitFirstSpec(specText.trim());
+  };
 
   const handleSuggestionClick = (suggestion: string) => {
-    setSpecText(suggestion)
-    clearError()
-  }
+    setSpecText(suggestion);
+    clearError();
+  };
 
-  const characterCount = specText.length
-  const isValidLength = characterCount >= 10 && characterCount <= 2000
+  const characterCount = specText.length;
+  const isValidLength = characterCount >= 10 && characterCount <= 2000;
 
   return (
     <div className="space-y-6">
@@ -61,8 +68,8 @@ export function FirstSpecStep() {
           placeholder="Example: Add a logout button to the navbar that clears the session and redirects to the login page..."
           value={specText}
           onChange={(e) => {
-            setSpecText(e.target.value)
-            if (error) clearError()
+            setSpecText(e.target.value);
+            if (error) clearError();
           }}
           className="min-h-[120px] resize-none"
           disabled={isLoading}
@@ -145,5 +152,5 @@ export function FirstSpecStep() {
         Skip for now - I&apos;ll create a spec later
       </Button>
     </div>
-  )
+  );
 }

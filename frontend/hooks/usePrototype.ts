@@ -2,16 +2,16 @@
  * React hook for prototype session management
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useCallback } from "react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import {
   prototypeApi,
   type PrototypeSession,
   type PromptResponse,
   type ExportResponse,
-} from "@/lib/api/prototype"
-import { ApiError } from "@/lib/api/client"
-import { useEvents, type SystemEvent } from "./useEvents"
+} from "@/lib/api/prototype";
+import { ApiError } from "@/lib/api/client";
+import { useEvents, type SystemEvent } from "./useEvents";
 
 // ============================================================================
 // Query Keys
@@ -21,7 +21,7 @@ export const prototypeKeys = {
   all: ["prototype"] as const,
   session: (sessionId: string) =>
     [...prototypeKeys.all, "session", sessionId] as const,
-}
+};
 
 // ============================================================================
 // Hook
@@ -38,7 +38,7 @@ export const prototypeKeys = {
  * - WebSocket events for prompt/export updates
  */
 export function usePrototype(sessionId: string | null) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   // Query session status
   const {
@@ -49,23 +49,27 @@ export function usePrototype(sessionId: string | null) {
     queryKey: prototypeKeys.session(sessionId || ""),
     queryFn: async () => {
       try {
-        return await prototypeApi.getSession(sessionId!)
+        return await prototypeApi.getSession(sessionId!);
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
-          return null
+          return null;
         }
-        throw err
+        throw err;
       }
     },
     enabled: !!sessionId,
     refetchInterval: (query) => {
-      const data = query.state.data
-      if (!data) return false
-      if (data.status === "creating" || data.status === "prompting" || data.status === "exporting")
-        return 5_000
-      return false
+      const data = query.state.data;
+      if (!data) return false;
+      if (
+        data.status === "creating" ||
+        data.status === "prompting" ||
+        data.status === "exporting"
+      )
+        return 5_000;
+      return false;
     },
-  })
+  });
 
   // Listen for WebSocket events
   const handleEvent = useCallback(
@@ -77,11 +81,11 @@ export function usePrototype(sessionId: string | null) {
       ) {
         queryClient.invalidateQueries({
           queryKey: prototypeKeys.session(sessionId!),
-        })
+        });
       }
     },
-    [sessionId, queryClient]
-  )
+    [sessionId, queryClient],
+  );
 
   useEvents({
     enabled: !!sessionId,
@@ -89,12 +93,12 @@ export function usePrototype(sessionId: string | null) {
       event_types: ["PROTOTYPE_PROMPT_APPLIED", "PROTOTYPE_EXPORTED"],
     },
     onEvent: handleEvent,
-  })
+  });
 
   // Start session mutation
   const startMutation = useMutation({
     mutationFn: (framework: string) => prototypeApi.startSession(framework),
-  })
+  });
 
   // Apply prompt mutation
   const promptMutation = useMutation({
@@ -104,10 +108,10 @@ export function usePrototype(sessionId: string | null) {
       if (sessionId) {
         queryClient.invalidateQueries({
           queryKey: prototypeKeys.session(sessionId),
-        })
+        });
       }
     },
-  })
+  });
 
   // Export mutation
   const exportMutation = useMutation({
@@ -116,18 +120,18 @@ export function usePrototype(sessionId: string | null) {
       branch,
       commitMessage,
     }: {
-      repoUrl: string
-      branch?: string
-      commitMessage?: string
+      repoUrl: string;
+      branch?: string;
+      commitMessage?: string;
     }) => prototypeApi.exportToRepo(sessionId!, repoUrl, branch, commitMessage),
     onSuccess: () => {
       if (sessionId) {
         queryClient.invalidateQueries({
           queryKey: prototypeKeys.session(sessionId),
-        })
+        });
       }
     },
-  })
+  });
 
   // End session mutation
   const endMutation = useMutation({
@@ -136,10 +140,10 @@ export function usePrototype(sessionId: string | null) {
       if (sessionId) {
         queryClient.invalidateQueries({
           queryKey: prototypeKeys.session(sessionId),
-        })
+        });
       }
     },
-  })
+  });
 
   return {
     session,
@@ -163,5 +167,5 @@ export function usePrototype(sessionId: string | null) {
     // End
     endSession: endMutation.mutate,
     isEnding: endMutation.isPending,
-  }
+  };
 }

@@ -1,14 +1,20 @@
-"use client"
+"use client";
 
-import { use, useState } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { use, useState } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -16,7 +22,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
   ArrowLeft,
   CreditCard,
@@ -29,9 +35,9 @@ import {
   Settings,
   Loader2,
   Crown,
-} from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { useOrganization } from "@/hooks/useOrganizations"
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useOrganization } from "@/hooks/useOrganizations";
 import {
   useBillingAccount,
   usePaymentMethods,
@@ -46,115 +52,127 @@ import {
   useReactivateSubscription,
   useCreateLifetimeCheckout,
   useCreateSubscriptionCheckout,
-} from "@/hooks/useBilling"
-import { SubscriptionCard } from "@/components/billing/SubscriptionCard"
-import { UpgradeDialog } from "@/components/billing/UpgradeDialog"
-import type { SubscriptionTier } from "@/lib/api/types"
+} from "@/hooks/useBilling";
+import { SubscriptionCard } from "@/components/billing/SubscriptionCard";
+import { UpgradeDialog } from "@/components/billing/UpgradeDialog";
+import type { SubscriptionTier } from "@/lib/api/types";
 
 interface BillingPageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }
 
 export default function BillingPage({ params }: BillingPageProps) {
-  const { id: orgId } = use(params)
-  const { toast } = useToast()
-  const [creditAmount, setCreditAmount] = useState("50")
-  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false)
-  const [upgradeError, setUpgradeError] = useState<string | null>(null)
+  const { id: orgId } = use(params);
+  const { toast } = useToast();
+  const [creditAmount, setCreditAmount] = useState("50");
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
 
   // Fetch data
-  const { data: org, isLoading: orgLoading, error: orgError } = useOrganization(orgId)
-  const { data: account, isLoading: accountLoading } = useBillingAccount(orgId)
-  const { data: subscription, isLoading: subscriptionLoading } = useSubscription(orgId)
-  const { data: paymentMethods, isLoading: pmLoading } = usePaymentMethods(orgId)
-  const { data: stripeInvoices, isLoading: invoicesLoading } = useStripeInvoices(orgId, { limit: 10 })
-  const { data: usage, isLoading: usageLoading } = useUsage(orgId, { billed: false })
-  const { data: stripeConfig } = useStripeConfig()
+  const {
+    data: org,
+    isLoading: orgLoading,
+    error: orgError,
+  } = useOrganization(orgId);
+  const { data: account, isLoading: accountLoading } = useBillingAccount(orgId);
+  const { data: subscription, isLoading: subscriptionLoading } =
+    useSubscription(orgId);
+  const { data: paymentMethods, isLoading: pmLoading } =
+    usePaymentMethods(orgId);
+  const { data: stripeInvoices, isLoading: invoicesLoading } =
+    useStripeInvoices(orgId, { limit: 10 });
+  const { data: usage, isLoading: usageLoading } = useUsage(orgId, {
+    billed: false,
+  });
+  const { data: stripeConfig } = useStripeConfig();
 
   // Mutations
-  const createCheckout = useCreateCreditCheckout()
-  const createPortal = useCreateCustomerPortal()
-  const removePaymentMethod = useRemovePaymentMethod()
-  const cancelSubscription = useCancelSubscription()
-  const reactivateSubscription = useReactivateSubscription()
-  const createLifetimeCheckout = useCreateLifetimeCheckout()
-  const createSubscriptionCheckout = useCreateSubscriptionCheckout()
+  const createCheckout = useCreateCreditCheckout();
+  const createPortal = useCreateCustomerPortal();
+  const removePaymentMethod = useRemovePaymentMethod();
+  const cancelSubscription = useCancelSubscription();
+  const reactivateSubscription = useReactivateSubscription();
+  const createLifetimeCheckout = useCreateLifetimeCheckout();
+  const createSubscriptionCheckout = useCreateSubscriptionCheckout();
 
   const handleBuyCredits = async () => {
-    const amount = parseFloat(creditAmount)
+    const amount = parseFloat(creditAmount);
     if (isNaN(amount) || amount < 10 || amount > 1000) {
       toast({
         title: "Invalid amount",
         description: "Please enter an amount between $10 and $1000",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     try {
       const result = await createCheckout.mutateAsync({
         orgId,
         data: { amount_usd: amount },
-      })
+      });
       // Redirect to Stripe checkout
-      window.location.href = result.checkout_url
+      window.location.href = result.checkout_url;
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to create checkout session. Please try again.",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   const handleOpenPortal = async () => {
     try {
-      const result = await createPortal.mutateAsync(orgId)
-      window.open(result.portal_url, "_blank")
+      const result = await createPortal.mutateAsync(orgId);
+      window.open(result.portal_url, "_blank");
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to open billing portal. Please try again.",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   const handleRemovePaymentMethod = async (paymentMethodId: string) => {
     try {
-      await removePaymentMethod.mutateAsync({ orgId, paymentMethodId })
+      await removePaymentMethod.mutateAsync({ orgId, paymentMethodId });
       toast({
         title: "Payment method removed",
         description: "The payment method has been removed from your account.",
-      })
+      });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to remove payment method. Please try again.",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   const handleUpgrade = () => {
-    setUpgradeError(null)
-    setUpgradeDialogOpen(true)
-  }
+    setUpgradeError(null);
+    setUpgradeDialogOpen(true);
+  };
 
   const handleSelectTier = async (tier: SubscriptionTier) => {
-    setUpgradeError(null)
+    setUpgradeError(null);
     try {
       if (tier === "enterprise") {
         // Open enterprise contact form or email
-        window.open("mailto:sales@omoios.com?subject=Enterprise%20Plan%20Inquiry", "_blank")
-        setUpgradeDialogOpen(false)
-        return
+        window.open(
+          "mailto:sales@omoios.com?subject=Enterprise%20Plan%20Inquiry",
+          "_blank",
+        );
+        setUpgradeDialogOpen(false);
+        return;
       }
 
       if (tier === "lifetime") {
-        const result = await createLifetimeCheckout.mutateAsync({ orgId })
-        window.location.href = result.checkout_url
-        return
+        const result = await createLifetimeCheckout.mutateAsync({ orgId });
+        window.location.href = result.checkout_url;
+        return;
       }
 
       // For pro and team tiers, create a subscription checkout session
@@ -166,71 +184,82 @@ export default function BillingPage({ params }: BillingPageProps) {
             success_url: `${window.location.origin}/organizations/${orgId}/billing?checkout=success`,
             cancel_url: `${window.location.origin}/organizations/${orgId}/billing?checkout=cancelled`,
           },
-        })
-        window.location.href = result.checkout_url
-        return
+        });
+        window.location.href = result.checkout_url;
+        return;
       }
 
       // Fallback: open the portal for other tiers
-      const result = await createPortal.mutateAsync(orgId)
-      window.open(result.portal_url, "_blank")
-      setUpgradeDialogOpen(false)
+      const result = await createPortal.mutateAsync(orgId);
+      window.open(result.portal_url, "_blank");
+      setUpgradeDialogOpen(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to process upgrade. Please try again."
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to process upgrade. Please try again.";
 
       // If user already has a paid subscription, redirect to customer portal for plan changes
-      if (errorMessage.toLowerCase().includes("already has an active paid subscription") ||
-          errorMessage.toLowerCase().includes("use the customer portal")) {
+      if (
+        errorMessage
+          .toLowerCase()
+          .includes("already has an active paid subscription") ||
+        errorMessage.toLowerCase().includes("use the customer portal")
+      ) {
         try {
-          const result = await createPortal.mutateAsync(orgId)
-          window.open(result.portal_url, "_blank")
-          setUpgradeDialogOpen(false)
+          const result = await createPortal.mutateAsync(orgId);
+          window.open(result.portal_url, "_blank");
+          setUpgradeDialogOpen(false);
           toast({
             title: "Opening Billing Portal",
-            description: "Use the Stripe portal to manage your subscription and change plans.",
-          })
-          return
+            description:
+              "Use the Stripe portal to manage your subscription and change plans.",
+          });
+          return;
         } catch (portalError) {
-          setUpgradeError("Failed to open billing portal. Please try the 'Billing Portal' button.")
-          return
+          setUpgradeError(
+            "Failed to open billing portal. Please try the 'Billing Portal' button.",
+          );
+          return;
         }
       }
 
-      setUpgradeError(errorMessage)
+      setUpgradeError(errorMessage);
     }
-  }
+  };
 
   const handleCancelSubscription = async () => {
     try {
-      await cancelSubscription.mutateAsync({ orgId, atPeriodEnd: true })
+      await cancelSubscription.mutateAsync({ orgId, atPeriodEnd: true });
       toast({
         title: "Subscription canceled",
-        description: "Your subscription will end at the end of the current billing period.",
-      })
+        description:
+          "Your subscription will end at the end of the current billing period.",
+      });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to cancel subscription. Please try again.",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   const handleReactivateSubscription = async () => {
     try {
-      await reactivateSubscription.mutateAsync(orgId)
+      await reactivateSubscription.mutateAsync(orgId);
       toast({
         title: "Subscription reactivated",
         description: "Your subscription has been reactivated.",
-      })
+      });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to reactivate subscription. Please try again.",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   // Loading state
   if (orgLoading || accountLoading) {
@@ -247,7 +276,7 @@ export default function BillingPage({ params }: BillingPageProps) {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -263,7 +292,7 @@ export default function BillingPage({ params }: BillingPageProps) {
           <Link href={`/organizations/${orgId}`}>Back to Organization</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   if (!org || !account) {
@@ -274,14 +303,17 @@ export default function BillingPage({ params }: BillingPageProps) {
           <Link href="/organizations">Back to Organizations</Link>
         </Button>
       </div>
-    )
+    );
   }
 
-  const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  const statusColors: Record<
+    string,
+    "default" | "secondary" | "destructive" | "outline"
+  > = {
     active: "default",
     pending: "secondary",
     suspended: "destructive",
-  }
+  };
 
   return (
     <div className="container mx-auto max-w-5xl p-6 space-y-6">
@@ -301,7 +333,11 @@ export default function BillingPage({ params }: BillingPageProps) {
             Manage billing, credits, and payment methods for {org.name}
           </p>
         </div>
-        <Button variant="outline" onClick={handleOpenPortal} disabled={createPortal.isPending}>
+        <Button
+          variant="outline"
+          onClick={handleOpenPortal}
+          disabled={createPortal.isPending}
+        >
           {createPortal.isPending ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
@@ -320,7 +356,9 @@ export default function BillingPage({ params }: BillingPageProps) {
                 <DollarSign className="h-5 w-5 text-green-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">${account.credit_balance.toFixed(2)}</p>
+                <p className="text-2xl font-bold">
+                  ${account.credit_balance.toFixed(2)}
+                </p>
                 <p className="text-sm text-muted-foreground">Credit Balance</p>
               </div>
             </div>
@@ -343,13 +381,18 @@ export default function BillingPage({ params }: BillingPageProps) {
                     </p>
                     <p className="text-sm text-muted-foreground">
                       Workflows Left
-                      {subscription.workflows_limit !== -1 && ` / ${subscription.workflows_limit}`}
+                      {subscription.workflows_limit !== -1 &&
+                        ` / ${subscription.workflows_limit}`}
                     </p>
                   </>
                 ) : (
                   <>
-                    <p className="text-2xl font-bold">{account.free_workflows_remaining}</p>
-                    <p className="text-sm text-muted-foreground">Free Workflows Left</p>
+                    <p className="text-2xl font-bold">
+                      {account.free_workflows_remaining}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Free Workflows Left
+                    </p>
                   </>
                 )}
               </div>
@@ -366,13 +409,21 @@ export default function BillingPage({ params }: BillingPageProps) {
                 {/* Show subscription usage if subscribed, otherwise total */}
                 {subscription && subscription.tier !== "free" ? (
                   <>
-                    <p className="text-2xl font-bold">{subscription.workflows_used}</p>
-                    <p className="text-sm text-muted-foreground">Workflows Used This Period</p>
+                    <p className="text-2xl font-bold">
+                      {subscription.workflows_used}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Workflows Used This Period
+                    </p>
                   </>
                 ) : (
                   <>
-                    <p className="text-2xl font-bold">{account.total_workflows_completed}</p>
-                    <p className="text-sm text-muted-foreground">Workflows Completed</p>
+                    <p className="text-2xl font-bold">
+                      {account.total_workflows_completed}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Workflows Completed
+                    </p>
                   </>
                 )}
               </div>
@@ -386,7 +437,9 @@ export default function BillingPage({ params }: BillingPageProps) {
                 <CreditCard className="h-5 w-5 text-orange-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">${account.total_amount_spent.toFixed(2)}</p>
+                <p className="text-2xl font-bold">
+                  ${account.total_amount_spent.toFixed(2)}
+                </p>
                 <p className="text-sm text-muted-foreground">Total Spent</p>
               </div>
             </div>
@@ -400,31 +453,49 @@ export default function BillingPage({ params }: BillingPageProps) {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Account Status</CardTitle>
-              <CardDescription>Your billing account information</CardDescription>
+              <CardDescription>
+                Your billing account information
+              </CardDescription>
             </div>
-            <Badge variant={statusColors[account.status] || "secondary"}>{account.status}</Badge>
+            <Badge variant={statusColors[account.status] || "secondary"}>
+              {account.status}
+            </Badge>
           </div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Billing Email</p>
-              <p className="text-sm">{account.billing_email || org.billing_email || "Not set"}</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                Billing Email
+              </p>
+              <p className="text-sm">
+                {account.billing_email || org.billing_email || "Not set"}
+              </p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Free Tier Reset</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                Free Tier Reset
+              </p>
               <p className="text-sm">
                 {account.free_workflows_reset_at
-                  ? new Date(account.free_workflows_reset_at).toLocaleDateString()
+                  ? new Date(
+                      account.free_workflows_reset_at,
+                    ).toLocaleDateString()
                   : "N/A"}
               </p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Auto-Billing</p>
-              <p className="text-sm">{account.auto_billing_enabled ? "Enabled" : "Disabled"}</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                Auto-Billing
+              </p>
+              <p className="text-sm">
+                {account.auto_billing_enabled ? "Enabled" : "Disabled"}
+              </p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Tax Exempt</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                Tax Exempt
+              </p>
               <p className="text-sm">{account.tax_exempt ? "Yes" : "No"}</p>
             </div>
           </div>
@@ -461,7 +532,8 @@ export default function BillingPage({ params }: BillingPageProps) {
             <CardHeader>
               <CardTitle>Buy Credits</CardTitle>
               <CardDescription>
-                Purchase prepaid credits to use for workflow completions. Each workflow costs $10.
+                Purchase prepaid credits to use for workflow completions. Each
+                workflow costs $10.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -480,7 +552,9 @@ export default function BillingPage({ params }: BillingPageProps) {
                 </div>
                 <Button
                   onClick={handleBuyCredits}
-                  disabled={createCheckout.isPending || !stripeConfig?.is_configured}
+                  disabled={
+                    createCheckout.isPending || !stripeConfig?.is_configured
+                  }
                 >
                   {createCheckout.isPending ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -549,7 +623,10 @@ export default function BillingPage({ params }: BillingPageProps) {
                         <CreditCard className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="font-medium">
-                            {pm.card_brand ? pm.card_brand.charAt(0).toUpperCase() + pm.card_brand.slice(1) : pm.type}{" "}
+                            {pm.card_brand
+                              ? pm.card_brand.charAt(0).toUpperCase() +
+                                pm.card_brand.slice(1)
+                              : pm.type}{" "}
                             ending in {pm.card_last4 || "****"}
                           </p>
                           {pm.is_default && (
@@ -573,8 +650,14 @@ export default function BillingPage({ params }: BillingPageProps) {
               ) : (
                 <div className="text-center py-8">
                   <CreditCard className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <p className="mt-2 text-muted-foreground">No payment methods added</p>
-                  <Button className="mt-4" variant="outline" onClick={handleOpenPortal}>
+                  <p className="mt-2 text-muted-foreground">
+                    No payment methods added
+                  </p>
+                  <Button
+                    className="mt-4"
+                    variant="outline"
+                    onClick={handleOpenPortal}
+                  >
                     Add Payment Method
                   </Button>
                 </div>
@@ -611,21 +694,25 @@ export default function BillingPage({ params }: BillingPageProps) {
                   <TableBody>
                     {stripeInvoices.map((invoice) => (
                       <TableRow key={invoice.id}>
-                        <TableCell className="font-mono">{invoice.number || invoice.id}</TableCell>
+                        <TableCell className="font-mono">
+                          {invoice.number || invoice.id}
+                        </TableCell>
                         <TableCell>
                           {invoice.created
                             ? new Date(invoice.created).toLocaleDateString()
                             : "N/A"}
                         </TableCell>
-                        <TableCell>${(invoice.total / 100).toFixed(2)}</TableCell>
+                        <TableCell>
+                          ${(invoice.total / 100).toFixed(2)}
+                        </TableCell>
                         <TableCell>
                           <Badge
                             variant={
                               invoice.status === "paid"
                                 ? "default"
                                 : invoice.status === "open"
-                                ? "secondary"
-                                : "destructive"
+                                  ? "secondary"
+                                  : "destructive"
                             }
                           >
                             {invoice.status}
@@ -634,13 +721,21 @@ export default function BillingPage({ params }: BillingPageProps) {
                         <TableCell>
                           {invoice.hosted_invoice_url ? (
                             <Button variant="ghost" size="sm" asChild>
-                              <a href={invoice.hosted_invoice_url} target="_blank" rel="noopener noreferrer">
+                              <a
+                                href={invoice.hosted_invoice_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
                                 View
                               </a>
                             </Button>
                           ) : invoice.invoice_pdf ? (
                             <Button variant="ghost" size="sm" asChild>
-                              <a href={invoice.invoice_pdf} target="_blank" rel="noopener noreferrer">
+                              <a
+                                href={invoice.invoice_pdf}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
                                 PDF
                               </a>
                             </Button>
@@ -665,7 +760,9 @@ export default function BillingPage({ params }: BillingPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Current Usage</CardTitle>
-              <CardDescription>Unbilled usage for the current period</CardDescription>
+              <CardDescription>
+                Unbilled usage for the current period
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {usageLoading ? (
@@ -710,7 +807,9 @@ export default function BillingPage({ params }: BillingPageProps) {
               ) : (
                 <div className="text-center py-8">
                   <Zap className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <p className="mt-2 text-muted-foreground">No usage recorded this period</p>
+                  <p className="mt-2 text-muted-foreground">
+                    No usage recorded this period
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -724,9 +823,13 @@ export default function BillingPage({ params }: BillingPageProps) {
         onOpenChange={setUpgradeDialogOpen}
         currentTier={subscription?.tier || "free"}
         onSelectTier={handleSelectTier}
-        isLoading={createLifetimeCheckout.isPending || createPortal.isPending || createSubscriptionCheckout.isPending}
+        isLoading={
+          createLifetimeCheckout.isPending ||
+          createPortal.isPending ||
+          createSubscriptionCheckout.isPending
+        }
         error={upgradeError}
       />
     </div>
-  )
+  );
 }

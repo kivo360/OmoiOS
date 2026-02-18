@@ -1,53 +1,74 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { ArrowRight, Activity, Shield, AlertTriangle, Loader2 } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
-import { Skeleton } from "@/components/ui/skeleton"
-import { useSystemHealth, useDashboardSummary, useAnomalies } from "@/hooks/useMonitor"
-import { useAgents } from "@/hooks/useAgents"
+import Link from "next/link";
+import {
+  ArrowRight,
+  Activity,
+  Shield,
+  AlertTriangle,
+  Loader2,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  useSystemHealth,
+  useDashboardSummary,
+  useAnomalies,
+} from "@/hooks/useMonitor";
+import { useAgents } from "@/hooks/useAgents";
 
 const statusColor = (status: string) => {
-  if (status === "healthy" || status === "success" || status === "acknowledged") return "bg-emerald-100 text-emerald-700"
-  if (status === "warning" || status === "degraded" || status === "medium") return "bg-amber-100 text-amber-700"
-  return "bg-rose-100 text-rose-700"
-}
+  if (status === "healthy" || status === "success" || status === "acknowledged")
+    return "bg-emerald-100 text-emerald-700";
+  if (status === "warning" || status === "degraded" || status === "medium")
+    return "bg-amber-100 text-amber-700";
+  return "bg-rose-100 text-rose-700";
+};
 
 const formatTimeAgo = (dateStr: string | null | undefined) => {
-  if (!dateStr) return "N/A"
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const minutes = Math.floor(diff / (1000 * 60))
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
+  if (!dateStr) return "N/A";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const minutes = Math.floor(diff / (1000 * 60));
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
 
 export default function HealthOverviewPage() {
-  const { data: health, isLoading: healthLoading } = useSystemHealth()
-  const { data: dashboard, isLoading: dashboardLoading } = useDashboardSummary()
-  const { data: anomalies, isLoading: anomaliesLoading } = useAnomalies({ hours: 24 })
-  const { data: agents } = useAgents()
+  const { data: health, isLoading: healthLoading } = useSystemHealth();
+  const { data: dashboard, isLoading: dashboardLoading } =
+    useDashboardSummary();
+  const { data: anomalies, isLoading: anomaliesLoading } = useAnomalies({
+    hours: 24,
+  });
+  const { data: agents } = useAgents();
 
-  const isLoading = healthLoading || dashboardLoading
+  const isLoading = healthLoading || dashboardLoading;
 
   // Calculate active agents count
-  const activeAgents = agents?.filter(
-    (a) => a.status === "active" || a.status === "idle"
-  ).length ?? 0
+  const activeAgents =
+    agents?.filter((a) => a.status === "active" || a.status === "idle")
+      .length ?? 0;
 
   // Calculate open alerts (unacknowledged anomalies)
-  const openAlerts = anomalies?.filter((a) => !a.acknowledged_at).length ?? 0
+  const openAlerts = anomalies?.filter((a) => !a.acknowledged_at).length ?? 0;
 
   // Service status derived from health data
-  const healthStatus = health?.overall_status ?? "unknown"
+  const healthStatus = health?.overall_status ?? "unknown";
   const services = [
     {
       name: "Guardian",
@@ -64,17 +85,22 @@ export default function HealthOverviewPage() {
     {
       name: "Alerts",
       status: openAlerts > 0 ? "warning" : "healthy",
-      message: openAlerts > 0 ? `${openAlerts} anomalies need review` : "No open alerts",
+      message:
+        openAlerts > 0
+          ? `${openAlerts} anomalies need review`
+          : "No open alerts",
       icon: AlertTriangle,
     },
-  ]
+  ];
 
   return (
     <div className="container mx-auto p-6 space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">System Health</h1>
-          <p className="text-muted-foreground">Guardian, Conductor, and monitoring status</p>
+          <p className="text-muted-foreground">
+            Guardian, Conductor, and monitoring status
+          </p>
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
@@ -96,7 +122,9 @@ export default function HealthOverviewPage() {
             {isLoading ? (
               <Skeleton className="h-9 w-24" />
             ) : (
-              <CardTitle className="text-3xl font-bold capitalize">{healthStatus}</CardTitle>
+              <CardTitle className="text-3xl font-bold capitalize">
+                {healthStatus}
+              </CardTitle>
             )}
           </CardHeader>
           <CardContent>
@@ -104,7 +132,13 @@ export default function HealthOverviewPage() {
               <Skeleton className="h-2 w-full" />
             ) : (
               <Progress
-                value={healthStatus === "healthy" ? 100 : healthStatus === "degraded" ? 60 : 30}
+                value={
+                  healthStatus === "healthy"
+                    ? 100
+                    : healthStatus === "degraded"
+                      ? 60
+                      : 30
+                }
                 className="h-2"
               />
             )}
@@ -116,10 +150,14 @@ export default function HealthOverviewPage() {
             {isLoading ? (
               <Skeleton className="h-9 w-16" />
             ) : (
-              <CardTitle className="text-3xl font-bold">{dashboard?.active_agents ?? activeAgents}</CardTitle>
+              <CardTitle className="text-3xl font-bold">
+                {dashboard?.active_agents ?? activeAgents}
+              </CardTitle>
             )}
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">Monitored in real time</CardContent>
+          <CardContent className="text-sm text-muted-foreground">
+            Monitored in real time
+          </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
@@ -127,10 +165,14 @@ export default function HealthOverviewPage() {
             {isLoading ? (
               <Skeleton className="h-9 w-16" />
             ) : (
-              <CardTitle className="text-3xl font-bold">{dashboard?.total_tasks_pending ?? 0}</CardTitle>
+              <CardTitle className="text-3xl font-bold">
+                {dashboard?.total_tasks_pending ?? 0}
+              </CardTitle>
             )}
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">Tasks awaiting processing</CardContent>
+          <CardContent className="text-sm text-muted-foreground">
+            Tasks awaiting processing
+          </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
@@ -151,7 +193,9 @@ export default function HealthOverviewPage() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Service Status</CardTitle>
-            <CardDescription>Guardian, Conductor, Discovery health</CardDescription>
+            <CardDescription>
+              Guardian, Conductor, Discovery health
+            </CardDescription>
           </div>
           <Button variant="outline" size="sm" asChild>
             <Link href="/health/trajectories">View Trajectories</Link>
@@ -159,7 +203,10 @@ export default function HealthOverviewPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {services.map((svc) => (
-            <div key={svc.name} className="flex items-center justify-between rounded-lg border p-4">
+            <div
+              key={svc.name}
+              className="flex items-center justify-between rounded-lg border p-4"
+            >
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                   <svc.icon className="h-5 w-5 text-primary" />
@@ -196,7 +243,10 @@ export default function HealthOverviewPage() {
             </div>
           ) : anomalies && anomalies.length > 0 ? (
             anomalies.slice(0, 5).map((anomaly) => (
-              <div key={anomaly.anomaly_id} className="flex items-center justify-between">
+              <div
+                key={anomaly.anomaly_id}
+                className="flex items-center justify-between"
+              >
                 <div className="flex items-center gap-3">
                   <Badge variant="secondary" className="capitalize">
                     {anomaly.anomaly_type}
@@ -204,15 +254,26 @@ export default function HealthOverviewPage() {
                   <p className="text-sm">{anomaly.description}</p>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <Badge className={statusColor(anomaly.acknowledged_at ? "acknowledged" : anomaly.severity)} variant="outline">
-                    {anomaly.acknowledged_at ? "acknowledged" : anomaly.severity}
+                  <Badge
+                    className={statusColor(
+                      anomaly.acknowledged_at
+                        ? "acknowledged"
+                        : anomaly.severity,
+                    )}
+                    variant="outline"
+                  >
+                    {anomaly.acknowledged_at
+                      ? "acknowledged"
+                      : anomaly.severity}
                   </Badge>
                   <span>{formatTimeAgo(anomaly.detected_at)}</span>
                 </div>
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">No recent anomalies</p>
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No recent anomalies
+            </p>
           )}
         </CardContent>
       </Card>
@@ -237,6 +298,5 @@ export default function HealthOverviewPage() {
         </Button>
       </div>
     </div>
-  )
+  );
 }
-

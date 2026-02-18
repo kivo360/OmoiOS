@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   MarketingNavbar,
   HeroSection,
@@ -17,17 +17,26 @@ import {
   FAQSection,
   WaitlistCTASection,
   FooterSection,
-} from "@/components/marketing"
-import { Announcement, AnnouncementTag, AnnouncementTitle } from "@/components/ui/announcement"
-import { ArrowUpRightIcon } from "lucide-react"
-import Link from "next/link"
+} from "@/components/marketing";
+import {
+  Announcement,
+  AnnouncementTag,
+  AnnouncementTitle,
+} from "@/components/ui/announcement";
+import { ArrowUpRightIcon } from "lucide-react";
+import Link from "next/link";
 
 function LandingPage() {
   return (
     <div className="landing-page min-h-screen bg-landing-bg">
       {/* Announcement Banner - sticky at top, above navbar */}
       <div className="pointer-events-none sticky top-0 z-[5001] flex justify-center bg-landing-bg-muted py-2.5">
-        <Link href="https://prompt.omoios.dev/" target="_blank" rel="noopener noreferrer" className="pointer-events-auto">
+        <Link
+          href="https://prompt.omoios.dev/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="pointer-events-auto"
+        >
           <Announcement themed className="themed cursor-pointer">
             <AnnouncementTag>Free for Limited Time</AnnouncementTag>
             <AnnouncementTitle>
@@ -77,7 +86,7 @@ function LandingPage() {
       {/* Footer */}
       <FooterSection />
     </div>
-  )
+  );
 }
 
 function LoadingState() {
@@ -88,28 +97,28 @@ function LoadingState() {
         <Skeleton className="h-4 w-32" />
       </div>
     </div>
-  )
+  );
 }
 
 export default function RootPage() {
-  const router = useRouter()
-  const [isLoading, setIsLoading] = useState(true)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     // Check for auth token
-    const token = localStorage.getItem("auth_token")
+    const token = localStorage.getItem("auth_token");
     if (token) {
-      setIsAuthenticated(true)
-      router.replace("/command")
+      setIsAuthenticated(true);
+      router.replace("/command");
     } else {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [router])
+  }, [router]);
 
   if (isLoading && isAuthenticated) {
-    return <LoadingState />
+    return <LoadingState />;
   }
 
-  return <LandingPage />
+  return <LandingPage />;
 }

@@ -28,7 +28,7 @@ export {
   isSessionRecordingActive,
   getSessionId,
   getDistinctId,
-} from './posthog'
+} from "./posthog";
 
 // Event tracking
 export {
@@ -38,7 +38,7 @@ export {
   trackError,
   trackApiError,
   trackFeature,
-} from './track'
+} from "./track";
 
 // Event definitions
 export {
@@ -62,7 +62,7 @@ export {
   type AuthEventProperties,
   type NavigationEventProperties,
   type OrganizationEventProperties,
-} from './events'
+} from "./events";
 
 // User identification
 export {
@@ -78,4 +78,4 @@ export {
   clearOrganization,
   type UserProperties,
   type OrganizationProperties,
-} from './identify'
+} from "./identify";

@@ -17,6 +17,9 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
+    "types": [
+      "@testing-library/jest-dom/vitest"
+    ],
     "plugins": [
       {
         "name": "next"

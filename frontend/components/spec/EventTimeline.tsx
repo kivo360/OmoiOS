@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { useState, useEffect, useRef } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Play,
   CheckCircle,
@@ -19,91 +19,160 @@ import {
   Activity,
   ExternalLink,
   Terminal,
-} from "lucide-react"
-import Link from "next/link"
-import { useSpecEvents } from "@/hooks/useSpecs"
-import type { SpecEventItem } from "@/lib/api/specs"
+} from "lucide-react";
+import Link from "next/link";
+import { useSpecEvents } from "@/hooks/useSpecs";
+import type { SpecEventItem } from "@/lib/api/specs";
 
 interface EventTimelineProps {
-  specId: string
-  isExecuting?: boolean
-  maxHeight?: string
-  className?: string
+  specId: string;
+  isExecuting?: boolean;
+  maxHeight?: string;
+  className?: string;
 }
 
 // Map event types to display configuration
-const eventConfig: Record<string, {
-  icon: React.ComponentType<{ className?: string }>
-  color: string
-  label: string
-}> = {
+const eventConfig: Record<
+  string,
+  {
+    icon: React.ComponentType<{ className?: string }>;
+    color: string;
+    label: string;
+  }
+> = {
   // Spec lifecycle events
-  "spec.execution_started": { icon: Play, color: "text-blue-500", label: "Execution Started" },
-  "spec.phase_started": { icon: Activity, color: "text-blue-400", label: "Phase Started" },
-  "spec.phase_completed": { icon: CheckCircle, color: "text-green-500", label: "Phase Completed" },
-  "spec.phase_failed": { icon: XCircle, color: "text-red-500", label: "Phase Failed" },
-  "spec.phase_retry": { icon: RefreshCw, color: "text-yellow-500", label: "Phase Retry" },
-  "spec.execution_completed": { icon: CheckCircle, color: "text-green-600", label: "Execution Complete" },
-  "spec.sync_started": { icon: RefreshCw, color: "text-blue-400", label: "Sync Started" },
-  "spec.sync_completed": { icon: CheckCircle, color: "text-green-500", label: "Sync Completed" },
-  "spec.tasks_queued": { icon: Zap, color: "text-purple-500", label: "Tasks Queued" },
+  "spec.execution_started": {
+    icon: Play,
+    color: "text-blue-500",
+    label: "Execution Started",
+  },
+  "spec.phase_started": {
+    icon: Activity,
+    color: "text-blue-400",
+    label: "Phase Started",
+  },
+  "spec.phase_completed": {
+    icon: CheckCircle,
+    color: "text-green-500",
+    label: "Phase Completed",
+  },
+  "spec.phase_failed": {
+    icon: XCircle,
+    color: "text-red-500",
+    label: "Phase Failed",
+  },
+  "spec.phase_retry": {
+    icon: RefreshCw,
+    color: "text-yellow-500",
+    label: "Phase Retry",
+  },
+  "spec.execution_completed": {
+    icon: CheckCircle,
+    color: "text-green-600",
+    label: "Execution Complete",
+  },
+  "spec.sync_started": {
+    icon: RefreshCw,
+    color: "text-blue-400",
+    label: "Sync Started",
+  },
+  "spec.sync_completed": {
+    icon: CheckCircle,
+    color: "text-green-500",
+    label: "Sync Completed",
+  },
+  "spec.tasks_queued": {
+    icon: Zap,
+    color: "text-purple-500",
+    label: "Tasks Queued",
+  },
 
   // Agent events
-  "agent.started": { icon: Bot, color: "text-blue-500", label: "Agent Started" },
-  "agent.completed": { icon: CheckCircle, color: "text-green-500", label: "Agent Completed" },
-  "agent.failed": { icon: XCircle, color: "text-red-500", label: "Agent Failed" },
-  "agent.error": { icon: AlertCircle, color: "text-red-400", label: "Agent Error" },
-  "agent.tool_completed": { icon: Zap, color: "text-purple-400", label: "Tool Completed" },
-  "agent.heartbeat": { icon: Activity, color: "text-gray-400", label: "Heartbeat" },
+  "agent.started": {
+    icon: Bot,
+    color: "text-blue-500",
+    label: "Agent Started",
+  },
+  "agent.completed": {
+    icon: CheckCircle,
+    color: "text-green-500",
+    label: "Agent Completed",
+  },
+  "agent.failed": {
+    icon: XCircle,
+    color: "text-red-500",
+    label: "Agent Failed",
+  },
+  "agent.error": {
+    icon: AlertCircle,
+    color: "text-red-400",
+    label: "Agent Error",
+  },
+  "agent.tool_completed": {
+    icon: Zap,
+    color: "text-purple-400",
+    label: "Tool Completed",
+  },
+  "agent.heartbeat": {
+    icon: Activity,
+    color: "text-gray-400",
+    label: "Heartbeat",
+  },
 
   // Default fallback
   default: { icon: Clock, color: "text-gray-500", label: "Event" },
-}
+};
 
 function getEventConfig(eventType: string) {
-  return eventConfig[eventType] || eventConfig.default
+  return eventConfig[eventType] || eventConfig.default;
 }
 
 function formatTimestamp(timestamp: string) {
-  const date = new Date(timestamp)
+  const date = new Date(timestamp);
   return date.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-  })
+  });
 }
 
 function formatEventMessage(event: SpecEventItem): string {
-  const data = event.event_data
+  const data = event.event_data;
 
   // Try to extract meaningful message from event_data
-  if (data.message) return String(data.message)
-  if (data.phase) return `Phase: ${String(data.phase)}`
-  if (data.task_count) return `${data.task_count} tasks`
-  if (data.eval_score !== undefined) return `Score: ${data.eval_score}`
-  if (data.error) return String(data.error).slice(0, 100)
-  if (data.duration) return `Duration: ${data.duration}s`
+  if (data.message) return String(data.message);
+  if (data.phase) return `Phase: ${String(data.phase)}`;
+  if (data.task_count) return `${data.task_count} tasks`;
+  if (data.eval_score !== undefined) return `Score: ${data.eval_score}`;
+  if (data.error) return String(data.error).slice(0, 100);
+  if (data.duration) return `Duration: ${data.duration}s`;
 
   // Extract from nested structures
   if (data.result && typeof data.result === "object") {
-    const result = data.result as Record<string, unknown>
-    if (result.summary) return String(result.summary)
+    const result = data.result as Record<string, unknown>;
+    if (result.summary) return String(result.summary);
   }
 
-  return ""
+  return "";
 }
 
-function EventItem({ event, isNew }: { event: SpecEventItem; isNew?: boolean }) {
-  const config = getEventConfig(event.event_type)
-  const Icon = config.icon
-  const message = formatEventMessage(event)
+function EventItem({
+  event,
+  isNew,
+}: {
+  event: SpecEventItem;
+  isNew?: boolean;
+}) {
+  const config = getEventConfig(event.event_type);
+  const Icon = config.icon;
+  const message = formatEventMessage(event);
 
   return (
     <div
       className={cn(
         "flex items-start gap-3 py-2 px-3 rounded-md transition-colors",
-        isNew && "bg-primary/5 animate-pulse"
+        isNew && "bg-primary/5 animate-pulse",
       )}
     >
       <div className={cn("mt-0.5 flex-shrink-0", config.color)}>
@@ -128,7 +197,7 @@ function EventItem({ event, isNew }: { event: SpecEventItem; isNew?: boolean }) 
         {formatTimestamp(event.created_at)}
       </span>
     </div>
-  )
+  );
 }
 
 export function EventTimeline({
@@ -137,52 +206,52 @@ export function EventTimeline({
   maxHeight = "400px",
   className,
 }: EventTimelineProps) {
-  const [isPaused, setIsPaused] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(true)
-  const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set())
-  const previousEventsRef = useRef<Set<string>>(new Set())
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const [isPaused, setIsPaused] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set());
+  const previousEventsRef = useRef<Set<string>>(new Set());
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Poll every 1.5s when executing and not paused for faster updates
   const { data: eventsData, isLoading } = useSpecEvents(specId, {
     enabled: true,
     refetchInterval: isExecuting && !isPaused ? 1500 : false,
     limit: 100,
-  })
+  });
 
-  const events = eventsData?.events || []
+  const events = eventsData?.events || [];
 
   // Get the most recent sandbox_id from events (for linking to sandbox viewer)
-  const activeSandboxId = events.length > 0 ? events[0].sandbox_id : null
+  const activeSandboxId = events.length > 0 ? events[0].sandbox_id : null;
 
   // Track new events for highlight animation
   useEffect(() => {
-    if (!events.length) return
+    if (!events.length) return;
 
-    const currentIds = new Set(events.map((e) => e.id))
-    const newIds = new Set<string>()
+    const currentIds = new Set(events.map((e) => e.id));
+    const newIds = new Set<string>();
 
     currentIds.forEach((id) => {
       if (!previousEventsRef.current.has(id)) {
-        newIds.add(id)
+        newIds.add(id);
       }
-    })
+    });
 
     if (newIds.size > 0) {
-      setNewEventIds(newIds)
+      setNewEventIds(newIds);
       // Clear highlight after animation
-      setTimeout(() => setNewEventIds(new Set()), 2000)
+      setTimeout(() => setNewEventIds(new Set()), 2000);
     }
 
-    previousEventsRef.current = currentIds
-  }, [events])
+    previousEventsRef.current = currentIds;
+  }, [events]);
 
   // Auto-scroll to top when new events arrive (they're newest first)
   useEffect(() => {
     if (newEventIds.size > 0 && !isPaused && scrollRef.current) {
-      scrollRef.current.scrollTop = 0
+      scrollRef.current.scrollTop = 0;
     }
-  }, [newEventIds, isPaused])
+  }, [newEventIds, isPaused]);
 
   if (!isExpanded) {
     return (
@@ -203,7 +272,7 @@ export function EventTimeline({
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </button>
       </div>
-    )
+    );
   }
 
   return (
@@ -287,7 +356,9 @@ export function EventTimeline({
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <Clock className="h-8 w-8 mb-2 opacity-50" />
               <p className="text-sm">No events yet</p>
-              <p className="text-xs">Events will appear here during execution</p>
+              <p className="text-xs">
+                Events will appear here during execution
+              </p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -306,10 +377,11 @@ export function EventTimeline({
       {/* Footer with count */}
       {events.length > 0 && (
         <div className="px-3 py-2 border-t text-xs text-muted-foreground">
-          Showing {events.length} of {eventsData?.total_count || events.length} events
+          Showing {events.length} of {eventsData?.total_count || events.length}{" "}
+          events
           {eventsData?.has_more && " • Scroll for more"}
         </div>
       )}
     </div>
-  )
+  );
 }

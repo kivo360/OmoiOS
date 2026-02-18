@@ -1,25 +1,25 @@
-import type { Metadata, Viewport } from "next"
-import { Inter, JetBrains_Mono } from "next/font/google"
-import "./globals.css"
-import "xterm/css/xterm.css"
-import "katex/dist/katex.min.css"
-import { RootProvider } from "fumadocs-ui/provider/next"
-import { QueryProvider } from "@/providers/QueryProvider"
-import { WebSocketProvider } from "@/providers/WebSocketProvider"
-import { StoreProvider } from "@/providers/StoreProvider"
-import { ThemeProvider } from "@/providers/ThemeProvider"
-import { AuthProvider } from "@/providers/AuthProvider"
-import { PostHogProvider } from "@/providers/PostHogProvider"
-import { Toaster } from "@/components/ui/sonner"
-import { OnboardingDebugInit } from "@/components/OnboardingDebugInit"
+import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import "./globals.css";
+import "xterm/css/xterm.css";
+import "katex/dist/katex.min.css";
+import { RootProvider } from "fumadocs-ui/provider/next";
+import { QueryProvider } from "@/providers/QueryProvider";
+import { WebSocketProvider } from "@/providers/WebSocketProvider";
+import { StoreProvider } from "@/providers/StoreProvider";
+import { ThemeProvider } from "@/providers/ThemeProvider";
+import { AuthProvider } from "@/providers/AuthProvider";
+import { PostHogProvider } from "@/providers/PostHogProvider";
+import { Toaster } from "@/components/ui/sonner";
+import { OnboardingDebugInit } from "@/components/OnboardingDebugInit";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
-const jetbrainsMono = JetBrains_Mono({ 
-  subsets: ["latin"], 
-  variable: "--font-jetbrains-mono" 
-})
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+});
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omoios.dev"
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omoios.dev";
 
 export const metadata: Metadata = {
   title: {
@@ -87,13 +87,13 @@ export const metadata: Metadata = {
     },
   },
   category: "technology",
-}
+};
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#ffffff",
-}
+};
 
 function OrganizationJsonLd() {
   const jsonLd = {
@@ -104,24 +104,21 @@ function OrganizationJsonLd() {
     logo: `${siteUrl}/logo.png`,
     description:
       "Spec-driven, multi-agent orchestration system that scales development without scaling headcount.",
-    sameAs: [
-      "https://twitter.com/TheGeodexes",
-      "https://github.com/omoios",
-    ],
-  }
+    sameAs: ["https://twitter.com/TheGeodexes", "https://github.com/omoios"],
+  };
 
   return (
     <script
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
     />
-  )
+  );
 }
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -130,7 +127,11 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans`}>
         <RootProvider>
-          <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="light"
+            forcedTheme="light"
+          >
             <PostHogProvider>
               <QueryProvider>
                 <AuthProvider>
@@ -148,6 +149,5 @@ export default function RootLayout({
         </RootProvider>
       </body>
     </html>
-  )
+  );
 }
-

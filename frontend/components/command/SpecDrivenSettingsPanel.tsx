@@ -1,14 +1,20 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback } from "react"
-import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Slider } from "@/components/ui/slider"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,9 +24,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Loader2, AlertTriangle, Settings2, RotateCcw, Save } from "lucide-react"
+} from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Loader2,
+  AlertTriangle,
+  Settings2,
+  RotateCcw,
+  Save,
+} from "lucide-react";
 import {
   useSpecDrivenSettings,
   useUpdateSpecDrivenSettings,
@@ -32,88 +44,97 @@ import {
   type SpecDrivenSettingsUpdate,
   type SettingsWarning,
   type ValidationError,
-} from "@/hooks/useSpecDrivenSettings"
+} from "@/hooks/useSpecDrivenSettings";
 
 interface SpecDrivenSettingsPanelProps {
-  onClose?: () => void
+  onClose?: () => void;
 }
 
-export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProps) {
-  const { data: settings, isLoading, error } = useSpecDrivenSettings()
-  const updateMutation = useUpdateSpecDrivenSettings()
-  const resetMutation = useResetSpecDrivenSettings()
+export function SpecDrivenSettingsPanel({
+  onClose,
+}: SpecDrivenSettingsPanelProps) {
+  const { data: settings, isLoading, error } = useSpecDrivenSettings();
+  const updateMutation = useUpdateSpecDrivenSettings();
+  const resetMutation = useResetSpecDrivenSettings();
 
   // Local state for form
-  const [localSettings, setLocalSettings] = useState<Partial<SpecDrivenSettings> | null>(null)
-  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
-  const [pendingClose, setPendingClose] = useState(false)
+  const [localSettings, setLocalSettings] =
+    useState<Partial<SpecDrivenSettings> | null>(null);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [pendingClose, setPendingClose] = useState(false);
 
   // Sync settings to local state when loaded
   useEffect(() => {
     if (settings && !localSettings) {
-      setLocalSettings(settings)
+      setLocalSettings(settings);
     }
-  }, [settings, localSettings])
+  }, [settings, localSettings]);
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
-    if (!settings || !localSettings) return false
-    return JSON.stringify(settings) !== JSON.stringify(localSettings)
-  }, [settings, localSettings])
+    if (!settings || !localSettings) return false;
+    return JSON.stringify(settings) !== JSON.stringify(localSettings);
+  }, [settings, localSettings]);
 
   // Get warnings and validation errors
-  const warnings: SettingsWarning[] = localSettings ? getSettingsWarnings(localSettings) : []
-  const validationErrors: ValidationError[] = localSettings ? validateSettings(localSettings) : []
+  const warnings: SettingsWarning[] = localSettings
+    ? getSettingsWarnings(localSettings)
+    : [];
+  const validationErrors: ValidationError[] = localSettings
+    ? validateSettings(localSettings)
+    : [];
 
   // Handle field changes
   const updateField = <K extends keyof SpecDrivenSettingsUpdate>(
     field: K,
-    value: SpecDrivenSettingsUpdate[K]
+    value: SpecDrivenSettingsUpdate[K],
   ) => {
-    setLocalSettings((prev) => prev ? { ...prev, [field]: value } : null)
-  }
+    setLocalSettings((prev) => (prev ? { ...prev, [field]: value } : null));
+  };
 
   // Handle save
   const handleSave = async () => {
-    if (!localSettings || validationErrors.length > 0) return
+    if (!localSettings || validationErrors.length > 0) return;
 
     try {
-      await updateMutation.mutateAsync(localSettings as SpecDrivenSettingsUpdate)
-      toast.success("Settings saved successfully")
+      await updateMutation.mutateAsync(
+        localSettings as SpecDrivenSettingsUpdate,
+      );
+      toast.success("Settings saved successfully");
     } catch (err) {
-      toast.error("Failed to save settings")
+      toast.error("Failed to save settings");
     }
-  }
+  };
 
   // Handle reset
   const handleReset = async () => {
     try {
-      const result = await resetMutation.mutateAsync()
-      setLocalSettings(result)
-      toast.success("Settings reset to defaults")
+      const result = await resetMutation.mutateAsync();
+      setLocalSettings(result);
+      toast.success("Settings reset to defaults");
     } catch (err) {
-      toast.error("Failed to reset settings")
+      toast.error("Failed to reset settings");
     }
-  }
+  };
 
   // Handle close with unsaved changes check
   const handleClose = () => {
     if (hasUnsavedChanges()) {
-      setPendingClose(true)
-      setShowUnsavedDialog(true)
+      setPendingClose(true);
+      setShowUnsavedDialog(true);
     } else {
-      onClose?.()
+      onClose?.();
     }
-  }
+  };
 
   // Confirm discard changes
   const handleDiscardChanges = () => {
-    setShowUnsavedDialog(false)
+    setShowUnsavedDialog(false);
     if (pendingClose) {
-      setPendingClose(false)
-      onClose?.()
+      setPendingClose(false);
+      onClose?.();
     }
-  }
+  };
 
   // Loading state
   if (isLoading) {
@@ -124,7 +145,9 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
             <Settings2 className="h-5 w-5" />
             Spec-Driven Settings
           </CardTitle>
-          <CardDescription>Configure your spec-driven development workflow</CardDescription>
+          <CardDescription>
+            Configure your spec-driven development workflow
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {[1, 2, 3, 4].map((i) => (
@@ -135,7 +158,7 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
           ))}
         </CardContent>
       </Card>
-    )
+    );
   }
 
   // Error state
@@ -158,10 +181,10 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
           </Alert>
         </CardContent>
       </Card>
-    )
+    );
   }
 
-  if (!localSettings) return null
+  if (!localSettings) return null;
 
   return (
     <>
@@ -173,7 +196,9 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
                 <Settings2 className="h-5 w-5" />
                 Spec-Driven Settings
               </CardTitle>
-              <CardDescription>Configure your spec-driven development workflow</CardDescription>
+              <CardDescription>
+                Configure your spec-driven development workflow
+              </CardDescription>
             </div>
             {onClose && (
               <Button variant="ghost" size="sm" onClick={handleClose}>
@@ -189,7 +214,9 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
               {warnings.map((warning, index) => (
                 <Alert
                   key={`${warning.field}-${index}`}
-                  variant={warning.severity === "error" ? "destructive" : "default"}
+                  variant={
+                    warning.severity === "error" ? "destructive" : "default"
+                  }
                 >
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>{warning.message}</AlertDescription>
@@ -203,7 +230,9 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
             <Label className="text-base font-medium">Execution Mode</Label>
             <RadioGroup
               value={localSettings.execution_mode}
-              onValueChange={(value) => updateField("execution_mode", value as "auto" | "manual")}
+              onValueChange={(value) =>
+                updateField("execution_mode", value as "auto" | "manual")
+              }
               data-testid="execution-mode-radio"
             >
               <div className="flex items-center space-x-2">
@@ -231,7 +260,9 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
             </div>
             <Switch
               checked={localSettings.auto_execute}
-              onCheckedChange={(checked) => updateField("auto_execute", checked)}
+              onCheckedChange={(checked) =>
+                updateField("auto_execute", checked)
+              }
               data-testid="auto-execute-switch"
             />
           </div>
@@ -239,22 +270,38 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
           {/* Coverage Threshold */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-base font-medium">Coverage Threshold</Label>
-              <span className="text-sm font-medium" data-testid="coverage-value">
+              <Label className="text-base font-medium">
+                Coverage Threshold
+              </Label>
+              <span
+                className="text-sm font-medium"
+                data-testid="coverage-value"
+              >
                 {localSettings.coverage_threshold}%
               </span>
             </div>
             <Slider
-              value={[localSettings.coverage_threshold ?? DEFAULT_SETTINGS.coverage_threshold]}
-              onValueChange={([value]) => updateField("coverage_threshold", value)}
+              value={[
+                localSettings.coverage_threshold ??
+                  DEFAULT_SETTINGS.coverage_threshold,
+              ]}
+              onValueChange={([value]) =>
+                updateField("coverage_threshold", value)
+              }
               min={0}
               max={100}
               step={5}
               data-testid="coverage-slider"
             />
             {validationErrors.find((e) => e.field === "coverage_threshold") && (
-              <p className="text-sm text-destructive" data-testid="coverage-error">
-                {validationErrors.find((e) => e.field === "coverage_threshold")?.message}
+              <p
+                className="text-sm text-destructive"
+                data-testid="coverage-error"
+              >
+                {
+                  validationErrors.find((e) => e.field === "coverage_threshold")
+                    ?.message
+                }
               </p>
             )}
           </div>
@@ -269,7 +316,9 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
             </div>
             <Switch
               checked={localSettings.enforce_coverage}
-              onCheckedChange={(checked) => updateField("enforce_coverage", checked)}
+              onCheckedChange={(checked) =>
+                updateField("enforce_coverage", checked)
+              }
               data-testid="enforce-coverage-switch"
             />
           </div>
@@ -277,14 +326,18 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
           {/* Parallel Execution Toggle */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-base font-medium">Parallel Execution</Label>
+              <Label className="text-base font-medium">
+                Parallel Execution
+              </Label>
               <p className="text-sm text-muted-foreground">
                 Run multiple tasks simultaneously
               </p>
             </div>
             <Switch
               checked={localSettings.parallel_execution}
-              onCheckedChange={(checked) => updateField("parallel_execution", checked)}
+              onCheckedChange={(checked) =>
+                updateField("parallel_execution", checked)
+              }
               data-testid="parallel-execution-switch"
             />
           </div>
@@ -294,7 +347,12 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
             <Label className="text-base font-medium">Validation Mode</Label>
             <RadioGroup
               value={localSettings.validation_mode}
-              onValueChange={(value) => updateField("validation_mode", value as "strict" | "relaxed" | "none")}
+              onValueChange={(value) =>
+                updateField(
+                  "validation_mode",
+                  value as "strict" | "relaxed" | "none",
+                )
+              }
               data-testid="validation-mode-radio"
             >
               <div className="flex items-center space-x-2">
@@ -328,7 +386,9 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
             </div>
             <Switch
               checked={localSettings.require_tests}
-              onCheckedChange={(checked) => updateField("require_tests", checked)}
+              onCheckedChange={(checked) =>
+                updateField("require_tests", checked)
+              }
               data-testid="require-tests-switch"
             />
           </div>
@@ -336,14 +396,18 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
           {/* Require Docs Toggle */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-base font-medium">Require Documentation</Label>
+              <Label className="text-base font-medium">
+                Require Documentation
+              </Label>
               <p className="text-sm text-muted-foreground">
                 All code must have documentation
               </p>
             </div>
             <Switch
               checked={localSettings.require_docs}
-              onCheckedChange={(checked) => updateField("require_docs", checked)}
+              onCheckedChange={(checked) =>
+                updateField("require_docs", checked)
+              }
               data-testid="require-docs-switch"
             />
           </div>
@@ -366,14 +430,18 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
           {/* Notify on Completion Toggle */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-base font-medium">Notify on Completion</Label>
+              <Label className="text-base font-medium">
+                Notify on Completion
+              </Label>
               <p className="text-sm text-muted-foreground">
                 Send notification when tasks complete
               </p>
             </div>
             <Switch
               checked={localSettings.notify_on_completion}
-              onCheckedChange={(checked) => updateField("notify_on_completion", checked)}
+              onCheckedChange={(checked) =>
+                updateField("notify_on_completion", checked)
+              }
               data-testid="notify-completion-switch"
             />
           </div>
@@ -415,7 +483,8 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
           <AlertDialogHeader>
             <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
             <AlertDialogDescription>
-              You have unsaved changes. Are you sure you want to close without saving?
+              You have unsaved changes. Are you sure you want to close without
+              saving?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -429,5 +498,5 @@ export function SpecDrivenSettingsPanel({ onClose }: SpecDrivenSettingsPanelProp
         </AlertDialogContent>
       </AlertDialog>
     </>
-  )
+  );
 }

@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Progress } from "@/components/ui/progress"
+import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 import {
   FileText,
   Bot,
@@ -12,21 +12,47 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowRight,
-} from "lucide-react"
+} from "lucide-react";
 
 const stats = [
-  { label: "Active Specs", value: 5, icon: FileText, trend: "up", change: "+2" },
+  {
+    label: "Active Specs",
+    value: 5,
+    icon: FileText,
+    trend: "up",
+    change: "+2",
+  },
   { label: "Active Agents", value: 3, icon: Bot, trend: "up", change: "+1" },
-  { label: "Open Tickets", value: 12, icon: Ticket, trend: "down", change: "-3" },
-  { label: "Commits (7d)", value: 28, icon: GitCommit, trend: "up", change: "+12" },
-]
+  {
+    label: "Open Tickets",
+    value: 12,
+    icon: Ticket,
+    trend: "down",
+    change: "-3",
+  },
+  {
+    label: "Commits (7d)",
+    value: 28,
+    icon: GitCommit,
+    trend: "up",
+    change: "+12",
+  },
+];
 
 const recentActivity = [
-  { type: "agent", message: "Agent completed: Fix groq integration", time: "2h ago" },
+  {
+    type: "agent",
+    message: "Agent completed: Fix groq integration",
+    time: "2h ago",
+  },
   { type: "commit", message: "Merged PR #142 to main", time: "3h ago" },
   { type: "spec", message: "Spec approved: Auth System", time: "5h ago" },
-  { type: "agent", message: "Agent started: Improve performance", time: "6h ago" },
-]
+  {
+    type: "agent",
+    message: "Agent started: Improve performance",
+    time: "6h ago",
+  },
+];
 
 export function AnalyticsPanel() {
   return (
@@ -43,18 +69,22 @@ export function AnalyticsPanel() {
           {/* Stat Cards */}
           <div className="grid grid-cols-2 gap-2">
             {stats.map((stat) => {
-              const Icon = stat.icon
+              const Icon = stat.icon;
               return (
                 <Card key={stat.label} className="p-3">
                   <div className="flex items-center gap-2">
                     <Icon className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">{stat.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {stat.label}
+                    </span>
                   </div>
                   <div className="mt-1 flex items-baseline gap-2">
                     <span className="text-xl font-bold">{stat.value}</span>
                     <span
                       className={`flex items-center text-xs ${
-                        stat.trend === "up" ? "text-success" : "text-destructive"
+                        stat.trend === "up"
+                          ? "text-success"
+                          : "text-destructive"
                       }`}
                     >
                       {stat.trend === "up" ? (
@@ -66,7 +96,7 @@ export function AnalyticsPanel() {
                     </span>
                   </div>
                 </Card>
-              )
+              );
             })}
           </div>
 
@@ -93,8 +123,8 @@ export function AnalyticsPanel() {
                       item.type === "agent"
                         ? "bg-primary"
                         : item.type === "commit"
-                        ? "bg-success"
-                        : "bg-info"
+                          ? "bg-success"
+                          : "bg-info"
                     }`}
                   />
                   <div className="flex-1 min-w-0">
@@ -118,5 +148,5 @@ export function AnalyticsPanel() {
         </Link>
       </div>
     </div>
-  )
+  );
 }

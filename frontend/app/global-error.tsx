@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 /**
  * Global Error Handler
@@ -13,13 +13,13 @@
  * @see https://nextjs.org/docs/app/building-your-application/routing/error-handling#handling-errors-in-root-layouts
  */
 
-import * as Sentry from "@sentry/nextjs"
-import { useEffect } from "react"
-import { AlertTriangle, RefreshCw, Home } from "lucide-react"
+import * as Sentry from "@sentry/nextjs";
+import { useEffect } from "react";
+import { AlertTriangle, RefreshCw, Home } from "lucide-react";
 
 interface GlobalErrorProps {
-  error: Error & { digest?: string }
-  reset: () => void
+  error: Error & { digest?: string };
+  reset: () => void;
 }
 
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
@@ -33,8 +33,8 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
       extra: {
         digest: error.digest,
       },
-    })
-  }, [error])
+    });
+  }, [error]);
 
   return (
     <html lang="en">
@@ -47,10 +47,12 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
             </div>
 
             {/* Error Message */}
-            <h1 className="mb-2 text-2xl font-bold tracking-tight">Something went wrong</h1>
+            <h1 className="mb-2 text-2xl font-bold tracking-tight">
+              Something went wrong
+            </h1>
             <p className="mb-6 text-muted-foreground">
-              We encountered an unexpected error. Our team has been automatically notified and is
-              working to fix it.
+              We encountered an unexpected error. Our team has been
+              automatically notified and is working to fix it.
             </p>
 
             {/* Error Details (development only) */}
@@ -59,7 +61,9 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
                 <p className="mb-1 text-xs font-medium uppercase text-muted-foreground">
                   Error Details
                 </p>
-                <p className="break-all font-mono text-sm text-destructive">{error.message}</p>
+                <p className="break-all font-mono text-sm text-destructive">
+                  {error.message}
+                </p>
                 {error.digest && (
                   <p className="mt-2 font-mono text-xs text-muted-foreground">
                     Digest: {error.digest}
@@ -158,5 +162,5 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
         `}</style>
       </body>
     </html>
-  )
+  );
 }

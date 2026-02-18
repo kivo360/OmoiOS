@@ -1,19 +1,19 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
-import { toast } from "sonner"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   Search,
   Plus,
@@ -27,122 +27,186 @@ import {
   RefreshCw,
   Box,
   MoreVertical,
-} from "lucide-react"
-import { useSandboxTasks, useFailTask } from "@/hooks/useTasks"
-import { useQueryClient } from "@tanstack/react-query"
-import { taskKeys } from "@/hooks/useTasks"
+} from "lucide-react";
+import { useSandboxTasks, useFailTask } from "@/hooks/useTasks";
+import { useQueryClient } from "@tanstack/react-query";
+import { taskKeys } from "@/hooks/useTasks";
 
-type TaskStatus = "pending" | "running" | "completed" | "failed" | "pending_validation" | "validating"
+type TaskStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "pending_validation"
+  | "validating";
 
 function normalizeStatus(status: string): TaskStatus {
-  const lower = status.toLowerCase()
+  const lower = status.toLowerCase();
   switch (lower) {
     case "pending":
-      return "pending"
+      return "pending";
     case "assigned":
     case "running":
     case "active":
     case "in_progress":
-      return "running"
+      return "running";
     case "completed":
     case "done":
     case "success":
-      return "completed"
+      return "completed";
     case "failed":
     case "error":
     case "cancelled":
-      return "failed"
+      return "failed";
     case "pending_validation":
-      return "pending_validation"
+      return "pending_validation";
     case "validating":
-      return "validating"
+      return "validating";
     default:
-      return "pending"
+      return "pending";
   }
 }
 
 function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return "just now"
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays < 7) return `${diffDays}d ago`
-  return `${Math.floor(diffDays / 7)}w ago`
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return `${Math.floor(diffDays / 7)}w ago`;
 }
 
-const statusConfig: Record<TaskStatus, { icon: typeof Clock; color: string; bgColor: string; label: string }> = {
-  pending: { icon: Clock, color: "text-muted-foreground", bgColor: "bg-muted", label: "Pending" },
-  running: { icon: Loader2, color: "text-blue-500", bgColor: "bg-blue-500/10", label: "Running" },
-  completed: { icon: CheckCircle, color: "text-green-500", bgColor: "bg-green-500/10", label: "Completed" },
-  failed: { icon: XCircle, color: "text-red-500", bgColor: "bg-red-500/10", label: "Failed" },
-  pending_validation: { icon: Clock, color: "text-purple-500", bgColor: "bg-purple-500/10", label: "Awaiting Validation" },
-  validating: { icon: Loader2, color: "text-purple-500", bgColor: "bg-purple-500/10", label: "Validating" },
-}
+const statusConfig: Record<
+  TaskStatus,
+  { icon: typeof Clock; color: string; bgColor: string; label: string }
+> = {
+  pending: {
+    icon: Clock,
+    color: "text-muted-foreground",
+    bgColor: "bg-muted",
+    label: "Pending",
+  },
+  running: {
+    icon: Loader2,
+    color: "text-blue-500",
+    bgColor: "bg-blue-500/10",
+    label: "Running",
+  },
+  completed: {
+    icon: CheckCircle,
+    color: "text-green-500",
+    bgColor: "bg-green-500/10",
+    label: "Completed",
+  },
+  failed: {
+    icon: XCircle,
+    color: "text-red-500",
+    bgColor: "bg-red-500/10",
+    label: "Failed",
+  },
+  pending_validation: {
+    icon: Clock,
+    color: "text-purple-500",
+    bgColor: "bg-purple-500/10",
+    label: "Awaiting Validation",
+  },
+  validating: {
+    icon: Loader2,
+    color: "text-purple-500",
+    bgColor: "bg-purple-500/10",
+    label: "Validating",
+  },
+};
 
 export default function SandboxesPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
-  const queryClient = useQueryClient()
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
+  const queryClient = useQueryClient();
 
-  const { data: tasks, isLoading, error, refetch, isFetching } = useSandboxTasks({ limit: 100 })
-  const failTaskMutation = useFailTask()
+  const {
+    data: tasks,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useSandboxTasks({ limit: 100 });
+  const failTaskMutation = useFailTask();
 
   const handleMarkFailed = (taskId: string) => {
     failTaskMutation.mutate(
       { taskId, reason: "marked_failed_by_user" },
       {
         onSuccess: () => {
-          toast.success("Task marked as failed")
+          toast.success("Task marked as failed");
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Failed to mark task as failed")
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to mark task as failed",
+          );
         },
-      }
-    )
-  }
+      },
+    );
+  };
 
   const filteredTasks = useMemo(() => {
-    if (!tasks) return []
+    if (!tasks) return [];
     return tasks.filter((task) => {
       // Search filter
-      const searchLower = searchQuery.toLowerCase()
+      const searchLower = searchQuery.toLowerCase();
       const matchesSearch =
         (task.title?.toLowerCase().includes(searchLower) ?? false) ||
         task.task_type.toLowerCase().includes(searchLower) ||
         task.id.toLowerCase().includes(searchLower) ||
-        (task.sandbox_id?.toLowerCase().includes(searchLower) ?? false)
+        (task.sandbox_id?.toLowerCase().includes(searchLower) ?? false);
 
       // Status filter
-      const status = normalizeStatus(task.status)
-      const matchesStatus = statusFilter === "all" || status === statusFilter
+      const status = normalizeStatus(task.status);
+      const matchesStatus = statusFilter === "all" || status === statusFilter;
 
-      return matchesSearch && matchesStatus
-    })
-  }, [tasks, searchQuery, statusFilter])
+      return matchesSearch && matchesStatus;
+    });
+  }, [tasks, searchQuery, statusFilter]);
 
   // Count by status
   const statusCounts = useMemo(() => {
-    if (!tasks) return { pending: 0, running: 0, completed: 0, failed: 0, pending_validation: 0, validating: 0 }
+    if (!tasks)
+      return {
+        pending: 0,
+        running: 0,
+        completed: 0,
+        failed: 0,
+        pending_validation: 0,
+        validating: 0,
+      };
     return tasks.reduce(
       (acc, task) => {
-        const status = normalizeStatus(task.status)
-        acc[status]++
-        return acc
+        const status = normalizeStatus(task.status);
+        acc[status]++;
+        return acc;
       },
-      { pending: 0, running: 0, completed: 0, failed: 0, pending_validation: 0, validating: 0 }
-    )
-  }, [tasks])
+      {
+        pending: 0,
+        running: 0,
+        completed: 0,
+        failed: 0,
+        pending_validation: 0,
+        validating: 0,
+      },
+    );
+  }, [tasks]);
 
   const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: taskKeys.sandboxList({}) })
-    refetch()
-  }
+    queryClient.invalidateQueries({ queryKey: taskKeys.sandboxList({}) });
+    refetch();
+  };
 
   return (
     <div className="flex h-[calc(100vh-48px)] flex-col">
@@ -159,8 +223,15 @@ export default function SandboxesPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isFetching}
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
+              />
               Refresh
             </Button>
             <Button size="sm" asChild>
@@ -183,7 +254,7 @@ export default function SandboxesPage() {
               className="pl-9"
             />
           </div>
-          
+
           {/* Status filter buttons */}
           <div className="flex items-center gap-1">
             <Button
@@ -193,9 +264,18 @@ export default function SandboxesPage() {
             >
               All
             </Button>
-            {(["running", "validating", "pending_validation", "pending", "completed", "failed"] as TaskStatus[]).map((status) => {
-              const config = statusConfig[status]
-              const count = statusCounts[status]
+            {(
+              [
+                "running",
+                "validating",
+                "pending_validation",
+                "pending",
+                "completed",
+                "failed",
+              ] as TaskStatus[]
+            ).map((status) => {
+              const config = statusConfig[status];
+              const count = statusCounts[status];
               return (
                 <Button
                   key={status}
@@ -204,15 +284,20 @@ export default function SandboxesPage() {
                   onClick={() => setStatusFilter(status)}
                   className="gap-1.5"
                 >
-                  <config.icon className={`h-3.5 w-3.5 ${statusFilter !== status ? config.color : ""}`} />
+                  <config.icon
+                    className={`h-3.5 w-3.5 ${statusFilter !== status ? config.color : ""}`}
+                  />
                   {config.label}
                   {count > 0 && (
-                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+                    <Badge
+                      variant="secondary"
+                      className="ml-1 h-5 px-1.5 text-[10px]"
+                    >
                       {count}
                     </Badge>
                   )}
                 </Button>
-              )
+              );
             })}
           </div>
         </div>
@@ -257,16 +342,18 @@ export default function SandboxesPage() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {filteredTasks.map((task) => {
-              const status = normalizeStatus(task.status)
-              const config = statusConfig[status]
-              const StatusIcon = config.icon
-              const canMarkFailed = ["running", "pending"].includes(status)
+              const status = normalizeStatus(task.status);
+              const config = statusConfig[status];
+              const StatusIcon = config.icon;
+              const canMarkFailed = ["running", "pending"].includes(status);
 
               return (
                 <div key={task.id} className="group relative">
                   <Link
                     href={task.sandbox_id ? `/sandbox/${task.sandbox_id}` : "#"}
-                    className={!task.sandbox_id ? "pointer-events-none opacity-50" : ""}
+                    className={
+                      !task.sandbox_id ? "pointer-events-none opacity-50" : ""
+                    }
                   >
                     <Card className="hover:border-primary/50 hover:shadow-md transition-all cursor-pointer h-full">
                       <CardContent className="p-4">
@@ -297,11 +384,22 @@ export default function SandboxesPage() {
                         )}
 
                         <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-                          <Badge variant={status === "completed" ? "default" : status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
+                          <Badge
+                            variant={
+                              status === "completed"
+                                ? "default"
+                                : status === "failed"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                            className="text-[10px]"
+                          >
                             {config.label}
                           </Badge>
                           {!task.sandbox_id && (
-                            <span className="text-[10px] text-muted-foreground">No sandbox</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              No sandbox
+                            </span>
                           )}
                         </div>
                       </CardContent>
@@ -325,8 +423,8 @@ export default function SandboxesPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           onClick={(e) => {
-                            e.preventDefault()
-                            handleMarkFailed(task.id)
+                            e.preventDefault();
+                            handleMarkFailed(task.id);
                           }}
                           className="text-destructive focus:text-destructive"
                         >
@@ -337,11 +435,11 @@ export default function SandboxesPage() {
                     </DropdownMenu>
                   )}
                 </div>
-              )
+              );
             })}
           </div>
         )}
       </div>
     </div>
-  )
+  );
 }

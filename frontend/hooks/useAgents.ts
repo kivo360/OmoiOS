@@ -2,7 +2,7 @@
  * React Query hooks for Agents API
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listAgents,
   getAgent,
@@ -15,7 +15,7 @@ import {
   getAgentHealth,
   getStaleAgents,
   cleanupStaleAgents,
-} from "@/lib/api/agents"
+} from "@/lib/api/agents";
 import type {
   Agent,
   AgentRegisterRequest,
@@ -23,7 +23,7 @@ import type {
   AgentMatchResponse,
   AgentHealth,
   AgentStatistics,
-} from "@/lib/api/types"
+} from "@/lib/api/types";
 
 // Query keys
 export const agentKeys = {
@@ -38,7 +38,7 @@ export const agentKeys = {
   statistics: () => [...agentKeys.all, "statistics"] as const,
   stale: () => [...agentKeys.all, "stale"] as const,
   search: (params: object) => [...agentKeys.all, "search", params] as const,
-}
+};
 
 /**
  * Hook to fetch list of all agents
@@ -47,7 +47,7 @@ export function useAgents() {
   return useQuery<Agent[]>({
     queryKey: agentKeys.list(),
     queryFn: listAgents,
-  })
+  });
 }
 
 /**
@@ -58,70 +58,83 @@ export function useAgent(agentId: string | undefined) {
     queryKey: agentKeys.detail(agentId!),
     queryFn: () => getAgent(agentId!),
     enabled: !!agentId,
-  })
+  });
 }
 
 /**
  * Hook to register a new agent
  */
 export function useRegisterAgent() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data: AgentRegisterRequest) => registerAgent(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: agentKeys.statistics() })
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: agentKeys.statistics() });
     },
-  })
+  });
 }
 
 /**
  * Hook to update an agent
  */
 export function useUpdateAgent() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ agentId, data }: { agentId: string; data: AgentUpdateRequest }) =>
-      updateAgent(agentId, data),
+    mutationFn: ({
+      agentId,
+      data,
+    }: {
+      agentId: string;
+      data: AgentUpdateRequest;
+    }) => updateAgent(agentId, data),
     onSuccess: (_, { agentId }) => {
-      queryClient.invalidateQueries({ queryKey: agentKeys.detail(agentId) })
-      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(agentId) });
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() });
     },
-  })
+  });
 }
 
 /**
  * Hook to toggle agent availability
  */
 export function useToggleAgentAvailability() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ agentId, available }: { agentId: string; available: boolean }) =>
-      toggleAgentAvailability(agentId, available),
+    mutationFn: ({
+      agentId,
+      available,
+    }: {
+      agentId: string;
+      available: boolean;
+    }) => toggleAgentAvailability(agentId, available),
     onSuccess: (_, { agentId }) => {
-      queryClient.invalidateQueries({ queryKey: agentKeys.detail(agentId) })
-      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(agentId) });
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() });
     },
-  })
+  });
 }
 
 /**
  * Hook to search for agents
  */
 export function useSearchAgents(params?: {
-  capabilities?: string[]
-  phase_id?: string
-  agent_type?: string
-  limit?: number
+  capabilities?: string[];
+  phase_id?: string;
+  agent_type?: string;
+  limit?: number;
 }) {
   return useQuery<AgentMatchResponse[]>({
     queryKey: agentKeys.search(params ?? {}),
     queryFn: () => searchAgents(params),
-    enabled: !!params?.capabilities?.length || !!params?.phase_id || !!params?.agent_type,
-  })
+    enabled:
+      !!params?.capabilities?.length ||
+      !!params?.phase_id ||
+      !!params?.agent_type,
+  });
 }
 
 /**
@@ -132,7 +145,7 @@ export function useAgentsHealth(timeoutSeconds?: number) {
     queryKey: agentKeys.healthAll(),
     queryFn: () => getAgentsHealth(timeoutSeconds),
     refetchInterval: 30000, // Refresh every 30 seconds
-  })
+  });
 }
 
 /**
@@ -143,19 +156,22 @@ export function useAgentStatistics() {
     queryKey: agentKeys.statistics(),
     queryFn: getAgentStatistics,
     refetchInterval: 30000, // Refresh every 30 seconds
-  })
+  });
 }
 
 /**
  * Hook to get health for a specific agent
  */
-export function useAgentHealth(agentId: string | undefined, timeoutSeconds?: number) {
+export function useAgentHealth(
+  agentId: string | undefined,
+  timeoutSeconds?: number,
+) {
   return useQuery<AgentHealth>({
     queryKey: agentKeys.healthAgent(agentId!),
     queryFn: () => getAgentHealth(agentId!, timeoutSeconds),
     enabled: !!agentId,
     refetchInterval: 15000, // Refresh every 15 seconds
-  })
+  });
 }
 
 /**
@@ -166,20 +182,20 @@ export function useStaleAgents(timeoutSeconds?: number) {
     queryKey: agentKeys.stale(),
     queryFn: () => getStaleAgents(timeoutSeconds),
     refetchInterval: 60000, // Refresh every minute
-  })
+  });
 }
 
 /**
  * Hook to cleanup stale agents
  */
 export function useCleanupStaleAgents() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (params?: { timeout_seconds?: number; mark_as?: string }) =>
       cleanupStaleAgents(params),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: agentKeys.all })
+      queryClient.invalidateQueries({ queryKey: agentKeys.all });
     },
-  })
+  });
 }

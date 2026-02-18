@@ -1,22 +1,22 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { CardTitle, CardDescription } from "@/components/ui/card"
-import { ArrowRight, Moon, Code, GitPullRequest, Sparkles } from "lucide-react"
-import { useOnboarding } from "@/hooks/useOnboarding"
-import { useAuth } from "@/hooks/useAuth"
+import { Button } from "@/components/ui/button";
+import { CardTitle, CardDescription } from "@/components/ui/card";
+import { ArrowRight, Moon, Code, GitPullRequest, Sparkles } from "lucide-react";
+import { useOnboarding } from "@/hooks/useOnboarding";
+import { useAuth } from "@/hooks/useAuth";
 
 export function WelcomeStep() {
-  const { nextStep } = useOnboarding()
-  const { user } = useAuth()
+  const { nextStep } = useOnboarding();
+  const { user } = useAuth();
 
-  const firstName = user?.full_name?.split(" ")[0] || "there"
+  const firstName = user?.full_name?.split(" ")[0] || "there";
 
   const handleGetStarted = () => {
-    console.log("Get Started clicked, calling nextStep...")
-    nextStep()
-    console.log("nextStep called")
-  }
+    console.log("Get Started clicked, calling nextStep...");
+    nextStep();
+    console.log("nextStep called");
+  };
 
   return (
     <div className="space-y-6 text-center">
@@ -71,7 +71,7 @@ export function WelcomeStep() {
         <ArrowRight className="ml-2 h-5 w-5" />
       </Button>
     </div>
-  )
+  );
 }
 
 function StepPreview({
@@ -80,10 +80,10 @@ function StepPreview({
   title,
   description,
 }: {
-  number: number
-  icon: React.ReactNode
-  title: string
-  description: string
+  number: number;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
 }) {
   return (
     <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
@@ -98,5 +98,5 @@ function StepPreview({
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
     </div>
-  )
+  );
 }

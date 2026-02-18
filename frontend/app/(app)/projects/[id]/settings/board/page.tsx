@@ -1,24 +1,30 @@
-"use client"
+"use client";
 
-import { use, useState } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
-import { Skeleton } from "@/components/ui/skeleton"
+import { use, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { toast } from "sonner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   ArrowLeft,
   Settings,
@@ -40,13 +46,13 @@ import {
   Trash2,
   Save,
   Info,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { useProject } from "@/hooks/useProjects"
-import { PHASES } from "@/lib/phases-config"
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useProject } from "@/hooks/useProjects";
+import { PHASES } from "@/lib/phases-config";
 
 interface BoardSettingsPageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }
 
 const settingsNav = [
@@ -54,16 +60,46 @@ const settingsNav = [
   { href: "/board", label: "Board", icon: Columns3 },
   { href: "/phases", label: "Phases", icon: Workflow },
   { href: "/github", label: "GitHub", icon: GitBranch },
-]
+];
 
 // Default board columns (these are tied to phases)
 const defaultColumns = [
-  { id: "backlog", name: "Backlog", phaseMapping: "PHASE_BACKLOG", wipLimit: 0, color: "#6B7280" },
-  { id: "todo", name: "To Do", phaseMapping: "PHASE_REQUIREMENTS", wipLimit: 10, color: "#3B82F6" },
-  { id: "in-progress", name: "In Progress", phaseMapping: "PHASE_IMPLEMENTATION", wipLimit: 5, color: "#F59E0B" },
-  { id: "review", name: "Review", phaseMapping: "PHASE_TESTING", wipLimit: 3, color: "#8B5CF6" },
-  { id: "done", name: "Done", phaseMapping: "PHASE_DONE", wipLimit: 0, color: "#10B981" },
-]
+  {
+    id: "backlog",
+    name: "Backlog",
+    phaseMapping: "PHASE_BACKLOG",
+    wipLimit: 0,
+    color: "#6B7280",
+  },
+  {
+    id: "todo",
+    name: "To Do",
+    phaseMapping: "PHASE_REQUIREMENTS",
+    wipLimit: 10,
+    color: "#3B82F6",
+  },
+  {
+    id: "in-progress",
+    name: "In Progress",
+    phaseMapping: "PHASE_IMPLEMENTATION",
+    wipLimit: 5,
+    color: "#F59E0B",
+  },
+  {
+    id: "review",
+    name: "Review",
+    phaseMapping: "PHASE_TESTING",
+    wipLimit: 3,
+    color: "#8B5CF6",
+  },
+  {
+    id: "done",
+    name: "Done",
+    phaseMapping: "PHASE_DONE",
+    wipLimit: 0,
+    color: "#10B981",
+  },
+];
 
 // Default ticket types
 const defaultTicketTypes = [
@@ -71,17 +107,17 @@ const defaultTicketTypes = [
   { id: "bug", name: "Bug", color: "#EF4444", icon: "🐛" },
   { id: "task", name: "Task", color: "#6B7280", icon: "📋" },
   { id: "improvement", name: "Improvement", color: "#10B981", icon: "⬆️" },
-]
+];
 
 export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
-  const { id } = use(params)
-  const pathname = usePathname()
-  
-  const { data: project, isLoading, error } = useProject(id)
-  const [columns, setColumns] = useState(defaultColumns)
-  const [ticketTypes, setTicketTypes] = useState(defaultTicketTypes)
-  const [isAddColumnOpen, setIsAddColumnOpen] = useState(false)
-  const [isAddTypeOpen, setIsAddTypeOpen] = useState(false)
+  const { id } = use(params);
+  const pathname = usePathname();
+
+  const { data: project, isLoading, error } = useProject(id);
+  const [columns, setColumns] = useState(defaultColumns);
+  const [ticketTypes, setTicketTypes] = useState(defaultTicketTypes);
+  const [isAddColumnOpen, setIsAddColumnOpen] = useState(false);
+  const [isAddTypeOpen, setIsAddTypeOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -93,7 +129,7 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
           <Skeleton className="h-64 flex-1" />
         </div>
       </div>
-    )
+    );
   }
 
   if (error || !project) {
@@ -104,12 +140,14 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
           <Link href="/projects">Back to Projects</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   const handleSave = () => {
-    toast.success("Board settings saved locally. Note: Backend API for board configuration coming soon.")
-  }
+    toast.success(
+      "Board settings saved locally. Note: Backend API for board configuration coming soon.",
+    );
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -125,14 +163,17 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Project Settings</h1>
-        <p className="text-muted-foreground">Manage settings for {project.name}</p>
+        <p className="text-muted-foreground">
+          Manage settings for {project.name}
+        </p>
       </div>
 
       <div className="flex gap-6">
         {/* Sidebar Navigation */}
         <nav className="w-48 shrink-0 space-y-1">
           {settingsNav.map((item) => {
-            const isActive = pathname === `/projects/${id}/settings${item.href}`
+            const isActive =
+              pathname === `/projects/${id}/settings${item.href}`;
             return (
               <Link
                 key={item.href}
@@ -141,13 +182,13 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                   isActive
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
               </Link>
-            )
+            );
           })}
         </nav>
 
@@ -159,7 +200,9 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
             <div>
               <p className="font-medium text-blue-900">Board Configuration</p>
               <p className="text-sm text-blue-700">
-                Board columns are currently managed as a local configuration. Changes are previewed here but the backend API for persisting board settings is coming soon.
+                Board columns are currently managed as a local configuration.
+                Changes are previewed here but the backend API for persisting
+                board settings is coming soon.
               </p>
             </div>
           </div>
@@ -169,7 +212,9 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Board Columns</CardTitle>
-                <CardDescription>Configure kanban board columns and their phase mappings</CardDescription>
+                <CardDescription>
+                  Configure kanban board columns and their phase mappings
+                </CardDescription>
               </div>
               <Dialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen}>
                 <DialogTrigger asChild>
@@ -206,15 +251,27 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="wipLimit">WIP Limit (0 = unlimited)</Label>
-                      <Input id="wipLimit" type="number" min="0" defaultValue="0" />
+                      <Label htmlFor="wipLimit">
+                        WIP Limit (0 = unlimited)
+                      </Label>
+                      <Input
+                        id="wipLimit"
+                        type="number"
+                        min="0"
+                        defaultValue="0"
+                      />
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsAddColumnOpen(false)}>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsAddColumnOpen(false)}
+                    >
                       Cancel
                     </Button>
-                    <Button onClick={() => setIsAddColumnOpen(false)}>Add Column</Button>
+                    <Button onClick={() => setIsAddColumnOpen(false)}>
+                      Add Column
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -234,7 +291,9 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
                     <div className="flex-1">
                       <p className="font-medium">{column.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {column.phaseMapping.replace("PHASE_", "").replace(/_/g, " ")}
+                        {column.phaseMapping
+                          .replace("PHASE_", "")
+                          .replace(/_/g, " ")}
                       </p>
                     </div>
                     {column.wipLimit > 0 && (
@@ -254,7 +313,8 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
                 ))}
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                Drag columns to reorder. Column order determines display order on the board.
+                Drag columns to reorder. Column order determines display order
+                on the board.
               </p>
             </CardContent>
           </Card>
@@ -264,7 +324,9 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Ticket Types</CardTitle>
-                <CardDescription>Configure the types of tickets available in this project</CardDescription>
+                <CardDescription>
+                  Configure the types of tickets available in this project
+                </CardDescription>
               </div>
               <Dialog open={isAddTypeOpen} onOpenChange={setIsAddTypeOpen}>
                 <DialogTrigger asChild>
@@ -287,18 +349,31 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="typeIcon">Icon (emoji)</Label>
-                      <Input id="typeIcon" placeholder="e.g., 🎯" maxLength={2} />
+                      <Input
+                        id="typeIcon"
+                        placeholder="e.g., 🎯"
+                        maxLength={2}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="typeColor">Color</Label>
-                      <Input id="typeColor" type="color" defaultValue="#6B7280" />
+                      <Input
+                        id="typeColor"
+                        type="color"
+                        defaultValue="#6B7280"
+                      />
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsAddTypeOpen(false)}>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsAddTypeOpen(false)}
+                    >
                       Cancel
                     </Button>
-                    <Button onClick={() => setIsAddTypeOpen(false)}>Add Type</Button>
+                    <Button onClick={() => setIsAddTypeOpen(false)}>
+                      Add Type
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -338,7 +413,9 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Default Settings</CardTitle>
-              <CardDescription>Configure default values for new tickets</CardDescription>
+              <CardDescription>
+                Configure default values for new tickets
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
@@ -383,7 +460,9 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Auto-Transitions</CardTitle>
-              <CardDescription>Configure automatic ticket status transitions</CardDescription>
+              <CardDescription>
+                Configure automatic ticket status transitions
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
@@ -428,5 +507,5 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }

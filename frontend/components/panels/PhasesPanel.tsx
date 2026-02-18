@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   Workflow,
   Bot,
@@ -12,8 +12,8 @@ import {
   Clock,
   AlertCircle,
   ChevronRight,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Mock phase data for sidebar
 const sidebarPhases = [
@@ -66,14 +66,17 @@ const sidebarPhases = [
     activeAgents: 0,
     color: "#059669",
   },
-]
+];
 
 export function PhasesPanel() {
-  const pathname = usePathname()
-  
-  const totalAgents = sidebarPhases.reduce((sum, p) => sum + p.activeAgents, 0)
-  const totalTasks = sidebarPhases.reduce((sum, p) => sum + p.taskStats.total, 0)
-  const totalDone = sidebarPhases.reduce((sum, p) => sum + p.taskStats.done, 0)
+  const pathname = usePathname();
+
+  const totalAgents = sidebarPhases.reduce((sum, p) => sum + p.activeAgents, 0);
+  const totalTasks = sidebarPhases.reduce(
+    (sum, p) => sum + p.taskStats.total,
+    0,
+  );
+  const totalDone = sidebarPhases.reduce((sum, p) => sum + p.taskStats.done, 0);
 
   return (
     <div className="flex h-full flex-col">
@@ -89,7 +92,9 @@ export function PhasesPanel() {
       <div className="border-b px-4 py-3 space-y-2">
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Overall Progress</span>
-          <span className="font-medium">{Math.round((totalDone / totalTasks) * 100)}%</span>
+          <span className="font-medium">
+            {Math.round((totalDone / totalTasks) * 100)}%
+          </span>
         </div>
         <Progress value={(totalDone / totalTasks) * 100} className="h-1.5" />
         <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -102,11 +107,14 @@ export function PhasesPanel() {
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-1">
           {sidebarPhases.map((phase) => {
-            const isActive = pathname === `/phases/${phase.id}`
-            const completionPercent = phase.taskStats.total > 0
-              ? Math.round((phase.taskStats.done / phase.taskStats.total) * 100)
-              : 0
-            
+            const isActive = pathname === `/phases/${phase.id}`;
+            const completionPercent =
+              phase.taskStats.total > 0
+                ? Math.round(
+                    (phase.taskStats.done / phase.taskStats.total) * 100,
+                  )
+                : 0;
+
             return (
               <Link
                 key={phase.id}
@@ -115,7 +123,7 @@ export function PhasesPanel() {
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors",
                   isActive
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground",
                 )}
               >
                 <div
@@ -126,21 +134,27 @@ export function PhasesPanel() {
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium truncate">{phase.name}</p>
                     {phase.activeAgents > 0 && (
-                      <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] h-4 px-1"
+                      >
                         <Bot className="h-2.5 w-2.5 mr-0.5" />
                         {phase.activeAgents}
                       </Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-1">
-                    <Progress value={completionPercent} className="h-1 flex-1" />
+                    <Progress
+                      value={completionPercent}
+                      className="h-1 flex-1"
+                    />
                     <span className="text-[10px] text-muted-foreground w-8 text-right">
                       {completionPercent}%
                     </span>
                   </div>
                 </div>
               </Link>
-            )
+            );
           })}
         </div>
       </ScrollArea>
@@ -153,14 +167,16 @@ export function PhasesPanel() {
             "flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors",
             pathname === "/phases/gates"
               ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground",
           )}
         >
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
             <span>Gate Approvals</span>
           </div>
-          <Badge variant="secondary" className="text-xs">3</Badge>
+          <Badge variant="secondary" className="text-xs">
+            3
+          </Badge>
         </Link>
         <Link
           href="/phases"
@@ -168,7 +184,7 @@ export function PhasesPanel() {
             "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
             pathname === "/phases"
               ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground",
           )}
         >
           <Workflow className="h-4 w-4" />
@@ -177,5 +193,5 @@ export function PhasesPanel() {
         </Link>
       </div>
     </div>
-  )
+  );
 }

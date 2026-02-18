@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { 
-  Brain, 
-  Ticket, 
-  ListTodo, 
+import { useState } from "react";
+import Link from "next/link";
+import {
+  Brain,
+  Ticket,
+  ListTodo,
   ArrowLeft,
   Clock,
   User,
@@ -13,33 +13,37 @@ import {
   Filter,
   Search,
   ChevronDown,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 interface DiagnosticContextPanelProps {
-  entityType?: string
-  entityId?: string
+  entityType?: string;
+  entityId?: string;
 }
 
 interface FilterSectionProps {
-  title: string
-  children: React.ReactNode
-  defaultOpen?: boolean
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
 }
 
-function FilterSection({ title, children, defaultOpen = true }: FilterSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
+function FilterSection({
+  title,
+  children,
+  defaultOpen = true,
+}: FilterSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -48,7 +52,7 @@ function FilterSection({ title, children, defaultOpen = true }: FilterSectionPro
         <ChevronDown
           className={cn(
             "h-4 w-4 text-muted-foreground transition-transform",
-            isOpen && "rotate-180"
+            isOpen && "rotate-180",
           )}
         />
       </CollapsibleTrigger>
@@ -56,7 +60,7 @@ function FilterSection({ title, children, defaultOpen = true }: FilterSectionPro
         {children}
       </CollapsibleContent>
     </Collapsible>
-  )
+  );
 }
 
 // Mock source entity data
@@ -69,20 +73,23 @@ const mockSourceEntity = {
   assignee: "worker-1",
   createdAt: "2024-01-15T10:00:00Z",
   phase: "Implementation",
-}
+};
 
-export function DiagnosticContextPanel({ entityType, entityId }: DiagnosticContextPanelProps) {
+export function DiagnosticContextPanel({
+  entityType,
+  entityId,
+}: DiagnosticContextPanelProps) {
   const [eventFilters, setEventFilters] = useState({
     discovery: true,
     decision: true,
     codeChange: true,
     error: true,
     linking: true,
-  })
+  });
 
   const toggleEventFilter = (filter: keyof typeof eventFilters) => {
-    setEventFilters((prev) => ({ ...prev, [filter]: !prev[filter] }))
-  }
+    setEventFilters((prev) => ({ ...prev, [filter]: !prev[filter] }));
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -94,10 +101,7 @@ export function DiagnosticContextPanel({ entityType, entityId }: DiagnosticConte
         </div>
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search events..."
-            className="pl-8 h-9"
-          />
+          <Input placeholder="Search events..." className="pl-8 h-9" />
         </div>
       </div>
 
@@ -150,7 +154,10 @@ export function DiagnosticContextPanel({ entityType, entityId }: DiagnosticConte
                   checked={eventFilters.discovery}
                   onCheckedChange={() => toggleEventFilter("discovery")}
                 />
-                <Label htmlFor="discovery" className="text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="discovery"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   🔍 Discoveries
                 </Label>
               </div>
@@ -160,7 +167,10 @@ export function DiagnosticContextPanel({ entityType, entityId }: DiagnosticConte
                   checked={eventFilters.decision}
                   onCheckedChange={() => toggleEventFilter("decision")}
                 />
-                <Label htmlFor="decision" className="text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="decision"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   🧠 Decisions
                 </Label>
               </div>
@@ -170,7 +180,10 @@ export function DiagnosticContextPanel({ entityType, entityId }: DiagnosticConte
                   checked={eventFilters.codeChange}
                   onCheckedChange={() => toggleEventFilter("codeChange")}
                 />
-                <Label htmlFor="codeChange" className="text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="codeChange"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   💻 Code Changes
                 </Label>
               </div>
@@ -180,7 +193,10 @@ export function DiagnosticContextPanel({ entityType, entityId }: DiagnosticConte
                   checked={eventFilters.error}
                   onCheckedChange={() => toggleEventFilter("error")}
                 />
-                <Label htmlFor="error" className="text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="error"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   ❌ Errors
                 </Label>
               </div>
@@ -190,7 +206,10 @@ export function DiagnosticContextPanel({ entityType, entityId }: DiagnosticConte
                   checked={eventFilters.linking}
                   onCheckedChange={() => toggleEventFilter("linking")}
                 />
-                <Label htmlFor="linking" className="text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="linking"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   🔗 Linking Events
                 </Label>
               </div>
@@ -240,8 +259,7 @@ export function DiagnosticContextPanel({ entityType, entityId }: DiagnosticConte
                 href="#"
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                <ListTodo className="h-3.5 w-3.5" />
-                3 spawned tasks
+                <ListTodo className="h-3.5 w-3.5" />3 spawned tasks
               </Link>
             </div>
           </FilterSection>
@@ -254,17 +272,19 @@ export function DiagnosticContextPanel({ entityType, entityId }: DiagnosticConte
           variant="ghost"
           size="sm"
           className="w-full text-muted-foreground"
-          onClick={() => setEventFilters({
-            discovery: true,
-            decision: true,
-            codeChange: true,
-            error: true,
-            linking: true,
-          })}
+          onClick={() =>
+            setEventFilters({
+              discovery: true,
+              decision: true,
+              codeChange: true,
+              error: true,
+              linking: true,
+            })
+          }
         >
           Reset filters
         </Button>
       </div>
     </div>
-  )
+  );
 }

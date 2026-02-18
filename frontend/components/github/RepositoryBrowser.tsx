@@ -1,20 +1,26 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Github,
   Search,
@@ -26,77 +32,88 @@ import {
   ExternalLink,
   RefreshCw,
   FolderOpen,
-} from "lucide-react"
-import { listRepos } from "@/lib/api/github"
-import { isProviderConnected } from "@/lib/api/oauth"
-import type { GitHubRepo } from "@/lib/api/types"
+} from "lucide-react";
+import { listRepos } from "@/lib/api/github";
+import { isProviderConnected } from "@/lib/api/oauth";
+import type { GitHubRepo } from "@/lib/api/types";
 
 interface RepositoryBrowserProps {
-  onSelectRepo?: (repo: GitHubRepo) => void
-  selectedRepoId?: number
+  onSelectRepo?: (repo: GitHubRepo) => void;
+  selectedRepoId?: number;
 }
 
-export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBrowserProps) {
-  const [repos, setRepos] = useState<GitHubRepo[]>([])
-  const [loading, setLoading] = useState(true)
-  const [connected, setConnected] = useState(false)
-  const [search, setSearch] = useState("")
-  const [visibility, setVisibility] = useState<"all" | "public" | "private">("all")
-  const [sort, setSort] = useState<"updated" | "created" | "pushed" | "full_name">("updated")
+export function RepositoryBrowser({
+  onSelectRepo,
+  selectedRepoId,
+}: RepositoryBrowserProps) {
+  const [repos, setRepos] = useState<GitHubRepo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [connected, setConnected] = useState(false);
+  const [search, setSearch] = useState("");
+  const [visibility, setVisibility] = useState<"all" | "public" | "private">(
+    "all",
+  );
+  const [sort, setSort] = useState<
+    "updated" | "created" | "pushed" | "full_name"
+  >("updated");
 
   useEffect(() => {
-    checkConnection()
-  }, [])
+    checkConnection();
+  }, []);
 
   useEffect(() => {
     if (connected) {
-      fetchRepos()
+      fetchRepos();
     }
-  }, [connected, visibility, sort])
+  }, [connected, visibility, sort]);
 
   const checkConnection = async () => {
-    const isConnected = await isProviderConnected("github")
-    setConnected(isConnected)
+    const isConnected = await isProviderConnected("github");
+    setConnected(isConnected);
     if (!isConnected) {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const fetchRepos = async () => {
     try {
-      setLoading(true)
-      const data = await listRepos({ visibility, sort, per_page: 100 })
-      setRepos(data)
+      setLoading(true);
+      const data = await listRepos({ visibility, sort, per_page: 100 });
+      setRepos(data);
       if (data.length === 0) {
-        console.warn("No repositories returned from GitHub API")
+        console.warn("No repositories returned from GitHub API");
       }
     } catch (error: any) {
-      console.error("Failed to fetch repos:", error)
+      console.error("Failed to fetch repos:", error);
       if (error.status === 400) {
-        const errorMessage = error.message || "GitHub not connected"
-        console.error("GitHub connection error:", errorMessage)
-        setConnected(false)
-        toast.error(errorMessage)
+        const errorMessage = error.message || "GitHub not connected";
+        console.error("GitHub connection error:", errorMessage);
+        setConnected(false);
+        toast.error(errorMessage);
       } else if (error.status === 401 || error.status === 403) {
-        toast.error("GitHub authentication failed. Please reconnect your GitHub account.")
-        setConnected(false)
+        toast.error(
+          "GitHub authentication failed. Please reconnect your GitHub account.",
+        );
+        setConnected(false);
       } else {
-        toast.error(`Failed to load repositories: ${error.message || "Unknown error"}`)
+        toast.error(
+          `Failed to load repositories: ${error.message || "Unknown error"}`,
+        );
       }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const filteredRepos = repos.filter((repo) => {
-    if (!search) return true
-    const searchLower = search.toLowerCase()
+    if (!search) return true;
+    const searchLower = search.toLowerCase();
     return (
       repo.name.toLowerCase().includes(searchLower) ||
       repo.full_name.toLowerCase().includes(searchLower) ||
       repo.description?.toLowerCase().includes(searchLower)
-    )
-  })
+    );
+  });
 
   const getLanguageColor = (language: string | null): string => {
     const colors: Record<string, string> = {
@@ -114,9 +131,9 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
       Swift: "#ffac45",
       Kotlin: "#A97BFF",
       Scala: "#c22d40",
-    }
-    return colors[language || ""] || "#858585"
-  }
+    };
+    return colors[language || ""] || "#858585";
+  };
 
   if (!connected) {
     return (
@@ -126,14 +143,16 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
             <Github className="h-5 w-5" />
             GitHub Repositories
           </CardTitle>
-          <CardDescription>Connect your GitHub account to browse repositories</CardDescription>
+          <CardDescription>
+            Connect your GitHub account to browse repositories
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <Github className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-4">
-              GitHub is not connected. Please connect your GitHub account in settings to browse your
-              repositories.
+              GitHub is not connected. Please connect your GitHub account in
+              settings to browse your repositories.
             </p>
             <Button asChild>
               <a href="/settings/integrations">Connect GitHub</a>
@@ -141,7 +160,7 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -155,8 +174,15 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
             </CardTitle>
             <CardDescription>Select a repository to work with</CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={fetchRepos} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchRepos}
+            disabled={loading}
+          >
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
+            />
             Refresh
           </Button>
         </div>
@@ -173,7 +199,10 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
               className="pl-9"
             />
           </div>
-          <Select value={visibility} onValueChange={(v) => setVisibility(v as any)}>
+          <Select
+            value={visibility}
+            onValueChange={(v) => setVisibility(v as any)}
+          >
             <SelectTrigger className="w-32">
               <SelectValue />
             </SelectTrigger>
@@ -216,7 +245,9 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
-                {search ? "No repositories match your search" : "No repositories found"}
+                {search
+                  ? "No repositories match your search"
+                  : "No repositories found"}
               </p>
             </div>
           ) : (
@@ -225,14 +256,18 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
                 <div
                   key={repo.id}
                   className={`p-4 border rounded-lg cursor-pointer transition-all hover:border-primary/50 ${
-                    selectedRepoId === repo.id ? "border-primary bg-primary/5" : ""
+                    selectedRepoId === repo.id
+                      ? "border-primary bg-primary/5"
+                      : ""
                   }`}
                   onClick={() => onSelectRepo?.(repo)}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{repo.full_name}</span>
+                        <span className="font-medium truncate">
+                          {repo.full_name}
+                        </span>
                         {repo.private ? (
                           <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         ) : (
@@ -249,7 +284,11 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
                           <span className="flex items-center gap-1">
                             <span
                               className="w-2.5 h-2.5 rounded-full"
-                              style={{ backgroundColor: getLanguageColor(repo.language) }}
+                              style={{
+                                backgroundColor: getLanguageColor(
+                                  repo.language,
+                                ),
+                              }}
                             />
                             {repo.language}
                           </span>
@@ -274,7 +313,11 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
                       asChild
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
+                      <a
+                        href={repo.html_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     </Button>
@@ -293,5 +336,5 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
         )}
       </CardContent>
     </Card>
-  )
+  );
 }

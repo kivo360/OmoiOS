@@ -2,7 +2,7 @@
  * Sandbox API client for interacting with sandbox endpoints
  */
 
-import { api } from "./client"
+import { api } from "./client";
 import type {
   SandboxEventResponse,
   SandboxEventsListResponse,
@@ -10,7 +10,7 @@ import type {
   MessageQueueResponse,
   TrajectorySummaryResponse,
   SandboxTask,
-} from "./types"
+} from "./types";
 
 // ============================================================================
 // Sandbox Events API
@@ -22,20 +22,20 @@ import type {
 export async function getSandboxEvents(
   sandboxId: string,
   options: {
-    limit?: number
-    offset?: number
-    event_type?: string
-  } = {}
+    limit?: number;
+    offset?: number;
+    event_type?: string;
+  } = {},
 ): Promise<SandboxEventsListResponse> {
-  const params = new URLSearchParams()
-  if (options.limit) params.set("limit", options.limit.toString())
-  if (options.offset) params.set("offset", options.offset.toString())
-  if (options.event_type) params.set("event_type", options.event_type)
+  const params = new URLSearchParams();
+  if (options.limit) params.set("limit", options.limit.toString());
+  if (options.offset) params.set("offset", options.offset.toString());
+  if (options.event_type) params.set("event_type", options.event_type);
 
-  const query = params.toString()
+  const query = params.toString();
   return api.get<SandboxEventsListResponse>(
-    `/api/v1/sandboxes/${sandboxId}/events${query ? `?${query}` : ""}`
-  )
+    `/api/v1/sandboxes/${sandboxId}/events${query ? `?${query}` : ""}`,
+  );
 }
 
 /**
@@ -45,20 +45,20 @@ export async function getSandboxEvents(
 export async function getSandboxTrajectory(
   sandboxId: string,
   options: {
-    limit?: number
-    cursor?: string | null
-    direction?: "older" | "newer"
-  } = {}
+    limit?: number;
+    cursor?: string | null;
+    direction?: "older" | "newer";
+  } = {},
 ): Promise<TrajectorySummaryResponse> {
-  const params = new URLSearchParams()
-  if (options.limit) params.set("limit", options.limit.toString())
-  if (options.cursor) params.set("cursor", options.cursor)
-  if (options.direction) params.set("direction", options.direction)
+  const params = new URLSearchParams();
+  if (options.limit) params.set("limit", options.limit.toString());
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.direction) params.set("direction", options.direction);
 
-  const query = params.toString()
+  const query = params.toString();
   return api.get<TrajectorySummaryResponse>(
-    `/api/v1/sandboxes/${sandboxId}/trajectory${query ? `?${query}` : ""}`
-  )
+    `/api/v1/sandboxes/${sandboxId}/trajectory${query ? `?${query}` : ""}`,
+  );
 }
 
 // ============================================================================
@@ -70,23 +70,23 @@ export async function getSandboxTrajectory(
  */
 export async function sendSandboxMessage(
   sandboxId: string,
-  message: SandboxMessage
+  message: SandboxMessage,
 ): Promise<SandboxEventResponse> {
   return api.post<SandboxEventResponse>(
     `/api/v1/sandboxes/${sandboxId}/messages`,
-    message
-  )
+    message,
+  );
 }
 
 /**
  * Get pending messages for a sandbox (typically used by workers, but useful for UI)
  */
 export async function getSandboxMessages(
-  sandboxId: string
+  sandboxId: string,
 ): Promise<MessageQueueResponse> {
   return api.get<MessageQueueResponse>(
-    `/api/v1/sandboxes/${sandboxId}/messages`
-  )
+    `/api/v1/sandboxes/${sandboxId}/messages`,
+  );
 }
 
 // ============================================================================
@@ -96,8 +96,10 @@ export async function getSandboxMessages(
 /**
  * Get the task associated with a sandbox
  */
-export async function getTaskBySandbox(sandboxId: string): Promise<SandboxTask> {
-  return api.get<SandboxTask>(`/api/v1/sandboxes/${sandboxId}/task`)
+export async function getTaskBySandbox(
+  sandboxId: string,
+): Promise<SandboxTask> {
+  return api.get<SandboxTask>(`/api/v1/sandboxes/${sandboxId}/task`);
 }
 
 // ============================================================================
@@ -108,7 +110,7 @@ export async function getTaskBySandbox(sandboxId: string): Promise<SandboxTask> 
  * Check sandbox API health
  */
 export async function checkSandboxHealth(): Promise<{ status: string }> {
-  return api.get<{ status: string }>("/api/v1/sandboxes/health", false)
+  return api.get<{ status: string }>("/api/v1/sandboxes/health", false);
 }
 
 // ============================================================================
@@ -129,6 +131,6 @@ export const sandboxApi = {
 
   // Health
   checkHealth: checkSandboxHealth,
-}
+};
 
-export default sandboxApi
+export default sandboxApi;

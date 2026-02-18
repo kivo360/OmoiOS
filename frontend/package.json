@@ -106,6 +106,7 @@
     "happy-dom": "^20.3.7",
     "jsdom": "^27.4.0",
     "postcss": "^8.4.32",
+    "prettier": "^3.8.1",
     "shadcn": "^3.6.2",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.3.0",

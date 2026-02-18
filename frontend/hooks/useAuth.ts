@@ -3,4 +3,4 @@
  * Re-exports useAuth from AuthProvider for convenience
  */
 
-export { useAuth, useAuthStore } from "@/providers/AuthProvider"
+export { useAuth, useAuthStore } from "@/providers/AuthProvider";

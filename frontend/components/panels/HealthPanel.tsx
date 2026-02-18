@@ -1,43 +1,47 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Separator } from "@/components/ui/separator"
-import { useSystemHealth, useDashboardSummary } from "@/hooks/useMonitor"
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { useSystemHealth, useDashboardSummary } from "@/hooks/useMonitor";
 
 const shortcuts = [
   { label: "Overview", href: "/health" },
   { label: "Trajectories", href: "/health/trajectories" },
   { label: "Interventions", href: "/health/interventions" },
   { label: "Settings", href: "/health/settings" },
-]
+];
 
 export function HealthPanel() {
-  const { data: health, isLoading: healthLoading } = useSystemHealth()
-  const { data: dashboard, isLoading: dashboardLoading } = useDashboardSummary()
-  
-  const isLoading = healthLoading || dashboardLoading
-  
+  const { data: health, isLoading: healthLoading } = useSystemHealth();
+  const { data: dashboard, isLoading: dashboardLoading } =
+    useDashboardSummary();
+
+  const isLoading = healthLoading || dashboardLoading;
+
   // Compute summary values from API data
-  const activeAgents = dashboard?.active_agents ?? 0
-  const openAlerts = dashboard?.recent_anomalies ?? 0
-  const healthStatus = health?.overall_status ?? "unknown"
-  
+  const activeAgents = dashboard?.active_agents ?? 0;
+  const openAlerts = dashboard?.recent_anomalies ?? 0;
+  const healthStatus = health?.overall_status ?? "unknown";
+
   // Get status color
-  const statusVariant = healthStatus === "healthy" 
-    ? "secondary" 
-    : healthStatus === "degraded" 
-      ? "outline" 
-      : "destructive"
+  const statusVariant =
+    healthStatus === "healthy"
+      ? "secondary"
+      : healthStatus === "degraded"
+        ? "outline"
+        : "destructive";
 
   return (
     <div className="flex h-full flex-col">
       <div className="p-4 pb-2">
         <h2 className="text-sm font-semibold">System Health</h2>
-        <p className="text-xs text-muted-foreground">Guardian, trajectories, interventions</p>
+        <p className="text-xs text-muted-foreground">
+          Guardian, trajectories, interventions
+        </p>
       </div>
 
       <div className="px-4 pb-3">
@@ -63,7 +67,9 @@ export function HealthPanel() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Tasks pending</span>
-                  <span className="font-medium">{dashboard?.total_tasks_pending ?? 0}</span>
+                  <span className="font-medium">
+                    {dashboard?.total_tasks_pending ?? 0}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Open alerts</span>
@@ -81,12 +87,16 @@ export function HealthPanel() {
 
       <div className="flex-1 overflow-auto px-2 py-3 space-y-1.5">
         {shortcuts.map((item) => (
-          <Button key={item.href} variant="ghost" className="w-full justify-start" asChild>
+          <Button
+            key={item.href}
+            variant="ghost"
+            className="w-full justify-start"
+            asChild
+          >
             <Link href={item.href}>{item.label}</Link>
           </Button>
         ))}
       </div>
     </div>
-  )
+  );
 }
-

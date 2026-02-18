@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useCallback } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useEffect, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Hammer,
@@ -10,26 +10,29 @@ import {
   CheckCircle2,
   User,
   GitPullRequest,
-} from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { PhaseInstructionsPanel, DoneCriterion } from "./PhaseInstructionsPanel"
-import { SimpleFeedbackArrow } from "./FeedbackLoopArrow"
-import { cn } from "@/lib/utils"
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  PhaseInstructionsPanel,
+  DoneCriterion,
+} from "./PhaseInstructionsPanel";
+import { SimpleFeedbackArrow } from "./FeedbackLoopArrow";
+import { cn } from "@/lib/utils";
 
 // Phase data from the actual codebase
 interface JourneyPhase {
-  id: string
-  phaseId: string
-  boardColumn: string
-  name: string
-  icon: React.ReactNode
-  duration: number // seconds to display this phase
-  agentRole: string
-  phaseInstructions: string[]
-  doneCriteria: DoneCriterion[]
-  canLoopBackTo?: string[]
-  artifacts: { type: string; label: string; status: string }[]
+  id: string;
+  phaseId: string;
+  boardColumn: string;
+  name: string;
+  icon: React.ReactNode;
+  duration: number; // seconds to display this phase
+  agentRole: string;
+  phaseInstructions: string[];
+  doneCriteria: DoneCriterion[];
+  canLoopBackTo?: string[];
+  artifacts: { type: string; label: string; status: string }[];
 }
 
 const journeyPhases: JourneyPhase[] = [
@@ -48,8 +51,16 @@ const journeyPhases: JourneyPhase[] = [
       "Create implementation tasks",
     ],
     doneCriteria: [
-      { label: "Requirements extracted", completed: false, animationDelay: 1000 },
-      { label: "Components identified", completed: false, animationDelay: 2500 },
+      {
+        label: "Requirements extracted",
+        completed: false,
+        animationDelay: 1000,
+      },
+      {
+        label: "Components identified",
+        completed: false,
+        animationDelay: 2500,
+      },
       { label: "Tasks created", completed: false, animationDelay: 4000 },
     ],
     artifacts: [
@@ -99,8 +110,16 @@ const journeyPhases: JourneyPhase[] = [
       "If FAIL → spawn fix task",
     ],
     doneCriteria: [
-      { label: "Integration tests run", completed: false, animationDelay: 1500 },
-      { label: "Requirements validated", completed: false, animationDelay: 3000 },
+      {
+        label: "Integration tests run",
+        completed: false,
+        animationDelay: 1500,
+      },
+      {
+        label: "Requirements validated",
+        completed: false,
+        animationDelay: 3000,
+      },
       { label: "All tests passing", completed: false, animationDelay: 5000 },
     ],
     canLoopBackTo: ["implementation"],
@@ -121,7 +140,11 @@ const journeyPhases: JourneyPhase[] = [
       "Enable monitoring",
     ],
     doneCriteria: [
-      { label: "Deployed successfully", completed: false, animationDelay: 1500 },
+      {
+        label: "Deployed successfully",
+        completed: false,
+        animationDelay: 1500,
+      },
       { label: "Health check passed", completed: false, animationDelay: 2500 },
       { label: "Monitoring enabled", completed: false, animationDelay: 3500 },
     ],
@@ -141,15 +164,15 @@ const journeyPhases: JourneyPhase[] = [
     ],
     artifacts: [],
   },
-]
+];
 
 interface TicketJourneyProps {
-  autoPlay?: boolean
-  speed?: "slow" | "normal" | "fast"
-  showPhaseInstructions?: boolean
-  showDoneCriteria?: boolean
-  showFeedbackLoops?: boolean
-  className?: string
+  autoPlay?: boolean;
+  speed?: "slow" | "normal" | "fast";
+  showPhaseInstructions?: boolean;
+  showDoneCriteria?: boolean;
+  showFeedbackLoops?: boolean;
+  className?: string;
 }
 
 export function TicketJourney({
@@ -159,51 +182,55 @@ export function TicketJourney({
   showFeedbackLoops = true,
   className,
 }: TicketJourneyProps) {
-  const [currentPhaseIndex, setCurrentPhaseIndex] = useState(0)
-  const [phaseProgress, setPhaseProgress] = useState(0)
-  const [completedCriteria, setCompletedCriteria] = useState<Set<string>>(new Set())
-  const [showFeedbackLoop, setShowFeedbackLoop] = useState(false)
-  const [elapsedTime, setElapsedTime] = useState(0)
-  const [isComplete, setIsComplete] = useState(false)
+  const [currentPhaseIndex, setCurrentPhaseIndex] = useState(0);
+  const [phaseProgress, setPhaseProgress] = useState(0);
+  const [completedCriteria, setCompletedCriteria] = useState<Set<string>>(
+    new Set(),
+  );
+  const [showFeedbackLoop, setShowFeedbackLoop] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [isComplete, setIsComplete] = useState(false);
 
-  const speedMultiplier = speed === "slow" ? 1.5 : speed === "fast" ? 0.5 : 1
+  const speedMultiplier = speed === "slow" ? 1.5 : speed === "fast" ? 0.5 : 1;
 
-  const currentPhase = journeyPhases[currentPhaseIndex]
+  const currentPhase = journeyPhases[currentPhaseIndex];
 
   // Reset animation
   const resetAnimation = useCallback(() => {
-    setCurrentPhaseIndex(0)
-    setPhaseProgress(0)
-    setCompletedCriteria(new Set())
-    setShowFeedbackLoop(false)
-    setElapsedTime(0)
-    setIsComplete(false)
-  }, [])
+    setCurrentPhaseIndex(0);
+    setPhaseProgress(0);
+    setCompletedCriteria(new Set());
+    setShowFeedbackLoop(false);
+    setElapsedTime(0);
+    setIsComplete(false);
+  }, []);
 
   // Progress through phases
   useEffect(() => {
-    if (!autoPlay) return
+    if (!autoPlay) return;
 
-    const phaseDuration = currentPhase.duration * 1000 * speedMultiplier
-    const progressInterval = 50
+    const phaseDuration = currentPhase.duration * 1000 * speedMultiplier;
+    const progressInterval = 50;
 
     const timer = setInterval(() => {
       setPhaseProgress((prev) => {
-        const newProgress = prev + (progressInterval / phaseDuration) * 100
+        const newProgress = prev + (progressInterval / phaseDuration) * 100;
 
         // Update elapsed time
-        setElapsedTime((prevTime) => prevTime + progressInterval)
+        setElapsedTime((prevTime) => prevTime + progressInterval);
 
         // Check for done criteria completion
         currentPhase.doneCriteria.forEach((criterion, i) => {
-          const criterionTime = criterion.animationDelay * speedMultiplier
+          const criterionTime = criterion.animationDelay * speedMultiplier;
           if (
             (newProgress / 100) * phaseDuration >= criterionTime &&
             !completedCriteria.has(`${currentPhase.id}-${i}`)
           ) {
-            setCompletedCriteria((prev) => new Set(prev).add(`${currentPhase.id}-${i}`))
+            setCompletedCriteria((prev) =>
+              new Set(prev).add(`${currentPhase.id}-${i}`),
+            );
           }
-        })
+        });
 
         // Show feedback loop in testing phase at ~60%
         if (
@@ -212,26 +239,26 @@ export function TicketJourney({
           newProgress < 50 &&
           showFeedbackLoops
         ) {
-          setShowFeedbackLoop(true)
-          setTimeout(() => setShowFeedbackLoop(false), 2000)
+          setShowFeedbackLoop(true);
+          setTimeout(() => setShowFeedbackLoop(false), 2000);
         }
 
         if (newProgress >= 100) {
           // Move to next phase or restart
           if (currentPhaseIndex < journeyPhases.length - 1) {
-            setCurrentPhaseIndex((prev) => prev + 1)
-            return 0
+            setCurrentPhaseIndex((prev) => prev + 1);
+            return 0;
           } else {
-            setIsComplete(true)
-            setTimeout(resetAnimation, 3000)
-            return 100
+            setIsComplete(true);
+            setTimeout(resetAnimation, 3000);
+            return 100;
           }
         }
-        return newProgress
-      })
-    }, progressInterval)
+        return newProgress;
+      });
+    }, progressInterval);
 
-    return () => clearInterval(timer)
+    return () => clearInterval(timer);
   }, [
     autoPlay,
     currentPhase,
@@ -240,14 +267,14 @@ export function TicketJourney({
     showFeedbackLoops,
     completedCriteria,
     resetAnimation,
-  ])
+  ]);
 
   const formatTime = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`
-  }
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
 
   return (
     <div className={cn("w-full", className)}>
@@ -263,11 +290,15 @@ export function TicketJourney({
               <GitPullRequest className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <div className="font-semibold text-foreground">Add user authentication</div>
+              <div className="font-semibold text-foreground">
+                Add user authentication
+              </div>
               <div className="text-xs text-muted-foreground">FEAT-147</div>
             </div>
           </div>
-          <div className="font-mono text-sm text-success">{formatTime(elapsedTime)}</div>
+          <div className="font-mono text-sm text-success">
+            {formatTime(elapsedTime)}
+          </div>
         </div>
       </motion.div>
 
@@ -290,9 +321,9 @@ export function TicketJourney({
         {/* Phase Nodes */}
         <div className="relative flex justify-between">
           {journeyPhases.map((phase, index) => {
-            const isActive = index === currentPhaseIndex
-            const isComplete = index < currentPhaseIndex
-            const isPending = index > currentPhaseIndex
+            const isActive = index === currentPhaseIndex;
+            const isComplete = index < currentPhaseIndex;
+            const isPending = index > currentPhaseIndex;
 
             return (
               <div key={phase.id} className="flex flex-col items-center">
@@ -302,7 +333,7 @@ export function TicketJourney({
                     "relative z-10 flex h-16 w-16 items-center justify-center rounded-xl border-2 bg-background transition-all duration-300",
                     isComplete && "border-primary",
                     isActive && "border-primary",
-                    isPending && "border-border"
+                    isPending && "border-border",
                   )}
                   animate={isActive ? { scale: [1, 1.05, 1] } : {}}
                   transition={{
@@ -316,7 +347,7 @@ export function TicketJourney({
                       "transition-colors duration-300",
                       isComplete && "text-primary",
                       isActive && "text-primary",
-                      isPending && "text-muted-foreground"
+                      isPending && "text-muted-foreground",
                     )}
                   >
                     {phase.icon}
@@ -333,7 +364,11 @@ export function TicketJourney({
                       <motion.div
                         className="absolute inset-0 rounded-xl border-2 border-primary"
                         animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
-                        transition={{ duration: 1.5, repeat: Infinity, delay: 0.5 }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: Infinity,
+                          delay: 0.5,
+                        }}
                       />
                     </>
                   )}
@@ -344,7 +379,11 @@ export function TicketJourney({
                       className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary"
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 25,
+                      }}
                     >
                       <CheckCircle2 className="h-3 w-3 text-primary-foreground" />
                     </motion.div>
@@ -358,7 +397,7 @@ export function TicketJourney({
                       "text-sm font-medium transition-colors duration-300",
                       isActive && "text-primary",
                       isComplete && "text-primary",
-                      isPending && "text-muted-foreground"
+                      isPending && "text-muted-foreground",
                     )}
                   >
                     {phase.boardColumn}
@@ -379,10 +418,13 @@ export function TicketJourney({
 
                 {/* Feedback loop indicator */}
                 {phase.id === "testing" && showFeedbackLoop && (
-                  <SimpleFeedbackArrow show={showFeedbackLoop} className="absolute -left-8 top-8" />
+                  <SimpleFeedbackArrow
+                    show={showFeedbackLoop}
+                    className="absolute -left-8 top-8"
+                  />
                 )}
               </div>
-            )
+            );
           })}
         </div>
       </div>
@@ -430,7 +472,9 @@ export function TicketJourney({
             </div>
             <div className="grid grid-cols-4 gap-4 text-center">
               <div>
-                <div className="text-xl font-bold text-foreground">{formatTime(elapsedTime)}</div>
+                <div className="text-xl font-bold text-foreground">
+                  {formatTime(elapsedTime)}
+                </div>
                 <div className="text-xs text-muted-foreground">Total Time</div>
               </div>
               <div>
@@ -450,5 +494,5 @@ export function TicketJourney({
         )}
       </AnimatePresence>
     </div>
-  )
+  );
 }

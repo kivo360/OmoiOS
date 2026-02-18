@@ -1,15 +1,15 @@
-import { AgentStatus } from "@/components/custom"
+import { AgentStatus } from "@/components/custom";
 
 export interface MockAgent {
-  id: string
-  taskName: string
-  status: AgentStatus
-  timeAgo: string
-  additions?: number
-  deletions?: number
-  repoName?: string
-  createdAt: Date
-  projectId?: string
+  id: string;
+  taskName: string;
+  status: AgentStatus;
+  timeAgo: string;
+  additions?: number;
+  deletions?: number;
+  repoName?: string;
+  createdAt: Date;
+  projectId?: string;
 }
 
 export const mockAgents: MockAgent[] = [
@@ -88,16 +88,16 @@ export const mockAgents: MockAgent[] = [
     createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
     projectId: "proj-002",
   },
-]
+];
 
 export function getAgentById(id: string): MockAgent | undefined {
-  return mockAgents.find((agent) => agent.id === id)
+  return mockAgents.find((agent) => agent.id === id);
 }
 
 export function getAgentsByStatus(status: AgentStatus): MockAgent[] {
-  return mockAgents.filter((agent) => agent.status === status)
+  return mockAgents.filter((agent) => agent.status === status);
 }
 
 export function getAgentsByProject(projectId: string): MockAgent[] {
-  return mockAgents.filter((agent) => agent.projectId === projectId)
+  return mockAgents.filter((agent) => agent.projectId === projectId);
 }

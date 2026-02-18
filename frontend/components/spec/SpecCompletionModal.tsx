@@ -1,51 +1,58 @@
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { CheckCircle, ExternalLink, Star, GitPullRequest } from "lucide-react"
-import { ShareButtons } from "./ShareButtons"
-import { api } from "@/lib/api/client"
-import type { Spec } from "@/lib/api/specs"
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { CheckCircle, ExternalLink, Star, GitPullRequest } from "lucide-react";
+import { ShareButtons } from "./ShareButtons";
+import { api } from "@/lib/api/client";
+import type { Spec } from "@/lib/api/specs";
 
 interface ShareResponse {
-  share_url: string
-  share_token: string
+  share_url: string;
+  share_token: string;
 }
 
 interface SpecCompletionModalProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  spec: Spec
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  spec: Spec;
 }
 
-export function SpecCompletionModal({ open, onOpenChange, spec }: SpecCompletionModalProps) {
-  const [shareUrl, setShareUrl] = useState<string | null>(null)
-  const [isSharing, setIsSharing] = useState(false)
+export function SpecCompletionModal({
+  open,
+  onOpenChange,
+  spec,
+}: SpecCompletionModalProps) {
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
 
-  const requirementsCount = spec.requirements?.length ?? 0
-  const tasksCompleted = spec.tasks?.filter((t) => t.status === "completed").length ?? 0
-  const totalTasks = spec.tasks?.length ?? 0
-  const testCoverage = spec.execution?.test_coverage ?? spec.test_coverage ?? 0
+  const requirementsCount = spec.requirements?.length ?? 0;
+  const tasksCompleted =
+    spec.tasks?.filter((t) => t.status === "completed").length ?? 0;
+  const totalTasks = spec.tasks?.length ?? 0;
+  const testCoverage = spec.execution?.test_coverage ?? spec.test_coverage ?? 0;
 
   const handleEnableSharing = async () => {
-    if (shareUrl) return // Already generated
-    setIsSharing(true)
+    if (shareUrl) return; // Already generated
+    setIsSharing(true);
     try {
-      const result = await api.post<ShareResponse>(`/api/v1/public/specs/${spec.id}/share`)
-      setShareUrl(result.share_url)
+      const result = await api.post<ShareResponse>(
+        `/api/v1/public/specs/${spec.id}/share`,
+      );
+      setShareUrl(result.share_url);
     } catch {
       // Silently fail — user can retry
     } finally {
-      setIsSharing(false)
+      setIsSharing(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -55,9 +62,7 @@ export function SpecCompletionModal({ open, onOpenChange, spec }: SpecCompletion
             <CheckCircle className="h-5 w-5 text-green-500" />
             Spec Complete!
           </DialogTitle>
-          <DialogDescription>
-            {spec.title}
-          </DialogDescription>
+          <DialogDescription>{spec.title}</DialogDescription>
         </DialogHeader>
 
         {/* Stats */}
@@ -67,7 +72,9 @@ export function SpecCompletionModal({ open, onOpenChange, spec }: SpecCompletion
             <p className="text-xs text-muted-foreground">Requirements</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold">{tasksCompleted}/{totalTasks}</p>
+            <p className="text-2xl font-bold">
+              {tasksCompleted}/{totalTasks}
+            </p>
             <p className="text-xs text-muted-foreground">Tasks Done</p>
           </div>
           <div className="text-center">
@@ -136,5 +143,5 @@ export function SpecCompletionModal({ open, onOpenChange, spec }: SpecCompletion
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

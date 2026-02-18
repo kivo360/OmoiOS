@@ -1,14 +1,20 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,66 +34,79 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { ArrowLeft, Plus, Key, Copy, Trash2, Clock, AlertCircle, Loader2 } from "lucide-react"
-import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/hooks/useApiKeys"
+} from "@/components/ui/alert-dialog";
+import {
+  ArrowLeft,
+  Plus,
+  Key,
+  Copy,
+  Trash2,
+  Clock,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
+import {
+  useApiKeys,
+  useCreateApiKey,
+  useRevokeApiKey,
+} from "@/hooks/useApiKeys";
 
 export default function ApiKeysPage() {
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [newKeyName, setNewKeyName] = useState("")
-  const [showNewKey, setShowNewKey] = useState<string | null>(null)
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [showNewKey, setShowNewKey] = useState<string | null>(null);
 
-  const { data: apiKeys, isLoading, error } = useApiKeys()
-  const createMutation = useCreateApiKey()
-  const revokeMutation = useRevokeApiKey()
+  const { data: apiKeys, isLoading, error } = useApiKeys();
+  const createMutation = useCreateApiKey();
+  const revokeMutation = useRevokeApiKey();
 
   const handleCreateKey = async () => {
     try {
-      const result = await createMutation.mutateAsync({ name: newKeyName })
-      setShowNewKey(result.key)
-      setNewKeyName("")
-      setIsDialogOpen(false)
-      toast.success("API key created successfully!")
+      const result = await createMutation.mutateAsync({ name: newKeyName });
+      setShowNewKey(result.key);
+      setNewKeyName("");
+      setIsDialogOpen(false);
+      toast.success("API key created successfully!");
     } catch (err) {
-      toast.error("Failed to create API key")
+      toast.error("Failed to create API key");
     }
-  }
+  };
 
   const handleDeleteKey = async (keyId: string) => {
     try {
-      await revokeMutation.mutateAsync(keyId)
-      toast.success("API key revoked")
+      await revokeMutation.mutateAsync(keyId);
+      toast.success("API key revoked");
     } catch (err) {
-      toast.error("Failed to revoke API key")
+      toast.error("Failed to revoke API key");
     }
-  }
+  };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success("Copied to clipboard")
-  }
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  };
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return "Never"
-    return new Date(dateStr).toLocaleDateString("en-US", { 
-      month: "short", 
-      day: "numeric", 
-      year: "numeric" 
-    })
-  }
+    if (!dateStr) return "Never";
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
 
   const formatTimeAgo = (dateStr: string | null) => {
-    if (!dateStr) return "Never"
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const minutes = Math.floor(diff / (1000 * 60))
-    if (minutes < 60) return `${minutes}m ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
+    if (!dateStr) return "Never";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / (1000 * 60));
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
 
   return (
     <div className="container mx-auto max-w-3xl p-6 space-y-6">
@@ -131,11 +150,13 @@ export default function ApiKeysPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button 
-                onClick={handleCreateKey} 
+              <Button
+                onClick={handleCreateKey}
                 disabled={!newKeyName || createMutation.isPending}
               >
-                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {createMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 {createMutation.isPending ? "Creating..." : "Create Key"}
               </Button>
             </DialogFooter>
@@ -154,7 +175,11 @@ export default function ApiKeysPage() {
                   Copy this key now. You won&apos;t be able to see it again.
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => copyToClipboard(showNewKey)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(showNewKey)}
+              >
                 <Copy className="mr-2 h-4 w-4" /> Copy
               </Button>
             </div>
@@ -197,7 +222,9 @@ export default function ApiKeysPage() {
         <Card className="border-destructive/50">
           <CardContent className="p-6 text-center">
             <AlertCircle className="mx-auto h-12 w-12 text-destructive/50" />
-            <h3 className="mt-4 text-lg font-semibold">Failed to load API keys</h3>
+            <h3 className="mt-4 text-lg font-semibold">
+              Failed to load API keys
+            </h3>
             <p className="mt-2 text-sm text-muted-foreground">
               Please try refreshing the page.
             </p>
@@ -219,18 +246,22 @@ export default function ApiKeysPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="font-medium">{key.name}</p>
-                        <Badge variant={key.is_active ? "default" : "secondary"}>
+                        <Badge
+                          variant={key.is_active ? "default" : "secondary"}
+                        >
                           {key.is_active ? "active" : "inactive"}
                         </Badge>
                       </div>
-                      <code className="text-sm text-muted-foreground">{key.key_prefix}****</code>
+                      <code className="text-sm text-muted-foreground">
+                        {key.key_prefix}****
+                      </code>
                     </div>
                   </div>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         className="text-destructive"
                         disabled={revokeMutation.isPending}
                       >
@@ -241,7 +272,8 @@ export default function ApiKeysPage() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Revoke API Key</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Are you sure you want to revoke &quot;{key.name}&quot;? This action cannot be undone.
+                          Are you sure you want to revoke &quot;{key.name}
+                          &quot;? This action cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -282,5 +314,5 @@ export default function ApiKeysPage() {
         </Card>
       )}
     </div>
-  )
+  );
 }

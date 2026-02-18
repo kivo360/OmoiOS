@@ -5,26 +5,26 @@
  * This links anonymous sessions to identified users.
  */
 
-import { posthog, isPostHogReady } from './posthog'
-import type { User } from '@/lib/api/types'
+import { posthog, isPostHogReady } from "./posthog";
+import type { User } from "@/lib/api/types";
 
 /**
  * User properties that can be set in PostHog
  */
 export interface UserProperties {
-  email?: string
-  name?: string
-  full_name?: string
-  plan_type?: 'free' | 'pro' | 'team' | 'enterprise' | 'lifetime'
-  organization_id?: string
-  organization_name?: string
-  github_connected?: boolean
-  github_username?: string
-  is_verified?: boolean
-  created_at?: string
-  onboarding_completed?: boolean
-  subscription_tier?: string
-  [key: string]: unknown
+  email?: string;
+  name?: string;
+  full_name?: string;
+  plan_type?: "free" | "pro" | "team" | "enterprise" | "lifetime";
+  organization_id?: string;
+  organization_name?: string;
+  github_connected?: boolean;
+  github_username?: string;
+  is_verified?: boolean;
+  created_at?: string;
+  onboarding_completed?: boolean;
+  subscription_tier?: string;
+  [key: string]: unknown;
 }
 
 /**
@@ -45,22 +45,22 @@ export interface UserProperties {
  */
 export function identify(userId: string, properties?: UserProperties): void {
   if (!isPostHogReady()) {
-    console.log('[Analytics] Identify called but PostHog not ready:', userId)
-    return
+    console.log("[Analytics] Identify called but PostHog not ready:", userId);
+    return;
   }
 
   // Remove undefined values from properties
   const cleanProperties = properties
     ? Object.fromEntries(
-        Object.entries(properties).filter(([, value]) => value !== undefined)
+        Object.entries(properties).filter(([, value]) => value !== undefined),
       )
-    : undefined
+    : undefined;
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics] Identify user:', userId, cleanProperties)
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Analytics] Identify user:", userId, cleanProperties);
   }
 
-  posthog.identify(userId, cleanProperties)
+  posthog.identify(userId, cleanProperties);
 }
 
 /**
@@ -70,7 +70,10 @@ export function identify(userId: string, properties?: UserProperties): void {
  * @param user - User object from the API
  * @param additionalProperties - Extra properties to merge
  */
-export function identifyUser(user: User, additionalProperties?: UserProperties): void {
+export function identifyUser(
+  user: User,
+  additionalProperties?: UserProperties,
+): void {
   const properties: UserProperties = {
     email: user.email,
     name: user.full_name || undefined,
@@ -78,9 +81,9 @@ export function identifyUser(user: User, additionalProperties?: UserProperties):
     is_verified: user.is_verified,
     created_at: user.created_at,
     ...additionalProperties,
-  }
+  };
 
-  identify(user.id, properties)
+  identify(user.id, properties);
 }
 
 /**
@@ -88,13 +91,13 @@ export function identifyUser(user: User, additionalProperties?: UserProperties):
  * Call this on logout to clear user identity
  */
 export function resetUser(): void {
-  if (!isPostHogReady()) return
+  if (!isPostHogReady()) return;
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics] Reset user (logout)')
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Analytics] Reset user (logout)");
   }
 
-  posthog.reset()
+  posthog.reset();
 }
 
 /**
@@ -104,17 +107,17 @@ export function resetUser(): void {
  * @param properties - Properties to set/update
  */
 export function setUserProperties(properties: UserProperties): void {
-  if (!isPostHogReady()) return
+  if (!isPostHogReady()) return;
 
   const cleanProperties = Object.fromEntries(
-    Object.entries(properties).filter(([, value]) => value !== undefined)
-  )
+    Object.entries(properties).filter(([, value]) => value !== undefined),
+  );
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics] Set user properties:', cleanProperties)
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Analytics] Set user properties:", cleanProperties);
   }
 
-  posthog.setPersonProperties(cleanProperties)
+  posthog.setPersonProperties(cleanProperties);
 }
 
 /**
@@ -124,13 +127,13 @@ export function setUserProperties(properties: UserProperties): void {
  * @param properties - Properties to persist
  */
 export function setSuperProperties(properties: Record<string, unknown>): void {
-  if (!isPostHogReady()) return
+  if (!isPostHogReady()) return;
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics] Set super properties:', properties)
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Analytics] Set super properties:", properties);
   }
 
-  posthog.register(properties)
+  posthog.register(properties);
 }
 
 /**
@@ -139,11 +142,11 @@ export function setSuperProperties(properties: Record<string, unknown>): void {
  * @param propertyNames - Names of properties to remove
  */
 export function unsetSuperProperties(propertyNames: string[]): void {
-  if (!isPostHogReady()) return
+  if (!isPostHogReady()) return;
 
   propertyNames.forEach((name) => {
-    posthog.unregister(name)
-  })
+    posthog.unregister(name);
+  });
 }
 
 /**
@@ -153,13 +156,13 @@ export function unsetSuperProperties(propertyNames: string[]): void {
  * @param alias - The alias to create (typically the new user ID)
  */
 export function aliasUser(alias: string): void {
-  if (!isPostHogReady()) return
+  if (!isPostHogReady()) return;
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics] Alias user:', alias)
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Analytics] Alias user:", alias);
   }
 
-  posthog.alias(alias)
+  posthog.alias(alias);
 }
 
 /**
@@ -173,28 +176,28 @@ export function aliasUser(alias: string): void {
 export function setGroup(
   groupType: string,
   groupKey: string,
-  properties?: Record<string, unknown>
+  properties?: Record<string, unknown>,
 ): void {
-  if (!isPostHogReady()) return
+  if (!isPostHogReady()) return;
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics] Set group:', groupType, groupKey, properties)
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Analytics] Set group:", groupType, groupKey, properties);
   }
 
-  posthog.group(groupType, groupKey, properties)
+  posthog.group(groupType, groupKey, properties);
 }
 
 /**
  * Organization properties for group analytics
  */
 export interface OrganizationProperties {
-  name?: string
-  slug?: string
-  plan_type?: 'free' | 'pro' | 'team' | 'enterprise' | 'lifetime'
-  member_count?: number
-  created_at?: string
-  billing_email?: string
-  [key: string]: unknown
+  name?: string;
+  slug?: string;
+  plan_type?: "free" | "pro" | "team" | "enterprise" | "lifetime";
+  member_count?: number;
+  created_at?: string;
+  billing_email?: string;
+  [key: string]: unknown;
 }
 
 /**
@@ -206,20 +209,20 @@ export interface OrganizationProperties {
  */
 export function setOrganization(
   organizationId: string,
-  properties?: OrganizationProperties
+  properties?: OrganizationProperties,
 ): void {
-  setGroup('organization', organizationId, properties)
+  setGroup("organization", organizationId, properties);
 
   // Also set as a super property for easy filtering
   if (isPostHogReady()) {
     posthog.register({
       organization_id: organizationId,
       organization_name: properties?.name,
-    })
+    });
   }
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics] Set organization:', organizationId, properties)
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Analytics] Set organization:", organizationId, properties);
   }
 }
 
@@ -228,13 +231,13 @@ export function setOrganization(
  * Call when switching organizations or logging out
  */
 export function clearOrganization(): void {
-  if (!isPostHogReady()) return
+  if (!isPostHogReady()) return;
 
-  posthog.resetGroups()
-  posthog.unregister('organization_id')
-  posthog.unregister('organization_name')
+  posthog.resetGroups();
+  posthog.unregister("organization_id");
+  posthog.unregister("organization_name");
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics] Cleared organization context')
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Analytics] Cleared organization context");
   }
 }

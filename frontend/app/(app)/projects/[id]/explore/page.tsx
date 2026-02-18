@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import { use, useState, useEffect, useRef } from "react"
-import Link from "next/link"
-import { toast } from "sonner"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Skeleton } from "@/components/ui/skeleton"
+import { use, useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft,
   Search,
@@ -26,8 +26,8 @@ import {
   Loader2,
   Plus,
   Trash2,
-} from "lucide-react"
-import { useProject } from "@/hooks/useProjects"
+} from "lucide-react";
+import { useProject } from "@/hooks/useProjects";
 import {
   useConversations,
   useConversation,
@@ -36,62 +36,68 @@ import {
   useDeleteConversation,
   useProjectFiles,
   useSuggestions,
-} from "@/hooks/useExplore"
-import type { Message } from "@/lib/api/explore"
+} from "@/hooks/useExplore";
+import type { Message } from "@/lib/api/explore";
 
 interface ExplorePageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }
 
 export default function ExplorePage({ params }: ExplorePageProps) {
-  const { id } = use(params)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [query, setQuery] = useState("")
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
-  const [localMessages, setLocalMessages] = useState<Message[]>([])
+  const { id } = use(params);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
+  const [localMessages, setLocalMessages] = useState<Message[]>([]);
 
   // Fetch data from API
-  const { data: project, isLoading: projectLoading } = useProject(id)
-  const { data: conversationsData, isLoading: conversationsLoading } = useConversations(id)
-  const { data: conversationData } = useConversation(id, activeConversationId || undefined)
-  const { data: filesData, isLoading: filesLoading } = useProjectFiles(id)
-  const { data: suggestionsData } = useSuggestions(id)
+  const { data: project, isLoading: projectLoading } = useProject(id);
+  const { data: conversationsData, isLoading: conversationsLoading } =
+    useConversations(id);
+  const { data: conversationData } = useConversation(
+    id,
+    activeConversationId || undefined,
+  );
+  const { data: filesData, isLoading: filesLoading } = useProjectFiles(id);
+  const { data: suggestionsData } = useSuggestions(id);
 
   // Mutations
-  const createConversationMutation = useCreateConversation(id)
-  const sendMessageMutation = useSendMessage(id, activeConversationId || "")
-  const deleteConversationMutation = useDeleteConversation(id)
+  const createConversationMutation = useCreateConversation(id);
+  const sendMessageMutation = useSendMessage(id, activeConversationId || "");
+  const deleteConversationMutation = useDeleteConversation(id);
 
-  const conversations = conversationsData?.conversations || []
-  const files = filesData?.files || []
+  const conversations = conversationsData?.conversations || [];
+  const files = filesData?.files || [];
   const suggestions = suggestionsData?.suggestions || [
     "Explain the authentication flow",
     "Show me the database schema",
     "What tests are failing?",
-  ]
+  ];
 
   // Set active conversation when data loads
   useEffect(() => {
     if (conversations.length > 0 && !activeConversationId) {
-      setActiveConversationId(conversations[0].id)
+      setActiveConversationId(conversations[0].id);
     }
-  }, [conversations, activeConversationId])
+  }, [conversations, activeConversationId]);
 
   // Update local messages when conversation changes
   useEffect(() => {
     if (conversationData?.conversation) {
-      setLocalMessages(conversationData.conversation.messages)
+      setLocalMessages(conversationData.conversation.messages);
     }
-  }, [conversationData])
+  }, [conversationData]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [localMessages])
+  }, [localMessages]);
 
-  const isLoading = projectLoading
+  const isLoading = projectLoading;
 
   if (isLoading) {
     return (
@@ -105,7 +111,7 @@ export default function ExplorePage({ params }: ExplorePageProps) {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   if (!project) {
@@ -116,70 +122,70 @@ export default function ExplorePage({ params }: ExplorePageProps) {
           <Link href="/projects">Back to Projects</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!query.trim() || !activeConversationId) return
+    e.preventDefault();
+    if (!query.trim() || !activeConversationId) return;
 
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       role: "user",
       content: query,
       timestamp: new Date().toISOString(),
-    }
+    };
 
     // Optimistically add user message
-    setLocalMessages((prev) => [...prev, userMessage])
-    setQuery("")
+    setLocalMessages((prev) => [...prev, userMessage]);
+    setQuery("");
 
     try {
-      const response = await sendMessageMutation.mutateAsync(query)
+      const response = await sendMessageMutation.mutateAsync(query);
       // Replace temp message with real ones
       setLocalMessages((prev) => [
         ...prev.filter((m) => m.id !== userMessage.id),
         response.user_message,
         response.assistant_message,
-      ])
+      ]);
     } catch (error) {
-      toast.error("Failed to send message")
+      toast.error("Failed to send message");
       // Remove optimistic message on error
-      setLocalMessages((prev) => prev.filter((m) => m.id !== userMessage.id))
+      setLocalMessages((prev) => prev.filter((m) => m.id !== userMessage.id));
     }
-  }
+  };
 
   const handleNewConversation = async () => {
     try {
-      const result = await createConversationMutation.mutateAsync()
-      setActiveConversationId(result.conversation.id)
-      setLocalMessages(result.conversation.messages)
-      toast.success("New conversation created")
+      const result = await createConversationMutation.mutateAsync();
+      setActiveConversationId(result.conversation.id);
+      setLocalMessages(result.conversation.messages);
+      toast.success("New conversation created");
     } catch (error) {
-      toast.error("Failed to create conversation")
+      toast.error("Failed to create conversation");
     }
-  }
+  };
 
   const handleDeleteConversation = async (convId: string) => {
     try {
-      await deleteConversationMutation.mutateAsync(convId)
+      await deleteConversationMutation.mutateAsync(convId);
       if (activeConversationId === convId) {
-        setActiveConversationId(null)
-        setLocalMessages([])
+        setActiveConversationId(null);
+        setLocalMessages([]);
       }
-      toast.success("Conversation deleted")
+      toast.success("Conversation deleted");
     } catch (error) {
-      toast.error("Failed to delete conversation")
+      toast.error("Failed to delete conversation");
     }
-  }
+  };
 
   const handleSuggestionClick = (suggestion: string) => {
-    setQuery(suggestion)
-  }
+    setQuery(suggestion);
+  };
 
   const handleConversationClick = (convId: string) => {
-    setActiveConversationId(convId)
-  }
+    setActiveConversationId(convId);
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -240,16 +246,32 @@ export default function ExplorePage({ params }: ExplorePageProps) {
                     >
                       <div
                         className={`text-sm whitespace-pre-wrap ${
-                          message.role === "assistant" ? "prose prose-sm dark:prose-invert max-w-none" : ""
+                          message.role === "assistant"
+                            ? "prose prose-sm dark:prose-invert max-w-none"
+                            : ""
                         }`}
                         dangerouslySetInnerHTML={{
-                          __html: message.content.replace(/\n/g, "<br/>").replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/##\s(.+)/g, "<h4 class='font-semibold mt-2 mb-1'>$1</h4>").replace(/###\s(.+)/g, "<h5 class='font-medium mt-2 mb-1'>$1</h5>").replace(/-\s(.+)/g, "• $1"),
+                          __html: message.content
+                            .replace(/\n/g, "<br/>")
+                            .replace(/`([^`]+)`/g, "<code>$1</code>")
+                            .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+                            .replace(
+                              /##\s(.+)/g,
+                              "<h4 class='font-semibold mt-2 mb-1'>$1</h4>",
+                            )
+                            .replace(
+                              /###\s(.+)/g,
+                              "<h5 class='font-medium mt-2 mb-1'>$1</h5>",
+                            )
+                            .replace(/-\s(.+)/g, "• $1"),
                         }}
                       />
                     </div>
                     {message.role === "user" && (
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary">
-                        <span className="text-xs text-primary-foreground font-medium">U</span>
+                        <span className="text-xs text-primary-foreground font-medium">
+                          U
+                        </span>
                       </div>
                     )}
                   </div>
@@ -272,9 +294,18 @@ export default function ExplorePage({ params }: ExplorePageProps) {
                   placeholder="Ask about the codebase..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  disabled={sendMessageMutation.isPending || !activeConversationId}
+                  disabled={
+                    sendMessageMutation.isPending || !activeConversationId
+                  }
                 />
-                <Button type="submit" disabled={sendMessageMutation.isPending || !query.trim() || !activeConversationId}>
+                <Button
+                  type="submit"
+                  disabled={
+                    sendMessageMutation.isPending ||
+                    !query.trim() ||
+                    !activeConversationId
+                  }
+                >
                   <Send className="h-4 w-4" />
                 </Button>
               </form>
@@ -331,13 +362,17 @@ export default function ExplorePage({ params }: ExplorePageProps) {
                   <div
                     key={conv.id}
                     className={`w-full text-left rounded-lg border p-3 hover:bg-accent transition-colors cursor-pointer ${
-                      activeConversationId === conv.id ? "bg-accent border-primary" : ""
+                      activeConversationId === conv.id
+                        ? "bg-accent border-primary"
+                        : ""
                     }`}
                     onClick={() => handleConversationClick(conv.id)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{conv.title}</p>
+                        <p className="text-sm font-medium truncate">
+                          {conv.title}
+                        </p>
                         <p className="text-xs text-muted-foreground truncate mt-1">
                           {conv.last_message}
                         </p>
@@ -347,8 +382,8 @@ export default function ExplorePage({ params }: ExplorePageProps) {
                         size="sm"
                         className="h-6 w-6 p-0 shrink-0"
                         onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteConversation(conv.id)
+                          e.stopPropagation();
+                          handleDeleteConversation(conv.id);
                         }}
                       >
                         <Trash2 className="h-3 w-3" />
@@ -385,11 +420,13 @@ export default function ExplorePage({ params }: ExplorePageProps) {
                     key={file.path}
                     className="w-full text-left flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent transition-colors text-sm"
                     onClick={() => {
-                      setQuery(`Explain the code in ${file.path}`)
+                      setQuery(`Explain the code in ${file.path}`);
                     }}
                   >
                     <FileCode className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="truncate font-mono text-xs">{file.path}</span>
+                    <span className="truncate font-mono text-xs">
+                      {file.path}
+                    </span>
                     <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
                   </button>
                 ))
@@ -435,5 +472,5 @@ export default function ExplorePage({ params }: ExplorePageProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }

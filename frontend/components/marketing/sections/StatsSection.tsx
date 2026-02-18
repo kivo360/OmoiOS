@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useRef } from "react"
-import { motion, useInView } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { useEffect, useState, useRef } from "react";
+import { motion, useInView } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 const stats = [
   {
@@ -29,10 +29,10 @@ const stats = [
     label: "babysitting required",
     description: "problems fix themselves",
   },
-]
+];
 
 interface StatsSectionProps {
-  className?: string
+  className?: string;
 }
 
 export function StatsSection({ className }: StatsSectionProps) {
@@ -70,15 +70,18 @@ export function StatsSection({ className }: StatsSectionProps) {
                 suffix={stat.suffix}
                 className="text-4xl font-bold text-landing-accent md:text-5xl"
               />
-              <div className="mt-2 font-medium text-landing-text">{stat.label}</div>
-              <div className="text-sm text-landing-text-muted">{stat.description}</div>
+              <div className="mt-2 font-medium text-landing-text">
+                {stat.label}
+              </div>
+              <div className="text-sm text-landing-text-muted">
+                {stat.description}
+              </div>
             </motion.div>
           ))}
         </div>
-
       </div>
     </section>
-  )
+  );
 }
 
 // Animated Counter Component
@@ -87,40 +90,40 @@ function AnimatedCounter({
   suffix,
   className,
 }: {
-  value: number
-  suffix: string
-  className?: string
+  value: number;
+  suffix: string;
+  className?: string;
 }) {
-  const [count, setCount] = useState(0)
-  const ref = useRef<HTMLSpanElement>(null)
-  const isInView = useInView(ref, { once: true })
+  const [count, setCount] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const isInView = useInView(ref, { once: true });
 
   useEffect(() => {
-    if (!isInView) return
+    if (!isInView) return;
 
-    const duration = 2000 // ms
-    const steps = 60
-    const stepDuration = duration / steps
-    const increment = value / steps
+    const duration = 2000; // ms
+    const steps = 60;
+    const stepDuration = duration / steps;
+    const increment = value / steps;
 
-    let current = 0
+    let current = 0;
     const timer = setInterval(() => {
-      current += increment
+      current += increment;
       if (current >= value) {
-        setCount(value)
-        clearInterval(timer)
+        setCount(value);
+        clearInterval(timer);
       } else {
-        setCount(Math.floor(current))
+        setCount(Math.floor(current));
       }
-    }, stepDuration)
+    }, stepDuration);
 
-    return () => clearInterval(timer)
-  }, [isInView, value])
+    return () => clearInterval(timer);
+  }, [isInView, value]);
 
   return (
     <span ref={ref} className={className}>
       {count}
       {suffix}
     </span>
-  )
+  );
 }

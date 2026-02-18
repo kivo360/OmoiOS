@@ -1,13 +1,19 @@
-"use client"
+"use client";
 
-import { use } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { use } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeft,
   Settings,
@@ -19,28 +25,36 @@ import {
   AlertCircle,
   Bot,
   CreditCard,
-} from "lucide-react"
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useOrganization, useMembers, useRoles } from "@/hooks/useOrganizations"
-import { useProjects } from "@/hooks/useProjects"
+} from "@/components/ui/dropdown-menu";
+import {
+  useOrganization,
+  useMembers,
+  useRoles,
+} from "@/hooks/useOrganizations";
+import { useProjects } from "@/hooks/useProjects";
 
 interface OrganizationPageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }
 
 export default function OrganizationPage({ params }: OrganizationPageProps) {
-  const { id } = use(params)
-  
+  const { id } = use(params);
+
   // Fetch organization data from API
-  const { data: org, isLoading: orgLoading, error: orgError } = useOrganization(id)
-  const { data: members, isLoading: membersLoading } = useMembers(id)
-  const { data: projects } = useProjects()
-  
+  const {
+    data: org,
+    isLoading: orgLoading,
+    error: orgError,
+  } = useOrganization(id);
+  const { data: members, isLoading: membersLoading } = useMembers(id);
+  const { data: projects } = useProjects();
+
   // Loading state
   if (orgLoading) {
     return (
@@ -63,7 +77,7 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -79,7 +93,7 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
           <Link href="/organizations">Back to Organizations</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   if (!org) {
@@ -90,7 +104,7 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
           <Link href="/organizations">Back to Organizations</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -120,7 +134,9 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
             </div>
             <p className="text-muted-foreground">@{org.slug}</p>
             {org.description && (
-              <p className="mt-1 text-sm text-muted-foreground">{org.description}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {org.description}
+              </p>
             )}
           </div>
         </div>
@@ -160,7 +176,9 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
                 <Bot className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{org.max_concurrent_agents}</p>
+                <p className="text-2xl font-bold">
+                  {org.max_concurrent_agents}
+                </p>
                 <p className="text-sm text-muted-foreground">Max Agents</p>
               </div>
             </div>
@@ -173,7 +191,9 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
                 <Building2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{org.max_agent_runtime_hours}h</p>
+                <p className="text-2xl font-bold">
+                  {org.max_agent_runtime_hours}h
+                </p>
                 <p className="text-sm text-muted-foreground">Max Runtime</p>
               </div>
             </div>
@@ -184,8 +204,12 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
       {/* Tabs */}
       <Tabs defaultValue="members" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="members">Members ({members?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="projects">Projects ({projects?.projects?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="members">
+            Members ({members?.length ?? 0})
+          </TabsTrigger>
+          <TabsTrigger value="projects">
+            Projects ({projects?.projects?.length ?? 0})
+          </TabsTrigger>
           <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
@@ -228,7 +252,11 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={member.role_name === "owner" ? "default" : "secondary"}>
+                      <Badge
+                        variant={
+                          member.role_name === "owner" ? "default" : "secondary"
+                        }
+                      >
                         {member.role_name}
                       </Badge>
                       <DropdownMenu>
@@ -270,7 +298,10 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
                 <Card key={project.id}>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base">
-                      <Link href={`/projects/${project.id}`} className="hover:underline">
+                      <Link
+                        href={`/projects/${project.id}`}
+                        className="hover:underline"
+                      >
                         {project.name}
                       </Link>
                     </CardTitle>
@@ -283,7 +314,11 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
                   <CardContent>
                     <div className="flex items-center justify-between text-sm text-muted-foreground">
                       <span>Phase: {project.default_phase_id}</span>
-                      <Badge variant={project.status === "active" ? "default" : "secondary"}>
+                      <Badge
+                        variant={
+                          project.status === "active" ? "default" : "secondary"
+                        }
+                      >
                         {project.status}
                       </Badge>
                     </div>
@@ -300,24 +335,38 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Organization Details</CardTitle>
-              <CardDescription>Configuration and billing information</CardDescription>
+              <CardDescription>
+                Configuration and billing information
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Billing Email</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Billing Email
+                  </p>
                   <p className="text-sm">{org.billing_email || "Not set"}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Created</p>
-                  <p className="text-sm">{new Date(org.created_at).toLocaleDateString()}</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Created
+                  </p>
+                  <p className="text-sm">
+                    {new Date(org.created_at).toLocaleDateString()}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
-                  <p className="text-sm">{new Date(org.updated_at).toLocaleDateString()}</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Last Updated
+                  </p>
+                  <p className="text-sm">
+                    {new Date(org.updated_at).toLocaleDateString()}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Owner ID</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Owner ID
+                  </p>
                   <p className="text-sm font-mono">{org.owner_id}</p>
                 </div>
               </div>
@@ -326,5 +375,5 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

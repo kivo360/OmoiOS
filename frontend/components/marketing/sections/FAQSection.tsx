@@ -1,13 +1,13 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
+import { motion } from "framer-motion";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/accordion";
+import { cn } from "@/lib/utils";
 
 const faqs = [
   {
@@ -50,11 +50,11 @@ const faqs = [
     answer:
       "No. That's the point. You approve the plan, then agents work autonomously—often overnight—until the work is complete. You wake up to a pull request ready for review.",
   },
-]
+];
 
 interface FAQSectionProps {
-  className?: string
-  id?: string
+  className?: string;
+  id?: string;
 }
 
 export function FAQSection({ className, id }: FAQSectionProps) {
@@ -122,5 +122,5 @@ export function FAQSection({ className, id }: FAQSectionProps) {
         </motion.div>
       </div>
     </section>
-  )
+  );
 }

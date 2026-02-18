@@ -2,55 +2,58 @@
  * Tasks API functions
  */
 
-import { apiRequest } from "./client"
-import type {
-  Task,
-  TaskListItem,
-  TaskDependencies,
-} from "./types"
+import { apiRequest } from "./client";
+import type { Task, TaskListItem, TaskDependencies } from "./types";
 
 export interface ListTasksParams {
-  status?: string
-  phase_id?: string
-  has_sandbox?: boolean
-  limit?: number
+  status?: string;
+  phase_id?: string;
+  has_sandbox?: boolean;
+  limit?: number;
 }
 
 /**
  * List tasks with optional filtering
  */
-export async function listTasks(params?: ListTasksParams): Promise<TaskListItem[]> {
-  const searchParams = new URLSearchParams()
-  if (params?.status) searchParams.set("status", params.status)
-  if (params?.phase_id) searchParams.set("phase_id", params.phase_id)
-  if (params?.has_sandbox !== undefined) searchParams.set("has_sandbox", String(params.has_sandbox))
-  if (params?.limit) searchParams.set("limit", String(params.limit))
+export async function listTasks(
+  params?: ListTasksParams,
+): Promise<TaskListItem[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.status) searchParams.set("status", params.status);
+  if (params?.phase_id) searchParams.set("phase_id", params.phase_id);
+  if (params?.has_sandbox !== undefined)
+    searchParams.set("has_sandbox", String(params.has_sandbox));
+  if (params?.limit) searchParams.set("limit", String(params.limit));
 
-  const query = searchParams.toString()
-  const url = query ? `/api/v1/tasks?${query}` : "/api/v1/tasks"
+  const query = searchParams.toString();
+  const url = query ? `/api/v1/tasks?${query}` : "/api/v1/tasks";
 
-  return apiRequest<TaskListItem[]>(url)
+  return apiRequest<TaskListItem[]>(url);
 }
 
 /**
  * List tasks that have sandboxes (convenience function)
  */
-export async function listSandboxTasks(params?: Omit<ListTasksParams, "has_sandbox">): Promise<TaskListItem[]> {
-  return listTasks({ ...params, has_sandbox: true })
+export async function listSandboxTasks(
+  params?: Omit<ListTasksParams, "has_sandbox">,
+): Promise<TaskListItem[]> {
+  return listTasks({ ...params, has_sandbox: true });
 }
 
 /**
  * Get a specific task by ID
  */
 export async function getTask(taskId: string): Promise<Task> {
-  return apiRequest<Task>(`/api/v1/tasks/${taskId}`)
+  return apiRequest<Task>(`/api/v1/tasks/${taskId}`);
 }
 
 /**
  * Get task dependencies information
  */
-export async function getTaskDependencies(taskId: string): Promise<TaskDependencies> {
-  return apiRequest<TaskDependencies>(`/api/v1/tasks/${taskId}/dependencies`)
+export async function getTaskDependencies(
+  taskId: string,
+): Promise<TaskDependencies> {
+  return apiRequest<TaskDependencies>(`/api/v1/tasks/${taskId}/dependencies`);
 }
 
 /**
@@ -58,12 +61,12 @@ export async function getTaskDependencies(taskId: string): Promise<TaskDependenc
  */
 export async function addTaskDependencies(
   taskId: string,
-  dependsOn: string[]
+  dependsOn: string[],
 ): Promise<TaskDependencies> {
   return apiRequest<TaskDependencies>(`/api/v1/tasks/${taskId}/dependencies`, {
     method: "POST",
     body: { depends_on: dependsOn },
-  })
+  });
 }
 
 /**
@@ -71,12 +74,12 @@ export async function addTaskDependencies(
  */
 export async function setTaskDependencies(
   taskId: string,
-  dependsOn: string[]
+  dependsOn: string[],
 ): Promise<TaskDependencies> {
   return apiRequest<TaskDependencies>(`/api/v1/tasks/${taskId}/dependencies`, {
     method: "PUT",
     body: { depends_on: dependsOn },
-  })
+  });
 }
 
 /**
@@ -84,12 +87,12 @@ export async function setTaskDependencies(
  */
 export async function removeTaskDependency(
   taskId: string,
-  dependsOnTaskId: string
+  dependsOnTaskId: string,
 ): Promise<TaskDependencies> {
   return apiRequest<TaskDependencies>(
     `/api/v1/tasks/${taskId}/dependencies/${dependsOnTaskId}`,
-    { method: "DELETE" }
-  )
+    { method: "DELETE" },
+  );
 }
 
 /**
@@ -97,15 +100,15 @@ export async function removeTaskDependency(
  */
 export async function checkCircularDependencies(
   taskId: string,
-  dependsOn: string[]
+  dependsOn: string[],
 ): Promise<{ has_circular_dependency: boolean; cycle: string[] | null }> {
-  return apiRequest<{ has_circular_dependency: boolean; cycle: string[] | null }>(
-    `/api/v1/tasks/${taskId}/check-circular`,
-    {
-      method: "POST",
-      body: dependsOn,
-    }
-  )
+  return apiRequest<{
+    has_circular_dependency: boolean;
+    cycle: string[] | null;
+  }>(`/api/v1/tasks/${taskId}/check-circular`, {
+    method: "POST",
+    body: dependsOn,
+  });
 }
 
 /**
@@ -113,15 +116,15 @@ export async function checkCircularDependencies(
  */
 export async function cancelTask(
   taskId: string,
-  reason = "cancelled_by_request"
+  reason = "cancelled_by_request",
 ): Promise<{ task_id: string; cancelled: boolean; reason: string }> {
   return apiRequest<{ task_id: string; cancelled: boolean; reason: string }>(
     `/api/v1/tasks/${taskId}/cancel`,
     {
       method: "POST",
       body: { reason },
-    }
-  )
+    },
+  );
 }
 
 /**
@@ -129,59 +132,68 @@ export async function cancelTask(
  */
 export async function failTask(
   taskId: string,
-  reason = "marked_failed_by_user"
-): Promise<{ task_id: string; status: string; reason: string; old_status: string }> {
-  return apiRequest<{ task_id: string; status: string; reason: string; old_status: string }>(
-    `/api/v1/tasks/${taskId}/fail`,
-    {
-      method: "POST",
-      body: { reason },
-    }
-  )
+  reason = "marked_failed_by_user",
+): Promise<{
+  task_id: string;
+  status: string;
+  reason: string;
+  old_status: string;
+}> {
+  return apiRequest<{
+    task_id: string;
+    status: string;
+    reason: string;
+    old_status: string;
+  }>(`/api/v1/tasks/${taskId}/fail`, {
+    method: "POST",
+    body: { reason },
+  });
 }
 
 /**
  * Get timeout status for a task
  */
 export async function getTaskTimeoutStatus(taskId: string): Promise<{
-  exists: boolean
-  task_id?: string
-  timeout_seconds?: number
-  started_at?: string
-  elapsed_time?: number
-  is_timed_out?: boolean
+  exists: boolean;
+  task_id?: string;
+  timeout_seconds?: number;
+  started_at?: string;
+  elapsed_time?: number;
+  is_timed_out?: boolean;
 }> {
-  return apiRequest(`/api/v1/tasks/${taskId}/timeout-status`)
+  return apiRequest(`/api/v1/tasks/${taskId}/timeout-status`);
 }
 
 /**
  * Get all timed-out tasks
  */
 export async function getTimedOutTasks(): Promise<TaskListItem[]> {
-  return apiRequest<TaskListItem[]>("/api/v1/tasks/timed-out")
+  return apiRequest<TaskListItem[]>("/api/v1/tasks/timed-out");
 }
 
 /**
  * Get cancellable tasks
  */
-export async function getCancellableTasks(agentId?: string): Promise<TaskListItem[]> {
+export async function getCancellableTasks(
+  agentId?: string,
+): Promise<TaskListItem[]> {
   const url = agentId
     ? `/api/v1/tasks/cancellable?agent_id=${agentId}`
-    : "/api/v1/tasks/cancellable"
-  return apiRequest<TaskListItem[]>(url)
+    : "/api/v1/tasks/cancellable";
+  return apiRequest<TaskListItem[]>(url);
 }
 
 /**
  * Cleanup timed-out tasks
  */
 export async function cleanupTimedOutTasks(): Promise<{
-  cleaned_count: number
-  total_timed_out: number
+  cleaned_count: number;
+  total_timed_out: number;
 }> {
   return apiRequest<{ cleaned_count: number; total_timed_out: number }>(
     "/api/v1/tasks/cleanup-timed-out",
-    { method: "POST" }
-  )
+    { method: "POST" },
+  );
 }
 
 /**
@@ -189,15 +201,16 @@ export async function cleanupTimedOutTasks(): Promise<{
  */
 export async function setTaskTimeout(
   taskId: string,
-  timeoutSeconds: number
+  timeoutSeconds: number,
 ): Promise<{ task_id: string; timeout_seconds: number; status: string }> {
-  return apiRequest<{ task_id: string; timeout_seconds: number; status: string }>(
-    `/api/v1/tasks/${taskId}/set-timeout`,
-    {
-      method: "POST",
-      body: { timeout_seconds: timeoutSeconds },
-    }
-  )
+  return apiRequest<{
+    task_id: string;
+    timeout_seconds: number;
+    status: string;
+  }>(`/api/v1/tasks/${taskId}/set-timeout`, {
+    method: "POST",
+    body: { timeout_seconds: timeoutSeconds },
+  });
 }
 
 /**
@@ -207,17 +220,18 @@ export async function registerConversation(
   taskId: string,
   conversationId: string,
   sandboxId?: string,
-  persistenceDir?: string
+  persistenceDir?: string,
 ): Promise<{ success: boolean; task_id: string; conversation_id: string }> {
-  return apiRequest<{ success: boolean; task_id: string; conversation_id: string }>(
-    `/api/v1/tasks/${taskId}/register-conversation`,
-    {
-      method: "POST",
-      body: {
-        conversation_id: conversationId,
-        sandbox_id: sandboxId || "",
-        persistence_dir: persistenceDir || "",
-      },
-    }
-  )
+  return apiRequest<{
+    success: boolean;
+    task_id: string;
+    conversation_id: string;
+  }>(`/api/v1/tasks/${taskId}/register-conversation`, {
+    method: "POST",
+    body: {
+      conversation_id: conversationId,
+      sandbox_id: sandboxId || "",
+      persistence_dir: persistenceDir || "",
+    },
+  });
 }

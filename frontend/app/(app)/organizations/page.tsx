@@ -1,13 +1,13 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search,
   Plus,
@@ -15,26 +15,27 @@ import {
   Settings,
   MoreHorizontal,
   AlertCircle,
-} from "lucide-react"
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useOrganizations } from "@/hooks/useOrganizations"
+} from "@/components/ui/dropdown-menu";
+import { useOrganizations } from "@/hooks/useOrganizations";
 
 export default function OrganizationsPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const { data: organizations, isLoading, error } = useOrganizations()
+  const [searchQuery, setSearchQuery] = useState("");
+  const { data: organizations, isLoading, error } = useOrganizations();
 
   const filteredOrgs = useMemo(() => {
-    if (!organizations) return []
-    return organizations.filter((org) =>
-      org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      org.slug.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [organizations, searchQuery])
+    if (!organizations) return [];
+    return organizations.filter(
+      (org) =>
+        org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        org.slug.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
+  }, [organizations, searchQuery]);
 
   if (isLoading) {
     return (
@@ -63,7 +64,7 @@ export default function OrganizationsPage() {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -71,13 +72,15 @@ export default function OrganizationsPage() {
       <div className="container mx-auto max-w-4xl p-6">
         <Card className="p-12 text-center">
           <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-semibold">Failed to load organizations</h3>
+          <h3 className="mt-4 text-lg font-semibold">
+            Failed to load organizations
+          </h3>
           <p className="mt-2 text-sm text-muted-foreground">
             There was an error loading your organizations. Please try again.
           </p>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -111,7 +114,10 @@ export default function OrganizationsPage() {
       {/* Organizations List */}
       <div className="space-y-4">
         {filteredOrgs.map((org) => (
-          <Card key={org.id} className="hover:border-primary/50 transition-colors">
+          <Card
+            key={org.id}
+            className="hover:border-primary/50 transition-colors"
+          >
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
@@ -128,7 +134,9 @@ export default function OrganizationsPage() {
                       >
                         {org.name}
                       </Link>
-                      <Badge variant={org.role === "owner" ? "default" : "secondary"}>
+                      <Badge
+                        variant={org.role === "owner" ? "default" : "secondary"}
+                      >
                         {org.role}
                       </Badge>
                     </div>
@@ -180,5 +188,5 @@ export default function OrganizationsPage() {
         </Card>
       )}
     </div>
-  )
+  );
 }

@@ -1,10 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Link from "next/link";
-import {
-  motion,
-  AnimatePresence,
-} from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Github } from "lucide-react";
 import { OmoiOSLogo } from "@/components/ui/omoios-logo";
@@ -39,7 +36,7 @@ export const FloatingNav = ({
         }}
         className={cn(
           "fixed left-1/2 top-14 z-[5000] flex -translate-x-1/2 items-center justify-center space-x-4 rounded-full border border-landing-border bg-landing-bg/80 py-2 pl-8 pr-2 shadow-lg backdrop-blur-md",
-          className
+          className,
         )}
       >
         {/* Logo */}
@@ -53,7 +50,7 @@ export const FloatingNav = ({
             key={`link-${idx}`}
             href={navItem.link}
             className={cn(
-              "relative flex items-center space-x-1 text-sm text-landing-text-muted transition-colors hover:text-landing-text"
+              "relative flex items-center space-x-1 text-sm text-landing-text-muted transition-colors hover:text-landing-text",
             )}
           >
             <span className="block sm:hidden">{navItem.icon}</span>

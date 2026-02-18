@@ -1,25 +1,25 @@
-import { apiRequest } from "./client"
+import { apiRequest } from "./client";
 import type {
   DependencyGraphResponse,
   BlockedTasksResponse,
   BlockingTasksResponse,
-} from "./types"
+} from "./types";
 
 /**
  * Get dependency graph for a project
  */
 export async function getProjectDependencyGraph(
   projectId: string,
-  params?: { includeResolved?: boolean }
+  params?: { includeResolved?: boolean },
 ): Promise<DependencyGraphResponse> {
-  const searchParams = new URLSearchParams()
+  const searchParams = new URLSearchParams();
   if (params?.includeResolved !== undefined) {
-    searchParams.set("include_resolved", String(params.includeResolved))
+    searchParams.set("include_resolved", String(params.includeResolved));
   }
-  const query = searchParams.toString()
+  const query = searchParams.toString();
   return apiRequest<DependencyGraphResponse>(
-    `/api/v1/graph/dependency-graph/project/${projectId}${query ? `?${query}` : ""}`
-  )
+    `/api/v1/graph/dependency-graph/project/${projectId}${query ? `?${query}` : ""}`,
+  );
 }
 
 /**
@@ -27,31 +27,39 @@ export async function getProjectDependencyGraph(
  */
 export async function getTicketDependencyGraph(
   ticketId: string,
-  params?: { includeResolved?: boolean; includeDiscoveries?: boolean }
+  params?: { includeResolved?: boolean; includeDiscoveries?: boolean },
 ): Promise<DependencyGraphResponse> {
-  const searchParams = new URLSearchParams()
+  const searchParams = new URLSearchParams();
   if (params?.includeResolved !== undefined) {
-    searchParams.set("include_resolved", String(params.includeResolved))
+    searchParams.set("include_resolved", String(params.includeResolved));
   }
   if (params?.includeDiscoveries !== undefined) {
-    searchParams.set("include_discoveries", String(params.includeDiscoveries))
+    searchParams.set("include_discoveries", String(params.includeDiscoveries));
   }
-  const query = searchParams.toString()
+  const query = searchParams.toString();
   return apiRequest<DependencyGraphResponse>(
-    `/api/v1/graph/dependency-graph/ticket/${ticketId}${query ? `?${query}` : ""}`
-  )
+    `/api/v1/graph/dependency-graph/ticket/${ticketId}${query ? `?${query}` : ""}`,
+  );
 }
 
 /**
  * Get tasks blocked by a specific task
  */
-export async function getBlockedTasks(taskId: string): Promise<BlockedTasksResponse> {
-  return apiRequest<BlockedTasksResponse>(`/api/v1/graph/dependency-graph/task/${taskId}/blocked`)
+export async function getBlockedTasks(
+  taskId: string,
+): Promise<BlockedTasksResponse> {
+  return apiRequest<BlockedTasksResponse>(
+    `/api/v1/graph/dependency-graph/task/${taskId}/blocked`,
+  );
 }
 
 /**
  * Get tasks that block a specific task
  */
-export async function getBlockingTasks(taskId: string): Promise<BlockingTasksResponse> {
-  return apiRequest<BlockingTasksResponse>(`/api/v1/graph/dependency-graph/task/${taskId}/blocking`)
+export async function getBlockingTasks(
+  taskId: string,
+): Promise<BlockingTasksResponse> {
+  return apiRequest<BlockingTasksResponse>(
+    `/api/v1/graph/dependency-graph/task/${taskId}/blocking`,
+  );
 }

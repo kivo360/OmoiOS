@@ -1,7 +1,7 @@
-import { getAllPosts, getAllTags, getPostsByTag } from '@/lib/blog';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import type { Metadata } from 'next';
+import { getAllPosts, getAllTags, getPostsByTag } from "@/lib/blog";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 
 interface PageProps {
   params: Promise<{ tag: string }>;
@@ -32,10 +32,10 @@ export default async function TagPage({ params }: PageProps) {
                 <span>{post.data.author}</span>
                 <span>•</span>
                 <time dateTime={String(post.data.date)}>
-                  {new Date(post.data.date).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
+                  {new Date(post.data.date).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
                   })}
                 </time>
               </div>

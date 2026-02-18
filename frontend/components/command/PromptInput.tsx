@@ -1,17 +1,17 @@
-"use client"
+"use client";
 
-import { useState, useRef, useCallback } from "react"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import { ArrowUp, Paperclip, Loader2 } from "lucide-react"
+import { useState, useRef, useCallback } from "react";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { ArrowUp, Paperclip, Loader2 } from "lucide-react";
 
 interface PromptInputProps {
-  onSubmit?: (prompt: string) => void
-  isLoading?: boolean
-  placeholder?: string
-  submitLabel?: string
-  className?: string
+  onSubmit?: (prompt: string) => void;
+  isLoading?: boolean;
+  placeholder?: string;
+  submitLabel?: string;
+  className?: string;
 }
 
 export function PromptInput({
@@ -21,33 +21,33 @@ export function PromptInput({
   submitLabel,
   className,
 }: PromptInputProps) {
-  const [value, setValue] = useState("")
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [value, setValue] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = useCallback(() => {
     if (value.trim() && !isLoading) {
-      onSubmit?.(value.trim())
+      onSubmit?.(value.trim());
     }
-  }, [value, isLoading, onSubmit])
+  }, [value, isLoading, onSubmit]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault()
-        handleSubmit()
+        e.preventDefault();
+        handleSubmit();
       }
     },
-    [handleSubmit]
-  )
+    [handleSubmit],
+  );
 
   // Auto-resize textarea
   const handleInput = useCallback(() => {
-    const textarea = textareaRef.current
+    const textarea = textareaRef.current;
     if (textarea) {
-      textarea.style.height = "auto"
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
-  }, [])
+  }, []);
 
   return (
     <div className={cn("relative", className)}>
@@ -96,5 +96,5 @@ export function PromptInput({
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Check,
   Crown,
@@ -17,23 +17,28 @@ import {
   Tag,
   CheckCircle2,
   XCircle,
-} from "lucide-react"
-import { useOnboarding } from "@/hooks/useOnboarding"
-import { cn } from "@/lib/utils"
-import { useCreateLifetimeCheckout, useStripeConfig, useValidatePromoCode, useRedeemPromoCode } from "@/hooks/useBilling"
-import { useToast } from "@/hooks/use-toast"
-import type { PromoCode } from "@/lib/api/types"
+} from "lucide-react";
+import { useOnboarding } from "@/hooks/useOnboarding";
+import { cn } from "@/lib/utils";
+import {
+  useCreateLifetimeCheckout,
+  useStripeConfig,
+  useValidatePromoCode,
+  useRedeemPromoCode,
+} from "@/hooks/useBilling";
+import { useToast } from "@/hooks/use-toast";
+import type { PromoCode } from "@/lib/api/types";
 
 interface PlanOption {
-  id: string
-  name: string
-  price: string
-  priceNote?: string
-  icon: React.ReactNode
-  features: string[]
-  highlighted?: boolean
-  urgencyText?: string
-  accentColor: string
+  id: string;
+  name: string;
+  price: string;
+  priceNote?: string;
+  icon: React.ReactNode;
+  features: string[];
+  highlighted?: boolean;
+  urgencyText?: string;
+  accentColor: string;
 }
 
 const PLANS: PlanOption[] = [
@@ -84,62 +89,71 @@ const PLANS: PlanOption[] = [
     urgencyText: "Most popular for growing teams",
     accentColor: "bg-emerald-500",
   },
-]
+];
 
 export function PlanSelectStep() {
-  const { data, updateData, nextStep, isLoading: onboardingLoading } = useOnboarding()
-  const { toast } = useToast()
-  const [selectedPlan, setSelectedPlan] = useState<string>(data.selectedPlan || "free")
-  const [isProcessing, setIsProcessing] = useState(false)
+  const {
+    data,
+    updateData,
+    nextStep,
+    isLoading: onboardingLoading,
+  } = useOnboarding();
+  const { toast } = useToast();
+  const [selectedPlan, setSelectedPlan] = useState<string>(
+    data.selectedPlan || "free",
+  );
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Promo code state
-  const [promoCode, setPromoCode] = useState("")
-  const [showPromoInput, setShowPromoInput] = useState(false)
-  const [validatedPromo, setValidatedPromo] = useState<PromoCode | null>(null)
-  const [promoError, setPromoError] = useState<string | null>(null)
+  const [promoCode, setPromoCode] = useState("");
+  const [showPromoInput, setShowPromoInput] = useState(false);
+  const [validatedPromo, setValidatedPromo] = useState<PromoCode | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
 
-  const createLifetimeCheckout = useCreateLifetimeCheckout()
-  const { data: stripeConfig } = useStripeConfig()
-  const validatePromoCode = useValidatePromoCode()
-  const redeemPromoCode = useRedeemPromoCode()
+  const createLifetimeCheckout = useCreateLifetimeCheckout();
+  const { data: stripeConfig } = useStripeConfig();
+  const validatePromoCode = useValidatePromoCode();
+  const redeemPromoCode = useRedeemPromoCode();
 
   const handleSelectPlan = (planId: string) => {
-    setSelectedPlan(planId)
-    updateData({ selectedPlan: planId })
-  }
+    setSelectedPlan(planId);
+    updateData({ selectedPlan: planId });
+  };
 
   const handleValidatePromo = async () => {
-    if (!promoCode.trim()) return
+    if (!promoCode.trim()) return;
 
-    setPromoError(null)
+    setPromoError(null);
     try {
-      const result = await validatePromoCode.mutateAsync({ code: promoCode.trim().toUpperCase() })
+      const result = await validatePromoCode.mutateAsync({
+        code: promoCode.trim().toUpperCase(),
+      });
       if (result.valid && result.promo_code) {
-        setValidatedPromo(result.promo_code)
+        setValidatedPromo(result.promo_code);
         toast({
           title: "Promo code valid!",
           description: result.message,
-        })
+        });
       } else {
-        setPromoError(result.message)
-        setValidatedPromo(null)
+        setPromoError(result.message);
+        setValidatedPromo(null);
       }
     } catch {
-      setPromoError("Failed to validate promo code")
-      setValidatedPromo(null)
+      setPromoError("Failed to validate promo code");
+      setValidatedPromo(null);
     }
-  }
+  };
 
   const handleRedeemPromo = async () => {
-    const orgId = data.organizationId
-    if (!orgId || !validatedPromo) return
+    const orgId = data.organizationId;
+    if (!orgId || !validatedPromo) return;
 
-    setIsProcessing(true)
+    setIsProcessing(true);
     try {
       const result = await redeemPromoCode.mutateAsync({
         orgId,
         data: { code: validatedPromo.code },
-      })
+      });
 
       if (result.success) {
         toast({
@@ -147,87 +161,92 @@ export function PlanSelectStep() {
           description: result.tier_granted
             ? `You now have ${result.tier_granted} access!`
             : result.message,
-        })
+        });
 
         // Update the selected plan based on what was granted
         if (result.tier_granted) {
-          updateData({ selectedPlan: result.tier_granted })
+          updateData({ selectedPlan: result.tier_granted });
         }
 
         // Continue to next step
-        nextStep()
+        nextStep();
       } else {
         toast({
           title: "Error",
           description: result.message,
           variant: "destructive",
-        })
+        });
       }
     } catch {
       toast({
         title: "Error",
         description: "Failed to redeem promo code. Please try again.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsProcessing(false)
+      setIsProcessing(false);
     }
-  }
+  };
 
   const clearPromo = () => {
-    setPromoCode("")
-    setValidatedPromo(null)
-    setPromoError(null)
-  }
+    setPromoCode("");
+    setValidatedPromo(null);
+    setPromoError(null);
+  };
 
   const handleContinue = async () => {
     if (selectedPlan === "free") {
       // Skip payment, go to complete
-      nextStep()
-      return
+      nextStep();
+      return;
     }
 
     if (selectedPlan === "pro" || selectedPlan === "team") {
       // Start Stripe checkout for paid plans
-      setIsProcessing(true)
+      setIsProcessing(true);
       try {
-        const orgId = data.organizationId
+        const orgId = data.organizationId;
         if (!orgId) {
           toast({
             title: "Setup incomplete",
             description: "Please complete the previous steps first.",
             variant: "destructive",
-          })
-          return
+          });
+          return;
         }
 
         // TODO: Create subscription checkout for pro/team plans
         // For now, redirect to contact for enterprise-level pricing
         toast({
           title: "Let's get you set up",
-          description: "Our team will reach out to complete your subscription setup.",
-        })
-        updateData({ selectedPlan })
-        nextStep()
+          description:
+            "Our team will reach out to complete your subscription setup.",
+        });
+        updateData({ selectedPlan });
+        nextStep();
       } catch {
         toast({
           title: "Error",
           description: "Failed to start checkout. Please try again.",
           variant: "destructive",
-        })
+        });
       } finally {
-        setIsProcessing(false)
+        setIsProcessing(false);
       }
-      return
+      return;
     }
-  }
+  };
 
   const handleSkip = () => {
-    updateData({ selectedPlan: "free" })
-    nextStep()
-  }
+    updateData({ selectedPlan: "free" });
+    nextStep();
+  };
 
-  const isLoading = onboardingLoading || isProcessing || createLifetimeCheckout.isPending || redeemPromoCode.isPending
+  const isLoading =
+    onboardingLoading ||
+    isProcessing ||
+    createLifetimeCheckout.isPending ||
+    redeemPromoCode.isPending;
 
   return (
     <div className="space-y-6">
@@ -237,7 +256,9 @@ export function PlanSelectStep() {
           <div className="h-8 w-8 rounded-full bg-green-500/10 flex items-center justify-center">
             <Sparkles className="h-4 w-4 text-green-600" />
           </div>
-          <CardTitle className="text-2xl">Your First Agent is Working!</CardTitle>
+          <CardTitle className="text-2xl">
+            Your First Agent is Working!
+          </CardTitle>
         </div>
         <CardDescription>
           While it runs, check out what&apos;s possible with more power:
@@ -249,7 +270,9 @@ export function PlanSelectStep() {
         <div className="p-3 rounded-lg bg-muted/50 text-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-4 w-4 animate-pulse text-primary" />
-            <span>Working on: &quot;{data.firstSpecText.slice(0, 40)}...&quot;</span>
+            <span>
+              Working on: &quot;{data.firstSpecText.slice(0, 40)}...&quot;
+            </span>
           </div>
         </div>
       )}
@@ -288,11 +311,12 @@ export function PlanSelectStep() {
                     {validatedPromo.code}
                   </p>
                   <p className="text-xs text-emerald-600 dark:text-emerald-500">
-                    {validatedPromo.discount_type === "full_bypass" && validatedPromo.grant_tier
+                    {validatedPromo.discount_type === "full_bypass" &&
+                    validatedPromo.grant_tier
                       ? `Grants ${validatedPromo.grant_tier} access${validatedPromo.grant_duration_months ? ` for ${validatedPromo.grant_duration_months} months` : ""}`
                       : validatedPromo.discount_type === "percentage"
-                      ? `${validatedPromo.discount_value}% off`
-                      : validatedPromo.description || "Valid promo code"}
+                        ? `${validatedPromo.discount_value}% off`
+                        : validatedPromo.description || "Valid promo code"}
                   </p>
                 </div>
               </div>
@@ -332,8 +356,8 @@ export function PlanSelectStep() {
                 variant="ghost"
                 size="icon"
                 onClick={() => {
-                  setShowPromoInput(false)
-                  clearPromo()
+                  setShowPromoInput(false);
+                  clearPromo();
                 }}
               >
                 <XCircle className="h-4 w-4" />
@@ -378,7 +402,7 @@ export function PlanSelectStep() {
             disabled={isLoading}
             className={cn(
               "w-full",
-              selectedPlan === "team" && "bg-emerald-600 hover:bg-emerald-700"
+              selectedPlan === "team" && "bg-emerald-600 hover:bg-emerald-700",
             )}
           >
             {isLoading ? (
@@ -393,7 +417,7 @@ export function PlanSelectStep() {
               </>
             ) : (
               <>
-                Upgrade to {PLANS.find(p => p.id === selectedPlan)?.name}
+                Upgrade to {PLANS.find((p) => p.id === selectedPlan)?.name}
                 <ArrowRight className="ml-2 h-5 w-5" />
               </>
             )}
@@ -412,7 +436,7 @@ export function PlanSelectStep() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
 function PlanCard({
@@ -421,10 +445,10 @@ function PlanCard({
   onSelect,
   disabled,
 }: {
-  plan: PlanOption
-  isSelected: boolean
-  onSelect: () => void
-  disabled?: boolean
+  plan: PlanOption;
+  isSelected: boolean;
+  onSelect: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -436,7 +460,7 @@ function PlanCard({
         "hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
         isSelected && "border-primary bg-primary/5 ring-1 ring-primary",
         plan.highlighted && !isSelected && "border-emerald-500/30",
-        disabled && "opacity-50 cursor-not-allowed"
+        disabled && "opacity-50 cursor-not-allowed",
       )}
     >
       {/* Highlight badge */}
@@ -453,7 +477,7 @@ function PlanCard({
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
             plan.id === "free" && "bg-slate-500/10 text-slate-500",
             plan.id === "pro" && "bg-purple-500/10 text-purple-500",
-            plan.id === "team" && "bg-emerald-500/10 text-emerald-500"
+            plan.id === "team" && "bg-emerald-500/10 text-emerald-500",
           )}
         >
           {plan.icon}
@@ -466,7 +490,9 @@ function PlanCard({
             <div className="text-right">
               <span className="font-bold text-lg">{plan.price}</span>
               {plan.priceNote && (
-                <span className="text-sm text-muted-foreground ml-1">{plan.priceNote}</span>
+                <span className="text-sm text-muted-foreground ml-1">
+                  {plan.priceNote}
+                </span>
               )}
             </div>
           </div>
@@ -493,12 +519,14 @@ function PlanCard({
         <div
           className={cn(
             "w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all",
-            isSelected ? "border-primary bg-primary" : "border-muted-foreground/30"
+            isSelected
+              ? "border-primary bg-primary"
+              : "border-muted-foreground/30",
           )}
         >
           {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
         </div>
       </div>
     </button>
-  )
+  );
 }

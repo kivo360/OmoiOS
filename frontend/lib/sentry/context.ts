@@ -5,16 +5,22 @@
  * including user information, request details, and breadcrumbs.
  */
 
-import * as Sentry from "@sentry/nextjs"
-import type { User } from "@/lib/api/types"
+import * as Sentry from "@sentry/nextjs";
+import type { User } from "@/lib/api/types";
 
 // ============================================================================
 // Error Categories
 // ============================================================================
 
-export type ErrorCategory = "api" | "validation" | "auth" | "network" | "render" | "user"
+export type ErrorCategory =
+  | "api"
+  | "validation"
+  | "auth"
+  | "network"
+  | "render"
+  | "user";
 
-export type ErrorSeverity = "fatal" | "error" | "warning" | "info"
+export type ErrorSeverity = "fatal" | "error" | "warning" | "info";
 
 // ============================================================================
 // User Context
@@ -25,13 +31,13 @@ export type ErrorSeverity = "fatal" | "error" | "warning" | "info"
  * Uses a simple hash for client-side (Sentry will group by this)
  */
 function hashString(str: string): string {
-  let hash = 0
+  let hash = 0;
   for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = (hash << 5) - hash + char
-    hash |= 0 // Convert to 32bit integer
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0; // Convert to 32bit integer
   }
-  return Math.abs(hash).toString(16)
+  return Math.abs(hash).toString(16);
 }
 
 /**
@@ -40,8 +46,8 @@ function hashString(str: string): string {
  */
 export function setUserContext(user: User | null): void {
   if (!user) {
-    Sentry.setUser(null)
-    return
+    Sentry.setUser(null);
+    return;
   }
 
   Sentry.setUser({
@@ -49,22 +55,22 @@ export function setUserContext(user: User | null): void {
     username: user.full_name || undefined,
     // Hash email for privacy while maintaining groupability
     email: user.email ? `${hashString(user.email)}@hashed` : undefined,
-  })
+  });
 
   // Set additional user tags
-  Sentry.setTag("user.role", user.is_super_admin ? "admin" : "user")
-  Sentry.setTag("user.verified", String(user.is_verified))
-  Sentry.setTag("user.waitlist", user.waitlist_status || "none")
+  Sentry.setTag("user.role", user.is_super_admin ? "admin" : "user");
+  Sentry.setTag("user.verified", String(user.is_verified));
+  Sentry.setTag("user.waitlist", user.waitlist_status || "none");
 }
 
 /**
  * Clear user context on logout
  */
 export function clearUserContext(): void {
-  Sentry.setUser(null)
-  Sentry.setTag("user.role", undefined)
-  Sentry.setTag("user.verified", undefined)
-  Sentry.setTag("user.waitlist", undefined)
+  Sentry.setUser(null);
+  Sentry.setTag("user.role", undefined);
+  Sentry.setTag("user.verified", undefined);
+  Sentry.setTag("user.waitlist", undefined);
 }
 
 // ============================================================================
@@ -72,29 +78,29 @@ export function clearUserContext(): void {
 // ============================================================================
 
 interface APIBreadcrumbData {
-  method: string
-  url: string
-  status?: number
-  duration?: number
-  error?: string
+  method: string;
+  url: string;
+  status?: number;
+  duration?: number;
+  error?: string;
 }
 
 /**
  * Add breadcrumb for API requests
  */
 export function addAPIBreadcrumb(data: APIBreadcrumbData): void {
-  const { method, url, status, duration, error } = data
+  const { method, url, status, duration, error } = data;
 
   // Determine level based on status/error
-  let level: Sentry.SeverityLevel = "info"
+  let level: Sentry.SeverityLevel = "info";
   if (error || (status && status >= 500)) {
-    level = "error"
+    level = "error";
   } else if (status && status >= 400) {
-    level = "warning"
+    level = "warning";
   }
 
   // Remove sensitive query params from URL
-  const sanitizedUrl = sanitizeUrl(url)
+  const sanitizedUrl = sanitizeUrl(url);
 
   Sentry.addBreadcrumb({
     category: "api",
@@ -105,7 +111,7 @@ export function addAPIBreadcrumb(data: APIBreadcrumbData): void {
       duration: duration ? `${duration}ms` : undefined,
       error,
     },
-  })
+  });
 }
 
 /**
@@ -120,31 +126,38 @@ export function addNavigationBreadcrumb(from: string, to: string): void {
       from: sanitizeUrl(from),
       to: sanitizeUrl(to),
     },
-  })
+  });
 }
 
 /**
  * Add breadcrumb for user actions (clicks, form submissions)
  */
-export function addUserActionBreadcrumb(action: string, target?: string, data?: Record<string, unknown>): void {
+export function addUserActionBreadcrumb(
+  action: string,
+  target?: string,
+  data?: Record<string, unknown>,
+): void {
   Sentry.addBreadcrumb({
     category: "user",
     message: target ? `${action}: ${target}` : action,
     level: "info",
     data,
-  })
+  });
 }
 
 /**
  * Add breadcrumb for state changes
  */
-export function addStateBreadcrumb(message: string, data?: Record<string, unknown>): void {
+export function addStateBreadcrumb(
+  message: string,
+  data?: Record<string, unknown>,
+): void {
   Sentry.addBreadcrumb({
     category: "state",
     message,
     level: "info",
     data,
-  })
+  });
 }
 
 // ============================================================================
@@ -153,53 +166,56 @@ export function addStateBreadcrumb(message: string, data?: Record<string, unknow
 
 interface CaptureErrorOptions {
   /** Error category for filtering */
-  category?: ErrorCategory
+  category?: ErrorCategory;
   /** Error severity */
-  severity?: ErrorSeverity
+  severity?: ErrorSeverity;
   /** Additional tags */
-  tags?: Record<string, string>
+  tags?: Record<string, string>;
   /** Additional context data */
-  extra?: Record<string, unknown>
+  extra?: Record<string, unknown>;
   /** User affected (if different from global context) */
-  user?: { id: string; email?: string }
+  user?: { id: string; email?: string };
 }
 
 /**
  * Capture an error with rich context
  */
-export function captureError(error: Error, options: CaptureErrorOptions = {}): string {
-  const { category, severity = "error", tags = {}, extra = {}, user } = options
+export function captureError(
+  error: Error,
+  options: CaptureErrorOptions = {},
+): string {
+  const { category, severity = "error", tags = {}, extra = {}, user } = options;
 
   return Sentry.withScope((scope) => {
     // Set error category
     if (category) {
-      scope.setTag("error.category", category)
+      scope.setTag("error.category", category);
     }
 
     // Set severity
-    scope.setTag("error.severity", severity)
-    scope.setLevel(severity as Sentry.SeverityLevel)
+    scope.setTag("error.severity", severity);
+    scope.setLevel(severity as Sentry.SeverityLevel);
 
     // Set custom tags
     Object.entries(tags).forEach(([key, value]) => {
-      scope.setTag(key, value)
-    })
+      scope.setTag(key, value);
+    });
 
     // Set extra context
     Object.entries(extra).forEach(([key, value]) => {
-      scope.setExtra(key, value)
-    })
+      scope.setExtra(key, value);
+    });
 
     // Override user if provided
     if (user) {
       scope.setUser({
         id: user.id,
         email: user.email ? `${hashString(user.email)}@hashed` : undefined,
-      })
+      });
     }
 
-    return Sentry.captureException(error)
-  })
+    return Sentry.captureException(error);
+  });
 }
 
 /**
@@ -208,12 +224,12 @@ export function captureError(error: Error, options: CaptureErrorOptions = {}): s
 export function captureAPIError(
   error: Error,
   request: {
-    method: string
-    url: string
-    status?: number
-    body?: unknown
+    method: string;
+    url: string;
+    status?: number;
+    body?: unknown;
   },
-  options: Omit<CaptureErrorOptions, "category"> = {}
+  options: Omit<CaptureErrorOptions, "category"> = {},
 ): string {
   return captureError(error, {
     ...options,
@@ -232,7 +248,7 @@ export function captureAPIError(
       "api.method": request.method,
       "api.status": String(request.status || "unknown"),
     },
-  })
+  });
 }
 
 /**
@@ -242,7 +258,7 @@ export function captureValidationError(
   error: Error,
   formId: string,
   fields?: string[],
-  options: Omit<CaptureErrorOptions, "category"> = {}
+  options: Omit<CaptureErrorOptions, "category"> = {},
 ): string {
   return captureError(error, {
     ...options,
@@ -257,7 +273,7 @@ export function captureValidationError(
       ...options.tags,
       "form.id": formId,
     },
-  })
+  });
 }
 
 /**
@@ -266,7 +282,7 @@ export function captureValidationError(
 export function captureAuthError(
   error: Error,
   action: "login" | "logout" | "refresh" | "register" | "verify",
-  options: Omit<CaptureErrorOptions, "category"> = {}
+  options: Omit<CaptureErrorOptions, "category"> = {},
 ): string {
   return captureError(error, {
     ...options,
@@ -276,7 +292,7 @@ export function captureAuthError(
       ...options.tags,
       "auth.action": action,
     },
-  })
+  });
 }
 
 // ============================================================================
@@ -289,36 +305,36 @@ export function captureAuthError(
  */
 export async function withSentryContext<T>(
   context: {
-    operation: string
-    tags?: Record<string, string>
-    extra?: Record<string, unknown>
+    operation: string;
+    tags?: Record<string, string>;
+    extra?: Record<string, unknown>;
   },
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
   return Sentry.withScope(async (scope) => {
-    scope.setTransactionName(context.operation)
+    scope.setTransactionName(context.operation);
 
     if (context.tags) {
       Object.entries(context.tags).forEach(([key, value]) => {
-        scope.setTag(key, value)
-      })
+        scope.setTag(key, value);
+      });
     }
 
     if (context.extra) {
       Object.entries(context.extra).forEach(([key, value]) => {
-        scope.setExtra(key, value)
-      })
+        scope.setExtra(key, value);
+      });
     }
 
     try {
-      return await fn()
+      return await fn();
     } catch (error) {
       if (error instanceof Error) {
-        Sentry.captureException(error)
+        Sentry.captureException(error);
       }
-      throw error
+      throw error;
     }
-  })
+  });
 }
 
 // ============================================================================
@@ -330,21 +346,28 @@ export async function withSentryContext<T>(
  */
 function sanitizeUrl(url: string): string {
   try {
-    const parsed = new URL(url, "http://localhost")
+    const parsed = new URL(url, "http://localhost");
 
     // Remove sensitive query parameters
-    const sensitiveParams = ["token", "api_key", "password", "secret", "key", "auth"]
+    const sensitiveParams = [
+      "token",
+      "api_key",
+      "password",
+      "secret",
+      "key",
+      "auth",
+    ];
     sensitiveParams.forEach((param) => {
       if (parsed.searchParams.has(param)) {
-        parsed.searchParams.set(param, "[REDACTED]")
+        parsed.searchParams.set(param, "[REDACTED]");
       }
-    })
+    });
 
     // Return just path + sanitized query for relative URLs
-    return `${parsed.pathname}${parsed.search}`
+    return `${parsed.pathname}${parsed.search}`;
   } catch {
     // If URL parsing fails, return as-is but remove obvious tokens
-    return url.replace(/token=[^&]+/g, "token=[REDACTED]")
+    return url.replace(/token=[^&]+/g, "token=[REDACTED]");
   }
 }
 
@@ -353,7 +376,10 @@ function sanitizeUrl(url: string): string {
  */
 export function createScopedErrorReporter(feature: string) {
   return {
-    captureError: (error: Error, options: Omit<CaptureErrorOptions, "tags"> = {}) =>
+    captureError: (
+      error: Error,
+      options: Omit<CaptureErrorOptions, "tags"> = {},
+    ) =>
       captureError(error, {
         ...options,
         tags: { feature },
@@ -366,5 +392,5 @@ export function createScopedErrorReporter(feature: string) {
         level: "info",
         data,
       }),
-  }
+  };
 }

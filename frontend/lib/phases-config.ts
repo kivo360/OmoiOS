@@ -1,28 +1,28 @@
 /**
  * Static phase configuration
- * 
+ *
  * Phases are system-defined workflow stages. This configuration
  * defines the available phases and their properties.
  */
 
 export interface PhaseConfig {
-  id: string
-  name: string
-  description: string
-  order: number
-  isTerminal: boolean
-  isSystem: boolean
-  transitions: string[]
-  doneCriteria: string[]
-  expectedOutputs: { type: string; pattern: string; required: boolean }[]
-  phasePrompt: string
-  color: string
+  id: string;
+  name: string;
+  description: string;
+  order: number;
+  isTerminal: boolean;
+  isSystem: boolean;
+  transitions: string[];
+  doneCriteria: string[];
+  expectedOutputs: { type: string; pattern: string; required: boolean }[];
+  phasePrompt: string;
+  color: string;
   config: {
-    timeout: number
-    maxRetries: number
-    retryStrategy: string
-    wipLimit: number
-  }
+    timeout: number;
+    maxRetries: number;
+    retryStrategy: string;
+    wipLimit: number;
+  };
 }
 
 export const PHASES: PhaseConfig[] = [
@@ -38,7 +38,12 @@ export const PHASES: PhaseConfig[] = [
     expectedOutputs: [],
     phasePrompt: "",
     color: "#6B7280",
-    config: { timeout: 0, maxRetries: 3, retryStrategy: "exponential", wipLimit: 0 },
+    config: {
+      timeout: 0,
+      maxRetries: 3,
+      retryStrategy: "exponential",
+      wipLimit: 0,
+    },
   },
   {
     id: "PHASE_REQUIREMENTS",
@@ -61,7 +66,12 @@ Define clear acceptance criteria for each requirement.
 Identify dependencies and constraints.
 Flag any ambiguities for clarification.`,
     color: "#3B82F6",
-    config: { timeout: 1800, maxRetries: 2, retryStrategy: "linear", wipLimit: 10 },
+    config: {
+      timeout: 1800,
+      maxRetries: 2,
+      retryStrategy: "linear",
+      wipLimit: 10,
+    },
   },
   {
     id: "PHASE_DESIGN",
@@ -84,7 +94,12 @@ Document architectural decisions and tradeoffs.
 Identify potential risks and mitigations.
 Define interfaces and data models.`,
     color: "#8B5CF6",
-    config: { timeout: 3600, maxRetries: 2, retryStrategy: "linear", wipLimit: 5 },
+    config: {
+      timeout: 3600,
+      maxRetries: 2,
+      retryStrategy: "linear",
+      wipLimit: 5,
+    },
   },
   {
     id: "PHASE_IMPLEMENTATION",
@@ -111,7 +126,12 @@ Follow existing code patterns and project conventions.
 Document any significant architectural decisions.
 If blocked, move to PHASE_BLOCKED with clear explanation.`,
     color: "#F59E0B",
-    config: { timeout: 3600, maxRetries: 3, retryStrategy: "exponential", wipLimit: 5 },
+    config: {
+      timeout: 3600,
+      maxRetries: 3,
+      retryStrategy: "exponential",
+      wipLimit: 5,
+    },
   },
   {
     id: "PHASE_TESTING",
@@ -135,7 +155,12 @@ Verify edge cases and error handling.
 Check code coverage meets minimum requirements.
 Document any known limitations.`,
     color: "#10B981",
-    config: { timeout: 1800, maxRetries: 2, retryStrategy: "linear", wipLimit: 3 },
+    config: {
+      timeout: 1800,
+      maxRetries: 2,
+      retryStrategy: "linear",
+      wipLimit: 3,
+    },
   },
   {
     id: "PHASE_DEPLOYMENT",
@@ -156,7 +181,12 @@ Verify all pre-deployment checks pass.
 Monitor for any deployment issues.
 Document deployment artifacts and versions.`,
     color: "#EC4899",
-    config: { timeout: 1800, maxRetries: 1, retryStrategy: "none", wipLimit: 2 },
+    config: {
+      timeout: 1800,
+      maxRetries: 1,
+      retryStrategy: "none",
+      wipLimit: 2,
+    },
   },
   {
     id: "PHASE_DONE",
@@ -194,17 +224,17 @@ Set expected resolution timeline if possible.`,
     color: "#EF4444",
     config: { timeout: 0, maxRetries: 0, retryStrategy: "none", wipLimit: 0 },
   },
-]
+];
 
 // Helper to get phase by ID
 export function getPhaseById(phaseId: string): PhaseConfig | undefined {
-  return PHASES.find((p) => p.id === phaseId)
+  return PHASES.find((p) => p.id === phaseId);
 }
 
 // Get all phase IDs
-export const ALL_PHASE_IDS = PHASES.map((p) => p.id)
+export const ALL_PHASE_IDS = PHASES.map((p) => p.id);
 
 // Get phases sorted by order
 export function getPhasesSorted(): PhaseConfig[] {
-  return [...PHASES].sort((a, b) => a.order - b.order)
+  return [...PHASES].sort((a, b) => a.order - b.order);
 }

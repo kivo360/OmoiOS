@@ -1,14 +1,20 @@
-"use client"
+"use client";
 
-import { use, useState } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Skeleton } from "@/components/ui/skeleton"
+import { use, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -17,119 +23,166 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, FileText, Clock, CheckCircle, AlertCircle, Loader2, FolderGit2, Trash2, X } from "lucide-react"
-import { useProjectSpecs, useCreateSpec, useDeleteSpec } from "@/hooks/useSpecs"
-import { useProject } from "@/hooks/useProjects"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Plus,
+  FileText,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  FolderGit2,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  useProjectSpecs,
+  useCreateSpec,
+  useDeleteSpec,
+} from "@/hooks/useSpecs";
+import { useProject } from "@/hooks/useProjects";
 
 interface SpecsPageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }
 
 const statusConfig = {
-  draft: { label: "Draft", icon: FileText, color: "secondary", spinning: false },
-  requirements: { label: "Requirements", icon: FileText, color: "secondary", spinning: false },
-  design: { label: "Design", icon: AlertCircle, color: "warning", spinning: false },
-  executing: { label: "Executing", icon: Loader2, color: "default", spinning: true },
-  completed: { label: "Completed", icon: CheckCircle, color: "success", spinning: false },
-}
+  draft: {
+    label: "Draft",
+    icon: FileText,
+    color: "secondary",
+    spinning: false,
+  },
+  requirements: {
+    label: "Requirements",
+    icon: FileText,
+    color: "secondary",
+    spinning: false,
+  },
+  design: {
+    label: "Design",
+    icon: AlertCircle,
+    color: "warning",
+    spinning: false,
+  },
+  executing: {
+    label: "Executing",
+    icon: Loader2,
+    color: "default",
+    spinning: true,
+  },
+  completed: {
+    label: "Completed",
+    icon: CheckCircle,
+    color: "success",
+    spinning: false,
+  },
+};
 
 export default function SpecsPage({ params }: SpecsPageProps) {
-  const { id: projectId } = use(params)
-  const router = useRouter()
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [newTitle, setNewTitle] = useState("")
-  const [newDescription, setNewDescription] = useState("")
-  const [selectedSpecs, setSelectedSpecs] = useState<Set<string>>(new Set())
-  const [isDeleting, setIsDeleting] = useState(false)
+  const { id: projectId } = use(params);
+  const router = useRouter();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [selectedSpecs, setSelectedSpecs] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Poll every 5s when any spec is executing to see status updates
   const { data, isLoading, error } = useProjectSpecs(projectId, {
     refetchInterval: (query) => {
-      const hasExecuting = query.state.data?.specs.some(s => s.status === "executing")
-      return hasExecuting ? 5000 : false
-    }
-  })
-  const { data: project } = useProject(projectId)
-  const createMutation = useCreateSpec()
-  const deleteSpecMutation = useDeleteSpec()
+      const hasExecuting = query.state.data?.specs.some(
+        (s) => s.status === "executing",
+      );
+      return hasExecuting ? 5000 : false;
+    },
+  });
+  const { data: project } = useProject(projectId);
+  const createMutation = useCreateSpec();
+  const deleteSpecMutation = useDeleteSpec();
 
-  const specs = data?.specs || []
+  const specs = data?.specs || [];
 
   // Selection handlers
   const toggleSelectSpec = (specId: string) => {
-    setSelectedSpecs(prev => {
-      const next = new Set(prev)
+    setSelectedSpecs((prev) => {
+      const next = new Set(prev);
       if (next.has(specId)) {
-        next.delete(specId)
+        next.delete(specId);
       } else {
-        next.add(specId)
+        next.add(specId);
       }
-      return next
-    })
-  }
+      return next;
+    });
+  };
 
   const toggleSelectAll = () => {
     if (selectedSpecs.size === specs.length) {
-      setSelectedSpecs(new Set())
+      setSelectedSpecs(new Set());
     } else {
-      setSelectedSpecs(new Set(specs.map(s => s.id)))
+      setSelectedSpecs(new Set(specs.map((s) => s.id)));
     }
-  }
+  };
 
   const clearSelection = () => {
-    setSelectedSpecs(new Set())
-  }
+    setSelectedSpecs(new Set());
+  };
 
   const handleBulkDelete = async () => {
-    if (selectedSpecs.size === 0) return
+    if (selectedSpecs.size === 0) return;
 
-    const count = selectedSpecs.size
-    if (!confirm(`Are you sure you want to archive ${count} spec${count > 1 ? 's' : ''}? This action cannot be undone.`)) {
-      return
+    const count = selectedSpecs.size;
+    if (
+      !confirm(
+        `Are you sure you want to archive ${count} spec${count > 1 ? "s" : ""}? This action cannot be undone.`,
+      )
+    ) {
+      return;
     }
 
-    setIsDeleting(true)
-    let successCount = 0
-    let failCount = 0
+    setIsDeleting(true);
+    let successCount = 0;
+    let failCount = 0;
 
     for (const specId of selectedSpecs) {
       try {
-        await deleteSpecMutation.mutateAsync({ specId, projectId })
-        successCount++
+        await deleteSpecMutation.mutateAsync({ specId, projectId });
+        successCount++;
       } catch {
-        failCount++
+        failCount++;
       }
     }
 
-    setIsDeleting(false)
-    setSelectedSpecs(new Set())
+    setIsDeleting(false);
+    setSelectedSpecs(new Set());
 
     if (failCount === 0) {
-      toast.success(`Archived ${successCount} spec${successCount > 1 ? 's' : ''} successfully`)
+      toast.success(
+        `Archived ${successCount} spec${successCount > 1 ? "s" : ""} successfully`,
+      );
     } else {
-      toast.error(`Archived ${successCount}, failed ${failCount}`)
+      toast.error(`Archived ${successCount}, failed ${failCount}`);
     }
-  }
+  };
 
   const formatTimeAgo = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
 
   const handleCreateSpec = async () => {
     if (!newTitle.trim()) {
-      toast.error("Title is required")
-      return
+      toast.error("Title is required");
+      return;
     }
 
     try {
@@ -137,16 +190,16 @@ export default function SpecsPage({ params }: SpecsPageProps) {
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
         project_id: projectId,
-      })
-      toast.success("Spec created successfully!")
-      setIsCreateOpen(false)
-      setNewTitle("")
-      setNewDescription("")
-      router.push(`/projects/${projectId}/specs/${result.id}`)
+      });
+      toast.success("Spec created successfully!");
+      setIsCreateOpen(false);
+      setNewTitle("");
+      setNewDescription("");
+      router.push(`/projects/${projectId}/specs/${result.id}`);
     } catch {
-      toast.error("Failed to create spec")
+      toast.error("Failed to create spec");
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -160,7 +213,7 @@ export default function SpecsPage({ params }: SpecsPageProps) {
           <Skeleton key={i} className="h-40 w-full" />
         ))}
       </div>
-    )
+    );
   }
 
   return (
@@ -172,7 +225,9 @@ export default function SpecsPage({ params }: SpecsPageProps) {
           className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
         >
           <FolderGit2 className="h-4 w-4" />
-          <span className="font-medium text-foreground">{project?.name || "Project"}</span>
+          <span className="font-medium text-foreground">
+            {project?.name || "Project"}
+          </span>
         </Link>
         <span className="text-muted-foreground">/</span>
         <span className="text-muted-foreground">Specifications</span>
@@ -183,7 +238,8 @@ export default function SpecsPage({ params }: SpecsPageProps) {
         <div>
           <h1 className="text-2xl font-bold">Specifications</h1>
           <p className="text-muted-foreground">
-            Manage specifications and requirements for {project?.name || "this project"}
+            Manage specifications and requirements for{" "}
+            {project?.name || "this project"}
           </p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -224,8 +280,13 @@ export default function SpecsPage({ params }: SpecsPageProps) {
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreateSpec} disabled={createMutation.isPending}>
-                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button
+                onClick={handleCreateSpec}
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 Create Spec
               </Button>
             </DialogFooter>
@@ -244,7 +305,7 @@ export default function SpecsPage({ params }: SpecsPageProps) {
           <span className="text-sm text-muted-foreground">
             {selectedSpecs.size > 0
               ? `${selectedSpecs.size} of ${specs.length} selected`
-              : `${specs.length} spec${specs.length > 1 ? 's' : ''}`}
+              : `${specs.length} spec${specs.length > 1 ? "s" : ""}`}
           </span>
           {selectedSpecs.size > 0 && (
             <>
@@ -280,8 +341,10 @@ export default function SpecsPage({ params }: SpecsPageProps) {
       {specs.length > 0 ? (
         <div className="space-y-4">
           {specs.map((spec) => {
-            const config = statusConfig[spec.status as keyof typeof statusConfig] || statusConfig.draft
-            const StatusIcon = config.icon
+            const config =
+              statusConfig[spec.status as keyof typeof statusConfig] ||
+              statusConfig.draft;
+            const StatusIcon = config.icon;
 
             return (
               <Card
@@ -311,8 +374,19 @@ export default function SpecsPage({ params }: SpecsPageProps) {
                             {spec.description || "No description"}
                           </CardDescription>
                         </div>
-                        <Badge variant={config.color as "default" | "secondary" | "destructive" | "outline"} className="shrink-0">
-                          <StatusIcon className={`mr-1 h-3 w-3 ${config.spinning ? "animate-spin" : ""}`} />
+                        <Badge
+                          variant={
+                            config.color as
+                              | "default"
+                              | "secondary"
+                              | "destructive"
+                              | "outline"
+                          }
+                          className="shrink-0"
+                        >
+                          <StatusIcon
+                            className={`mr-1 h-3 w-3 ${config.spinning ? "animate-spin" : ""}`}
+                          />
                           {config.label}
                         </Badge>
                       </div>
@@ -344,7 +418,7 @@ export default function SpecsPage({ params }: SpecsPageProps) {
                   </div>
                 </CardContent>
               </Card>
-            )
+            );
           })}
         </div>
       ) : (
@@ -361,5 +435,5 @@ export default function SpecsPage({ params }: SpecsPageProps) {
         </Card>
       )}
     </div>
-  )
+  );
 }

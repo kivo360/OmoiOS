@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Terminal, Circle } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Terminal, Circle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TerminalEntry {
-  timestamp: string
-  agentId: string
-  action: string
-  status: "thinking" | "coding" | "testing" | "committing" | "complete"
+  timestamp: string;
+  agentId: string;
+  action: string;
+  status: "thinking" | "coding" | "testing" | "committing" | "complete";
 }
 
 const terminalSequence: TerminalEntry[] = [
@@ -43,7 +43,7 @@ const terminalSequence: TerminalEntry[] = [
     action: "Opening PR #147: 'Add JWT authentication'",
     status: "committing",
   },
-]
+];
 
 const statusColors: Record<TerminalEntry["status"], string> = {
   thinking: "#FFD93D", // Yellow
@@ -51,12 +51,12 @@ const statusColors: Record<TerminalEntry["status"], string> = {
   testing: "#0366D6", // Blue
   committing: "#A855F7", // Purple
   complete: "#00FF41", // Green
-}
+};
 
 interface AgentTerminalProps {
-  className?: string
-  autoPlay?: boolean
-  speed?: "slow" | "normal" | "fast"
+  className?: string;
+  autoPlay?: boolean;
+  speed?: "slow" | "normal" | "fast";
 }
 
 export function AgentTerminal({
@@ -64,54 +64,54 @@ export function AgentTerminal({
   autoPlay = true,
   speed = "normal",
 }: AgentTerminalProps) {
-  const [visibleEntries, setVisibleEntries] = useState<number>(0)
-  const [currentText, setCurrentText] = useState("")
-  const [isTyping, setIsTyping] = useState(false)
+  const [visibleEntries, setVisibleEntries] = useState<number>(0);
+  const [currentText, setCurrentText] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
 
-  const speedMultiplier = speed === "slow" ? 2 : speed === "fast" ? 0.5 : 1
+  const speedMultiplier = speed === "slow" ? 2 : speed === "fast" ? 0.5 : 1;
 
   useEffect(() => {
-    if (!autoPlay) return
+    if (!autoPlay) return;
 
     const showNextEntry = () => {
       if (visibleEntries >= terminalSequence.length) {
         // Reset after delay
         setTimeout(() => {
-          setVisibleEntries(0)
-          setCurrentText("")
-        }, 3000 * speedMultiplier)
-        return
+          setVisibleEntries(0);
+          setCurrentText("");
+        }, 3000 * speedMultiplier);
+        return;
       }
 
-      setIsTyping(true)
-      const entry = terminalSequence[visibleEntries]
-      let charIndex = 0
+      setIsTyping(true);
+      const entry = terminalSequence[visibleEntries];
+      let charIndex = 0;
 
       // Type out the action text
       const typeInterval = setInterval(() => {
         if (charIndex <= entry.action.length) {
-          setCurrentText(entry.action.slice(0, charIndex))
-          charIndex++
+          setCurrentText(entry.action.slice(0, charIndex));
+          charIndex++;
         } else {
-          clearInterval(typeInterval)
-          setIsTyping(false)
-          setVisibleEntries((prev) => prev + 1)
+          clearInterval(typeInterval);
+          setIsTyping(false);
+          setVisibleEntries((prev) => prev + 1);
         }
-      }, 30 * speedMultiplier)
+      }, 30 * speedMultiplier);
 
-      return () => clearInterval(typeInterval)
-    }
+      return () => clearInterval(typeInterval);
+    };
 
-    const entryDelay = setTimeout(showNextEntry, 2000 * speedMultiplier)
+    const entryDelay = setTimeout(showNextEntry, 2000 * speedMultiplier);
 
-    return () => clearTimeout(entryDelay)
-  }, [autoPlay, visibleEntries, speedMultiplier])
+    return () => clearTimeout(entryDelay);
+  }, [autoPlay, visibleEntries, speedMultiplier]);
 
   return (
     <div
       className={cn(
         "overflow-hidden rounded-lg border border-[#333] bg-[#0D0D0D]",
-        className
+        className,
       )}
     >
       {/* Terminal Header */}
@@ -142,7 +142,9 @@ export function AgentTerminal({
               className="mb-2 flex items-start gap-3"
             >
               {/* Timestamp */}
-              <span className="text-muted-foreground/50">[{entry.timestamp}]</span>
+              <span className="text-muted-foreground/50">
+                [{entry.timestamp}]
+              </span>
 
               {/* Status indicator */}
               <Circle
@@ -158,7 +160,7 @@ export function AgentTerminal({
               <span
                 className={cn(
                   entry.status === "complete" && "text-[#00FF41]",
-                  entry.status !== "complete" && "text-[#E5E5E5]"
+                  entry.status !== "complete" && "text-[#E5E5E5]",
                 )}
               >
                 {entry.action}
@@ -226,5 +228,5 @@ export function AgentTerminal({
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,24 +1,30 @@
-"use client"
+"use client";
 
-import { use, useState } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
-import { Skeleton } from "@/components/ui/skeleton"
+import { use, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { toast } from "sonner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,7 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
   Settings,
@@ -46,13 +52,17 @@ import {
   Loader2,
   Webhook,
   Activity,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { useProject } from "@/hooks/useProjects"
-import { useConnectedRepositories, useConnectRepository, useSyncRepository } from "@/hooks/useGitHub"
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useProject } from "@/hooks/useProjects";
+import {
+  useConnectedRepositories,
+  useConnectRepository,
+  useSyncRepository,
+} from "@/hooks/useGitHub";
 
 interface GitHubSettingsPageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }
 
 const settingsNav = [
@@ -60,40 +70,48 @@ const settingsNav = [
   { href: "/board", label: "Board", icon: Columns3 },
   { href: "/phases", label: "Phases", icon: Workflow },
   { href: "/github", label: "GitHub", icon: GitBranch },
-]
+];
 
-export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) {
-  const { id } = use(params)
-  const pathname = usePathname()
-  
-  const { data: project, isLoading: projectLoading, error: projectError } = useProject(id)
-  const { data: connectedRepos } = useConnectedRepositories()
-  const syncMutation = useSyncRepository()
-  const connectMutation = useConnectRepository()
-  
-  const [isSyncing, setIsSyncing] = useState(false)
+export default function GitHubSettingsPage({
+  params,
+}: GitHubSettingsPageProps) {
+  const { id } = use(params);
+  const pathname = usePathname();
+
+  const {
+    data: project,
+    isLoading: projectLoading,
+    error: projectError,
+  } = useProject(id);
+  const { data: connectedRepos } = useConnectedRepositories();
+  const syncMutation = useSyncRepository();
+  const connectMutation = useConnectRepository();
+
+  const [isSyncing, setIsSyncing] = useState(false);
   const [syncSettings, setSyncSettings] = useState({
     issues: true,
     commits: true,
     pullRequests: true,
     workflowRuns: false,
-  })
+  });
 
   // Check if project is connected to GitHub
-  const isConnected = Boolean(project?.github_owner && project?.github_repo)
-  const selectedRepo = isConnected ? `${project?.github_owner}/${project?.github_repo}` : null
+  const isConnected = Boolean(project?.github_owner && project?.github_repo);
+  const selectedRepo = isConnected
+    ? `${project?.github_owner}/${project?.github_repo}`
+    : null;
 
   const handleSync = async () => {
-    setIsSyncing(true)
+    setIsSyncing(true);
     try {
-      await syncMutation.mutateAsync(id)
-      toast.success("Sync completed successfully!")
+      await syncMutation.mutateAsync(id);
+      toast.success("Sync completed successfully!");
     } catch (error) {
-      toast.error("Sync failed. Please try again.")
+      toast.error("Sync failed. Please try again.");
     } finally {
-      setIsSyncing(false)
+      setIsSyncing(false);
     }
-  }
+  };
 
   if (projectLoading) {
     return (
@@ -105,7 +123,7 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
           <Skeleton className="h-64 flex-1" />
         </div>
       </div>
-    )
+    );
   }
 
   if (projectError || !project) {
@@ -116,7 +134,7 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
           <Link href="/projects">Back to Projects</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -133,14 +151,17 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Project Settings</h1>
-        <p className="text-muted-foreground">Manage settings for {project.name}</p>
+        <p className="text-muted-foreground">
+          Manage settings for {project.name}
+        </p>
       </div>
 
       <div className="flex gap-6">
         {/* Sidebar Navigation */}
         <nav className="w-48 shrink-0 space-y-1">
           {settingsNav.map((item) => {
-            const isActive = pathname === `/projects/${id}/settings${item.href}`
+            const isActive =
+              pathname === `/projects/${id}/settings${item.href}`;
             return (
               <Link
                 key={item.href}
@@ -149,13 +170,13 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                   isActive
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
               </Link>
-            )
+            );
           })}
         </nav>
 
@@ -169,7 +190,8 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                 GitHub Connection
               </CardTitle>
               <CardDescription>
-                Connect your GitHub repository to sync issues, commits, and pull requests
+                Connect your GitHub repository to sync issues, commits, and pull
+                requests
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -187,17 +209,24 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                         </p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="border-green-300 text-green-700">
+                    <Badge
+                      variant="outline"
+                      className="border-green-300 text-green-700"
+                    >
                       Active
                     </Badge>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label className="text-muted-foreground">GitHub Repository</Label>
+                      <Label className="text-muted-foreground">
+                        GitHub Repository
+                      </Label>
                       <div className="flex items-center gap-2">
                         <GitBranch className="h-4 w-4" />
-                        <span className="font-medium font-mono text-sm">{selectedRepo}</span>
+                        <span className="font-medium font-mono text-sm">
+                          {selectedRepo}
+                        </span>
                       </div>
                     </div>
                     <div className="space-y-2">
@@ -260,7 +289,9 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <GitBranch className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-mono text-sm">{selectedRepo}</span>
+                          <span className="font-mono text-sm">
+                            {selectedRepo}
+                          </span>
                         </div>
                         <a
                           href={`https://github.com/${selectedRepo}`}
@@ -273,9 +304,10 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                       </div>
                     </div>
                   )}
-                  
+
                   <p className="text-xs text-muted-foreground">
-                    To change the connected repository, edit the project settings on the General tab.
+                    To change the connected repository, edit the project
+                    settings on the General tab.
                   </p>
                 </CardContent>
               </Card>
@@ -288,7 +320,8 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                     Webhook Configuration
                   </CardTitle>
                   <CardDescription>
-                    Webhooks are automatically configured when a repository is connected
+                    Webhooks are automatically configured when a repository is
+                    connected
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -303,9 +336,10 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                       </div>
                     </div>
                   </div>
-                  
+
                   <p className="text-xs text-muted-foreground">
-                    The webhook is set up automatically to receive push events, pull requests, and issue updates from GitHub.
+                    The webhook is set up automatically to receive push events,
+                    pull requests, and issue updates from GitHub.
                   </p>
                 </CardContent>
               </Card>
@@ -315,7 +349,8 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                 <CardHeader>
                   <CardTitle>Auto-Sync Settings</CardTitle>
                   <CardDescription>
-                    Configure what data is automatically synchronized from GitHub
+                    Configure what data is automatically synchronized from
+                    GitHub
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -359,7 +394,10 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                     <Switch
                       checked={syncSettings.pullRequests}
                       onCheckedChange={(checked) =>
-                        setSyncSettings({ ...syncSettings, pullRequests: checked })
+                        setSyncSettings({
+                          ...syncSettings,
+                          pullRequests: checked,
+                        })
                       }
                     />
                   </div>
@@ -374,7 +412,10 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                     <Switch
                       checked={syncSettings.workflowRuns}
                       onCheckedChange={(checked) =>
-                        setSyncSettings({ ...syncSettings, workflowRuns: checked })
+                        setSyncSettings({
+                          ...syncSettings,
+                          workflowRuns: checked,
+                        })
                       }
                     />
                   </div>
@@ -384,7 +425,9 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
               {/* Actions */}
               <Card className="border-destructive/50">
                 <CardHeader>
-                  <CardTitle className="text-destructive">Danger Zone</CardTitle>
+                  <CardTitle className="text-destructive">
+                    Danger Zone
+                  </CardTitle>
                   <CardDescription>
                     These actions can affect your GitHub integration
                   </CardDescription>
@@ -405,7 +448,8 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    To disconnect the repository, edit the project settings and clear the GitHub repository field.
+                    To disconnect the repository, edit the project settings and
+                    clear the GitHub repository field.
                   </p>
                 </CardContent>
               </Card>
@@ -414,5 +458,5 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
         </div>
       </div>
     </div>
-  )
+  );
 }

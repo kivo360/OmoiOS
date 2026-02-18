@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { usePathname } from "next/navigation"
-import Link from "next/link"
-import { cn } from "@/lib/utils"
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
 import {
   Terminal,
   FolderGit2,
@@ -11,24 +11,31 @@ import {
   Settings,
   Building2,
   Workflow,
-} from "lucide-react"
+} from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { OmoiOSMark } from "@/components/ui/omoios-logo"
+} from "@/components/ui/tooltip";
+import { OmoiOSMark } from "@/components/ui/omoios-logo";
 
-export type NavSection = "command" | "projects" | "phases" | "sandboxes" | "analytics" | "organizations" | "settings"
+export type NavSection =
+  | "command"
+  | "projects"
+  | "phases"
+  | "sandboxes"
+  | "analytics"
+  | "organizations"
+  | "settings";
 
 interface NavItem {
-  id: NavSection
-  label: string
-  icon: React.ComponentType<{ className?: string }>
-  href: string
-  badge?: number
-  badgeType?: "default" | "warning" | "destructive"
+  id: NavSection;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  href: string;
+  badge?: number;
+  badgeType?: "default" | "warning" | "destructive";
 }
 
 const mainNavItems: NavItem[] = [
@@ -39,46 +46,56 @@ const mainNavItems: NavItem[] = [
   { id: "sandboxes", label: "Sandboxes", icon: Box, href: "/sandboxes" },
   // TODO: Re-enable when analytics feature is ready
   // { id: "analytics", label: "Analytics", icon: BarChart3, href: "/analytics" },
-  { id: "organizations", label: "Organizations", icon: Building2, href: "/organizations" },
-]
+  {
+    id: "organizations",
+    label: "Organizations",
+    icon: Building2,
+    href: "/organizations",
+  },
+];
 
 const bottomNavItems: NavItem[] = [
   { id: "settings", label: "Settings", icon: Settings, href: "/settings" },
-]
+];
 
 interface IconRailProps {
-  activeSection?: NavSection
-  onSectionChange?: (section: NavSection) => void
-  className?: string
+  activeSection?: NavSection;
+  onSectionChange?: (section: NavSection) => void;
+  className?: string;
 }
 
-export function IconRail({ activeSection, onSectionChange, className }: IconRailProps) {
-  const pathname = usePathname()
+export function IconRail({
+  activeSection,
+  onSectionChange,
+  className,
+}: IconRailProps) {
+  const pathname = usePathname();
 
   const getActiveSection = (): NavSection => {
-    if (activeSection) return activeSection
-    if (pathname.startsWith("/command")) return "command"
-    if (pathname.startsWith("/projects")) return "projects"
-    if (pathname.startsWith("/phases")) return "phases"
-    if (pathname.startsWith("/sandboxes") || pathname.startsWith("/sandbox/")) return "sandboxes"
-    if (pathname.startsWith("/analytics")) return "analytics"
-    if (pathname.startsWith("/organizations")) return "organizations"
-    if (pathname.startsWith("/settings")) return "settings"
-    return "command"
-  }
+    if (activeSection) return activeSection;
+    if (pathname.startsWith("/command")) return "command";
+    if (pathname.startsWith("/projects")) return "projects";
+    if (pathname.startsWith("/phases")) return "phases";
+    if (pathname.startsWith("/sandboxes") || pathname.startsWith("/sandbox/"))
+      return "sandboxes";
+    if (pathname.startsWith("/analytics")) return "analytics";
+    if (pathname.startsWith("/organizations")) return "organizations";
+    if (pathname.startsWith("/settings")) return "settings";
+    return "command";
+  };
 
-  const currentSection = getActiveSection()
+  const currentSection = getActiveSection();
 
   const handleClick = (item: NavItem) => {
-    onSectionChange?.(item.id)
-  }
+    onSectionChange?.(item.id);
+  };
 
   return (
     <TooltipProvider delayDuration={0}>
       <div
         className={cn(
           "flex h-full w-14 flex-col items-center border-r bg-sidebar py-4",
-          className
+          className,
         )}
       >
         {/* Logo */}
@@ -92,8 +109,8 @@ export function IconRail({ activeSection, onSectionChange, className }: IconRail
         {/* Main Navigation */}
         <nav className="flex flex-1 flex-col items-center gap-2">
           {mainNavItems.map((item) => {
-            const isActive = currentSection === item.id
-            const Icon = item.icon
+            const isActive = currentSection === item.id;
+            const Icon = item.icon;
 
             return (
               <Tooltip key={item.id}>
@@ -105,7 +122,7 @@ export function IconRail({ activeSection, onSectionChange, className }: IconRail
                       "relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors",
                       isActive
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                     )}
                   >
                     <Icon className="h-5 w-5" />
@@ -116,8 +133,8 @@ export function IconRail({ activeSection, onSectionChange, className }: IconRail
                           item.badgeType === "warning"
                             ? "bg-warning text-warning-foreground"
                             : item.badgeType === "destructive"
-                            ? "bg-destructive text-destructive-foreground"
-                            : "bg-primary text-primary-foreground"
+                              ? "bg-destructive text-destructive-foreground"
+                              : "bg-primary text-primary-foreground",
                         )}
                       >
                         {item.badge > 9 ? "9+" : item.badge}
@@ -129,15 +146,15 @@ export function IconRail({ activeSection, onSectionChange, className }: IconRail
                   {item.label}
                 </TooltipContent>
               </Tooltip>
-            )
+            );
           })}
         </nav>
 
         {/* Bottom Navigation */}
         <nav className="flex flex-col items-center gap-2">
           {bottomNavItems.map((item) => {
-            const isActive = currentSection === item.id
-            const Icon = item.icon
+            const isActive = currentSection === item.id;
+            const Icon = item.icon;
 
             return (
               <Tooltip key={item.id}>
@@ -149,7 +166,7 @@ export function IconRail({ activeSection, onSectionChange, className }: IconRail
                       "flex h-10 w-10 items-center justify-center rounded-lg transition-colors",
                       isActive
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                     )}
                   >
                     <Icon className="h-5 w-5" />
@@ -159,10 +176,10 @@ export function IconRail({ activeSection, onSectionChange, className }: IconRail
                   {item.label}
                 </TooltipContent>
               </Tooltip>
-            )
+            );
           })}
         </nav>
       </div>
     </TooltipProvider>
-  )
+  );
 }

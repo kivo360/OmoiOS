@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
-import { Pencil, ListChecks, Moon, CheckCircle2 } from "lucide-react"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { TicketJourney } from "@/components/landing/TicketJourney"
-import { cn } from "@/lib/utils"
+import { motion } from "framer-motion";
+import { Pencil, ListChecks, Moon, CheckCircle2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { TicketJourney } from "@/components/landing/TicketJourney";
+import { cn } from "@/lib/utils";
 
 const phases = [
   {
@@ -48,15 +48,18 @@ const phases = [
     color: "bg-green-500",
     highlight: "Ready when you are",
   },
-]
+];
 
 interface WorkflowSectionProps {
-  className?: string
+  className?: string;
 }
 
 export function WorkflowSection({ className }: WorkflowSectionProps) {
   return (
-    <section className={cn("bg-landing-bg py-20 md:py-32", className)} id="how-it-works">
+    <section
+      className={cn("bg-landing-bg py-20 md:py-32", className)}
+      id="how-it-works"
+    >
       <div className="container mx-auto px-4">
         {/* Section Header */}
         <motion.div
@@ -69,8 +72,9 @@ export function WorkflowSection({ className }: WorkflowSectionProps) {
             You Sleep. Agents Ship.
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            Write a spec, approve the plan, go to bed. Agents execute in an organized pipeline—with
-            guardrails, tests, and retries—so you wake up to a PR you can trust.
+            Write a spec, approve the plan, go to bed. Agents execute in an
+            organized pipeline—with guardrails, tests, and retries—so you wake
+            up to a PR you can trust.
           </p>
         </motion.div>
 
@@ -95,7 +99,7 @@ export function WorkflowSection({ className }: WorkflowSectionProps) {
                   <div
                     className={cn(
                       "mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg",
-                      phase.color
+                      phase.color,
                     )}
                   >
                     <phase.icon className="h-5 w-5 text-white" />
@@ -105,7 +109,9 @@ export function WorkflowSection({ className }: WorkflowSectionProps) {
                   <h3 className="mb-2 text-lg font-semibold text-landing-text">
                     {phase.title}
                   </h3>
-                  <p className="mb-3 text-sm text-landing-text-muted">{phase.description}</p>
+                  <p className="mb-3 text-sm text-landing-text-muted">
+                    {phase.description}
+                  </p>
 
                   {/* Highlight Badge */}
                   <Badge
@@ -167,5 +173,5 @@ export function WorkflowSection({ className }: WorkflowSectionProps) {
         </motion.div>
       </div>
     </section>
-  )
+  );
 }

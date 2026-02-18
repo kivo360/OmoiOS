@@ -1,26 +1,27 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Moon, ExternalLink, CheckCircle2, Clock, GitPullRequest } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@/components/ui/table"
+  Moon,
+  ExternalLink,
+  CheckCircle2,
+  Clock,
+  GitPullRequest,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 interface LogEntry {
-  id: string
-  timestamp: string
-  agentId: string
-  ticketId: string
-  action: string
-  status: "completed" | "in_progress" | "pr_opened"
-  testCount?: number
-  prNumber?: number
+  id: string;
+  timestamp: string;
+  agentId: string;
+  ticketId: string;
+  action: string;
+  status: "completed" | "in_progress" | "pr_opened";
+  testCount?: number;
+  prNumber?: number;
 }
 
 const mockLogEntries: LogEntry[] = [
@@ -76,30 +77,35 @@ const mockLogEntries: LogEntry[] = [
     status: "pr_opened",
     prNumber: 147,
   },
-]
+];
 
 interface NightShiftLogProps {
-  className?: string
-  autoPlay?: boolean
+  className?: string;
+  autoPlay?: boolean;
 }
 
-export function NightShiftLog({ className, autoPlay = true }: NightShiftLogProps) {
-  const [visibleEntries, setVisibleEntries] = useState<number>(autoPlay ? 0 : mockLogEntries.length)
+export function NightShiftLog({
+  className,
+  autoPlay = true,
+}: NightShiftLogProps) {
+  const [visibleEntries, setVisibleEntries] = useState<number>(
+    autoPlay ? 0 : mockLogEntries.length,
+  );
 
   useEffect(() => {
-    if (!autoPlay) return
+    if (!autoPlay) return;
 
     const timer = setInterval(() => {
       setVisibleEntries((prev) => {
         if (prev >= mockLogEntries.length) {
-          return prev
+          return prev;
         }
-        return prev + 1
-      })
-    }, 1500)
+        return prev + 1;
+      });
+    }, 1500);
 
-    return () => clearInterval(timer)
-  }, [autoPlay])
+    return () => clearInterval(timer);
+  }, [autoPlay]);
 
   const getStatusBadge = (entry: LogEntry) => {
     switch (entry.status) {
@@ -109,29 +115,29 @@ export function NightShiftLog({ className, autoPlay = true }: NightShiftLogProps
             <CheckCircle2 className="mr-1 h-3 w-3" />
             {entry.action}
           </Badge>
-        )
+        );
       case "in_progress":
         return (
           <Badge variant="secondary">
             <div className="mr-1 h-3 w-3 animate-spin rounded-full border-2 border-warning border-t-transparent" />
             {entry.action}
           </Badge>
-        )
+        );
       case "pr_opened":
         return (
           <Badge variant="outline" className="border-primary text-primary">
             <GitPullRequest className="mr-1 h-3 w-3" />
             {entry.action}
           </Badge>
-        )
+        );
     }
-  }
+  };
 
   return (
     <div
       className={cn(
         "overflow-hidden rounded-xl border border-border bg-card",
-        className
+        className,
       )}
     >
       {/* Header */}
@@ -234,5 +240,5 @@ export function NightShiftLog({ className, autoPlay = true }: NightShiftLogProps
         </div>
       </div>
     </div>
-  )
+  );
 }

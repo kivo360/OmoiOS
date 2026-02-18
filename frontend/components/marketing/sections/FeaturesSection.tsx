@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
+import { motion } from "framer-motion";
 import {
   Bot,
   Zap,
@@ -10,9 +10,9 @@ import {
   Eye,
   Lightbulb,
   CheckCircle2,
-} from "lucide-react"
-import { BentoGrid, BentoGridItem } from "@/components/ui/bento-grid"
-import { cn } from "@/lib/utils"
+} from "lucide-react";
+import { BentoGrid, BentoGridItem } from "@/components/ui/bento-grid";
+import { cn } from "@/lib/utils";
 
 const features = [
   {
@@ -63,16 +63,19 @@ const features = [
     className: "md:col-span-2",
     visual: <VisibilityVisual />,
   },
-]
+];
 
 interface FeaturesSectionProps {
-  className?: string
-  id?: string
+  className?: string;
+  id?: string;
 }
 
 export function FeaturesSection({ className, id }: FeaturesSectionProps) {
   return (
-    <section id={id} className={cn("bg-landing-bg-warm py-20 md:py-32", className)}>
+    <section
+      id={id}
+      className={cn("bg-landing-bg-warm py-20 md:py-32", className)}
+    >
       <div className="container mx-auto px-4">
         {/* Section Header */}
         <motion.div
@@ -85,7 +88,8 @@ export function FeaturesSection({ className, id }: FeaturesSectionProps) {
             An Army of Agents. In Formation.
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            Orchestrated execution with guardrails, tests, and self-correction—so errors don&apos;t pile up.
+            Orchestrated execution with guardrails, tests, and
+            self-correction—so errors don&apos;t pile up.
           </p>
         </motion.div>
 
@@ -100,20 +104,20 @@ export function FeaturesSection({ className, id }: FeaturesSectionProps) {
               icon={<feature.icon className="h-4 w-4 text-landing-accent" />}
               className={cn(
                 feature.className,
-                "group border-landing-border bg-white hover:shadow-lg transition-all duration-300"
+                "group border-landing-border bg-white hover:shadow-lg transition-all duration-300",
               )}
             />
           ))}
         </BentoGrid>
       </div>
     </section>
-  )
+  );
 }
 
 // Visual Components for Bento Grid Items
 
 function SpecDrivenVisual() {
-  const phases = ["Requirements", "Design", "Plan", "Execution"]
+  const phases = ["Requirements", "Design", "Plan", "Execution"];
   return (
     <div className="flex h-full min-h-[120px] items-center justify-center gap-2 rounded-lg bg-landing-bg-muted p-4">
       {phases.map((phase, i) => (
@@ -134,7 +138,7 @@ function SpecDrivenVisual() {
         </motion.div>
       ))}
     </div>
-  )
+  );
 }
 
 function GuardianVisual() {
@@ -156,7 +160,7 @@ function GuardianVisual() {
         />
       </motion.div>
     </div>
-  )
+  );
 }
 
 function DiscoveryVisual() {
@@ -189,7 +193,7 @@ function DiscoveryVisual() {
         <Lightbulb className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 text-landing-accent" />
       </div>
     </div>
-  )
+  );
 }
 
 function VerificationVisual() {
@@ -208,7 +212,7 @@ function VerificationVisual() {
         </motion.div>
       ))}
     </div>
-  )
+  );
 }
 
 function SelfHealingVisual() {
@@ -221,7 +225,7 @@ function SelfHealingVisual() {
         <RefreshCw className="h-10 w-10 text-landing-accent" />
       </motion.div>
     </div>
-  )
+  );
 }
 
 function VisibilityVisual() {
@@ -238,5 +242,5 @@ function VisibilityVisual() {
         />
       ))}
     </div>
-  )
+  );
 }

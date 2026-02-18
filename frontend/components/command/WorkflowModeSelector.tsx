@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import {
   Select,
@@ -6,20 +6,20 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { cn } from "@/lib/utils"
-import { Zap, FileText } from "lucide-react"
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { Zap, FileText } from "lucide-react";
 
-export type WorkflowMode = "quick" | "spec_driven"
+export type WorkflowMode = "quick" | "spec_driven";
 
 export interface WorkflowModeOption {
-  id: WorkflowMode
-  name: string
-  description: string
-  icon: React.ComponentType<{ className?: string }>
-  placeholder: string
-  helperText: string
-  submitLabel: string
+  id: WorkflowMode;
+  name: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  placeholder: string;
+  helperText: string;
+  submitLabel: string;
 }
 
 export const workflowModes: WorkflowModeOption[] = [
@@ -41,12 +41,12 @@ export const workflowModes: WorkflowModeOption[] = [
     helperText: "We'll generate requirements & design for your approval",
     submitLabel: "Create Spec",
   },
-]
+];
 
 interface WorkflowModeSelectorProps {
-  value?: WorkflowMode
-  onValueChange?: (value: WorkflowMode) => void
-  className?: string
+  value?: WorkflowMode;
+  onValueChange?: (value: WorkflowMode) => void;
+  className?: string;
 }
 
 export function WorkflowModeSelector({
@@ -55,10 +55,11 @@ export function WorkflowModeSelector({
   className,
 }: WorkflowModeSelectorProps) {
   const handleChange = (newValue: string) => {
-    onValueChange?.(newValue as WorkflowMode)
-  }
+    onValueChange?.(newValue as WorkflowMode);
+  };
 
-  const selectedMode = workflowModes.find((m) => m.id === value) || workflowModes[0]
+  const selectedMode =
+    workflowModes.find((m) => m.id === value) || workflowModes[0];
 
   return (
     <Select value={value} onValueChange={handleChange}>
@@ -72,7 +73,7 @@ export function WorkflowModeSelector({
       </SelectTrigger>
       <SelectContent>
         {workflowModes.map((mode) => {
-          const Icon = mode.icon
+          const Icon = mode.icon;
           return (
             <SelectItem key={mode.id} value={mode.id}>
               <div className="flex items-center gap-2">
@@ -83,14 +84,14 @@ export function WorkflowModeSelector({
                 </span>
               </div>
             </SelectItem>
-          )
+          );
         })}
       </SelectContent>
     </Select>
-  )
+  );
 }
 
 // Helper to get mode config
 export function getWorkflowModeConfig(mode: WorkflowMode): WorkflowModeOption {
-  return workflowModes.find((m) => m.id === mode) || workflowModes[0]
+  return workflowModes.find((m) => m.id === mode) || workflowModes[0];
 }

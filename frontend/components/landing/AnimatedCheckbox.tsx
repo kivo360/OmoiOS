@@ -1,13 +1,13 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 interface AnimatedCheckboxProps {
-  checked: boolean
-  label: string
-  delay?: number
-  className?: string
+  checked: boolean;
+  label: string;
+  delay?: number;
+  className?: string;
 }
 
 export function AnimatedCheckbox({
@@ -30,7 +30,7 @@ export function AnimatedCheckbox({
             "h-4 w-4 rounded border-2 transition-colors duration-200",
             checked
               ? "border-success bg-success/10"
-              : "border-muted-foreground/50 bg-transparent"
+              : "border-muted-foreground/50 bg-transparent",
           )}
           animate={checked ? { scale: [1, 1.1, 1] } : {}}
           transition={{ duration: 0.2 }}
@@ -51,7 +51,11 @@ export function AnimatedCheckbox({
               strokeLinejoin="round"
               initial={{ pathLength: 0 }}
               animate={{ pathLength: 1 }}
-              transition={{ duration: 0.3, delay: delay + 0.1, ease: "easeOut" }}
+              transition={{
+                duration: 0.3,
+                delay: delay + 0.1,
+                ease: "easeOut",
+              }}
             />
           </svg>
         )}
@@ -61,7 +65,7 @@ export function AnimatedCheckbox({
       <motion.span
         className={cn(
           "text-sm transition-colors duration-200",
-          checked ? "text-success" : "text-muted-foreground"
+          checked ? "text-success" : "text-muted-foreground",
         )}
         animate={checked ? { opacity: 1 } : { opacity: 0.7 }}
       >
@@ -78,5 +82,5 @@ export function AnimatedCheckbox({
         />
       )}
     </motion.div>
-  )
+  );
 }

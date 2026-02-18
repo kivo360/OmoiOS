@@ -1,20 +1,26 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Search,
   Plus,
@@ -29,10 +35,13 @@ import {
   TrendingUp,
   Heart,
   HeartOff,
-} from "lucide-react"
-import { useAgents, useAgentStatistics } from "@/hooks/useAgents"
+} from "lucide-react";
+import { useAgents, useAgentStatistics } from "@/hooks/useAgents";
 
-const statusConfig: Record<string, { icon: typeof Bot; color: string; iconClass: string }> = {
+const statusConfig: Record<
+  string,
+  { icon: typeof Bot; color: string; iconClass: string }
+> = {
   idle: { icon: Clock, color: "secondary", iconClass: "" },
   busy: { icon: Loader2, color: "warning", iconClass: "animate-spin" },
   working: { icon: Loader2, color: "warning", iconClass: "animate-spin" },
@@ -40,55 +49,59 @@ const statusConfig: Record<string, { icon: typeof Bot; color: string; iconClass:
   failed: { icon: XCircle, color: "destructive", iconClass: "" },
   timeout: { icon: AlertCircle, color: "warning", iconClass: "" },
   maintenance: { icon: AlertCircle, color: "secondary", iconClass: "" },
-}
+};
 
 const healthConfig: Record<string, { icon: typeof Heart; color: string }> = {
   healthy: { icon: Heart, color: "success" },
   degraded: { icon: Heart, color: "warning" },
   unhealthy: { icon: HeartOff, color: "destructive" },
-}
+};
 
 export default function AgentsPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   // Fetch agents and statistics from API
-  const { data: agents, isLoading, error } = useAgents()
-  const { data: statistics } = useAgentStatistics()
+  const { data: agents, isLoading, error } = useAgents();
+  const { data: statistics } = useAgentStatistics();
 
   // Filter agents
   const filteredAgents = useMemo(() => {
-    if (!agents) return []
-    
+    if (!agents) return [];
+
     return agents.filter((agent) => {
       const matchesSearch =
         agent.agent_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         agent.agent_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        agent.capabilities.some((c) => c.toLowerCase().includes(searchQuery.toLowerCase()))
-    const matchesStatus = statusFilter === "all" || agent.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
-  }, [agents, searchQuery, statusFilter])
+        agent.capabilities.some((c) =>
+          c.toLowerCase().includes(searchQuery.toLowerCase()),
+        );
+      const matchesStatus =
+        statusFilter === "all" || agent.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [agents, searchQuery, statusFilter]);
 
   // Calculate metrics from statistics or fallback to counting
-  const totalAgents = statistics?.total_agents ?? agents?.length ?? 0
-  const activeAgents = statistics?.by_status?.["busy"] ?? statistics?.by_status?.["working"] ?? 0
-  const idleAgents = statistics?.by_status?.["idle"] ?? 0
-  const healthyAgents = statistics?.by_health?.["healthy"] ?? 0
-  const staleCount = statistics?.stale_count ?? 0
+  const totalAgents = statistics?.total_agents ?? agents?.length ?? 0;
+  const activeAgents =
+    statistics?.by_status?.["busy"] ?? statistics?.by_status?.["working"] ?? 0;
+  const idleAgents = statistics?.by_status?.["idle"] ?? 0;
+  const healthyAgents = statistics?.by_health?.["healthy"] ?? 0;
+  const staleCount = statistics?.stale_count ?? 0;
 
   const formatTimeAgo = (dateStr: string | null) => {
-    if (!dateStr) return "Never"
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const minutes = Math.floor(diff / (1000 * 60))
-    if (minutes < 60) return `${minutes}m ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
+    if (!dateStr) return "Never";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / (1000 * 60));
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
 
   // Loading state
   if (isLoading) {
@@ -126,7 +139,7 @@ export default function AgentsPage() {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -141,7 +154,7 @@ export default function AgentsPage() {
           </p>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -163,7 +176,9 @@ export default function AgentsPage() {
       <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Agents</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Agents
+            </CardTitle>
             <Bot className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -172,16 +187,22 @@ export default function AgentsPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Active
+            </CardTitle>
             <Zap className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-warning">{activeAgents}</div>
+            <div className="text-2xl font-bold text-warning">
+              {activeAgents}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Idle</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Idle
+            </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -190,20 +211,28 @@ export default function AgentsPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Healthy</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Healthy
+            </CardTitle>
             <Heart className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">{healthyAgents}</div>
+            <div className="text-2xl font-bold text-success">
+              {healthyAgents}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Stale</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Stale
+            </CardTitle>
             <AlertCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">{staleCount}</div>
+            <div className="text-2xl font-bold text-destructive">
+              {staleCount}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -237,33 +266,50 @@ export default function AgentsPage() {
       {/* Agents Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {filteredAgents.map((agent) => {
-          const config = statusConfig[agent.status] || statusConfig.idle
-          const StatusIcon = config.icon
-          const healthCfg = healthConfig[agent.health_status] || healthConfig.healthy
-          const HealthIcon = healthCfg.icon
+          const config = statusConfig[agent.status] || statusConfig.idle;
+          const StatusIcon = config.icon;
+          const healthCfg =
+            healthConfig[agent.health_status] || healthConfig.healthy;
+          const HealthIcon = healthCfg.icon;
 
           return (
-            <Card key={agent.agent_id} className="hover:border-primary/50 transition-colors">
+            <Card
+              key={agent.agent_id}
+              className="hover:border-primary/50 transition-colors"
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
                     <Bot className="h-5 w-5 text-muted-foreground" />
                     <div>
-                    <CardTitle className="text-base">
-                        <Link href={`/agents/${agent.agent_id}`} className="hover:underline">
+                      <CardTitle className="text-base">
+                        <Link
+                          href={`/agents/${agent.agent_id}`}
+                          className="hover:underline"
+                        >
                           {agent.agent_type}
-                      </Link>
-                    </CardTitle>
+                        </Link>
+                      </CardTitle>
                       <CardDescription className="text-xs font-mono">
                         {agent.agent_id.slice(0, 12)}...
                       </CardDescription>
                     </div>
                   </div>
                   <div className="flex gap-1">
-                    <Badge variant={config.color as "default" | "secondary" | "destructive" | "outline"}>
-                    <StatusIcon className={`mr-1 h-3 w-3 ${config.iconClass}`} />
-                    {agent.status}
-                  </Badge>
+                    <Badge
+                      variant={
+                        config.color as
+                          | "default"
+                          | "secondary"
+                          | "destructive"
+                          | "outline"
+                      }
+                    >
+                      <StatusIcon
+                        className={`mr-1 h-3 w-3 ${config.iconClass}`}
+                      />
+                      {agent.status}
+                    </Badge>
                   </div>
                 </div>
               </CardHeader>
@@ -291,7 +337,10 @@ export default function AgentsPage() {
                     <span>{agent.health_status}</span>
                   </div>
                   {agent.phase_id && (
-                    <span className="truncate text-xs max-w-[140px]" title={agent.phase_id}>
+                    <span
+                      className="truncate text-xs max-w-[140px]"
+                      title={agent.phase_id}
+                    >
                       {agent.phase_id}
                     </span>
                   )}
@@ -316,7 +365,7 @@ export default function AgentsPage() {
                 </div>
               </CardContent>
             </Card>
-          )
+          );
         })}
       </div>
 
@@ -338,5 +387,5 @@ export default function AgentsPage() {
         </Card>
       )}
     </div>
-  )
+  );
 }

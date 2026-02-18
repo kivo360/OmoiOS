@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import type { ReactNode } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { useTheme } from 'next-themes';
-import { useState, useEffect } from 'react';
-import { Moon, Sun, Rss } from 'lucide-react';
+import type { ReactNode } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { useTheme } from "next-themes";
+import { useState, useEffect } from "react";
+import { Moon, Sun, Rss } from "lucide-react";
 
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
@@ -19,11 +19,11 @@ function ThemeToggle() {
 
   return (
     <button
-      onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       className="p-2 rounded-lg hover:bg-muted transition-colors"
       aria-label="Toggle theme"
     >
-      {resolvedTheme === 'dark' ? (
+      {resolvedTheme === "dark" ? (
         <Sun className="h-5 w-5" />
       ) : (
         <Moon className="h-5 w-5" />

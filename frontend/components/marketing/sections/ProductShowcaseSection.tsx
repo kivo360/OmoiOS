@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Image from "next/image"
-import { motion, AnimatePresence } from "framer-motion"
+import { useState } from "react";
+import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -10,15 +10,16 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const showcaseItems = [
   {
     id: "command",
     title: "Command Center",
-    description: "Describe what you want to build in plain English. Select your repo, branch, and model. Launch an agent with one click.",
+    description:
+      "Describe what you want to build in plain English. Select your repo, branch, and model. Launch an agent with one click.",
     icon: MessageSquare,
     image: "/screenshots/kanban-board.png",
     alt: "OmoiOS Command Center - describe what you want to build",
@@ -26,7 +27,8 @@ const showcaseItems = [
   {
     id: "kanban",
     title: "Kanban Board",
-    description: "Watch work flow through the pipeline: Backlog → Analyzing → Building → Testing → Deploying → Done. Full visibility into agent progress.",
+    description:
+      "Watch work flow through the pipeline: Backlog → Analyzing → Building → Testing → Deploying → Done. Full visibility into agent progress.",
     icon: FolderKanban,
     image: "/screenshots/agent-task-view.png",
     alt: "OmoiOS Kanban Board showing task pipeline",
@@ -34,7 +36,8 @@ const showcaseItems = [
   {
     id: "project",
     title: "Project Dashboard",
-    description: "One view for everything: active work, running agents, commit history, and GitHub integration. Know exactly where every project stands.",
+    description:
+      "One view for everything: active work, running agents, commit history, and GitHub integration. Know exactly where every project stands.",
     icon: LayoutDashboard,
     image: "/screenshots/command-center.png",
     alt: "OmoiOS Project Dashboard with overview stats",
@@ -42,29 +45,37 @@ const showcaseItems = [
   {
     id: "agent",
     title: "Live Agent View",
-    description: "Watch agents work in real-time: see the code they write, commands they run, and decisions they make. Full transparency, zero babysitting.",
+    description:
+      "Watch agents work in real-time: see the code they write, commands they run, and decisions they make. Full transparency, zero babysitting.",
     icon: Terminal,
     image: "/screenshots/project-overview.png",
     alt: "OmoiOS Live Agent View showing real-time code execution",
   },
-]
+];
 
 interface ProductShowcaseSectionProps {
-  className?: string
-  id?: string
+  className?: string;
+  id?: string;
 }
 
-export function ProductShowcaseSection({ className, id }: ProductShowcaseSectionProps) {
-  const [activeIndex, setActiveIndex] = useState(0)
-  const activeItem = showcaseItems[activeIndex]
+export function ProductShowcaseSection({
+  className,
+  id,
+}: ProductShowcaseSectionProps) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeItem = showcaseItems[activeIndex];
 
   const handlePrev = () => {
-    setActiveIndex((prev) => (prev === 0 ? showcaseItems.length - 1 : prev - 1))
-  }
+    setActiveIndex((prev) =>
+      prev === 0 ? showcaseItems.length - 1 : prev - 1,
+    );
+  };
 
   const handleNext = () => {
-    setActiveIndex((prev) => (prev === showcaseItems.length - 1 ? 0 : prev + 1))
-  }
+    setActiveIndex((prev) =>
+      prev === showcaseItems.length - 1 ? 0 : prev + 1,
+    );
+  };
 
   return (
     <section id={id} className={cn("bg-landing-bg py-20 md:py-32", className)}>
@@ -95,7 +106,7 @@ export function ProductShowcaseSection({ className, id }: ProductShowcaseSection
                   "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all",
                   activeIndex === index
                     ? "bg-landing-accent text-white"
-                    : "bg-landing-bg-muted text-landing-text-muted hover:bg-landing-bg-muted/80"
+                    : "bg-landing-bg-muted text-landing-text-muted hover:bg-landing-bg-muted/80",
                 )}
               >
                 <item.icon className="h-4 w-4" />
@@ -195,7 +206,7 @@ export function ProductShowcaseSection({ className, id }: ProductShowcaseSection
                     "h-2 rounded-full transition-all",
                     activeIndex === index
                       ? "w-6 bg-landing-accent"
-                      : "w-2 bg-landing-border hover:bg-landing-text-muted"
+                      : "w-2 bg-landing-border hover:bg-landing-text-muted",
                   )}
                 />
               ))}
@@ -204,5 +215,5 @@ export function ProductShowcaseSection({ className, id }: ProductShowcaseSection
         </motion.div>
       </div>
     </section>
-  )
+  );
 }

@@ -177,13 +177,13 @@ test-watch:
 # Code Quality
 # ============================================================================
 
-# Format code with ruff and black
+# Format code with ruff
 [group('quality')]
 format:
     cd {{backend_dir}} && uv run ruff check --fix .
-    cd {{backend_dir}} && uv run black .
+    cd {{backend_dir}} && uv run ruff format .
 
-# Lint code with ruff
+# Lint code with ruff (check only, no fixes)
 [group('quality')]
 lint:
     cd {{backend_dir}} && uv run --active ruff check .
@@ -193,16 +193,17 @@ lint:
 type-check:
     cd {{backend_dir}} && uv run --active mypy omoi_os
 
-# Run all quality checks
+# Run quality checks (fix + format with ruff)
 [group('quality')]
-check: lint type-check
-    cd {{backend_dir}} && uv run --active black --check .
+check:
+    cd {{backend_dir}} && uv run ruff check --fix .
+    cd {{backend_dir}} && uv run ruff format .
 
-# Fix all auto-fixable issues
+# Fix all auto-fixable issues (alias for check)
 [group('quality')]
 fix:
     cd {{backend_dir}} && uv run ruff check --fix .
-    cd {{backend_dir}} && uv run black .
+    cd {{backend_dir}} && uv run ruff format .
     @echo "✅ Auto-fixes applied"
 
 # ============================================================================
@@ -553,7 +554,7 @@ dev-watch:
 
     # Start frontend in foreground
     echo "Starting frontend..."
-    cd {{frontend_dir}} && npm run dev -- -p {{frontend_port}}
+    cd {{frontend_dir}} && pnpm dev -- -p {{frontend_port}}
 
     # Cleanup on exit
     kill $BACKEND_PID 2>/dev/null || true
@@ -566,45 +567,40 @@ dev-watch:
 [group('frontend')]
 frontend-install:
     @echo "📦 Installing frontend dependencies..."
-    cd {{frontend_dir}} && npm install
+    cd {{frontend_dir}} && pnpm install
 
 # Start frontend development server
 [group('frontend')]
 frontend-dev port=frontend_port:
     @echo "🚀 Starting frontend development server..."
     @echo "Frontend will be at http://localhost:{{port}}"
-    cd {{frontend_dir}} && npm run dev -- -p {{port}}
+    cd {{frontend_dir}} && pnpm dev -- -p {{port}}
 
 # Build frontend for production
 [group('frontend')]
 frontend-build:
     @echo "🏗️  Building frontend for production..."
-    cd {{frontend_dir}} && npm run build
+    cd {{frontend_dir}} && pnpm build
 
 # Start frontend production server
 [group('frontend')]
 frontend-start port=frontend_port:
     @echo "🚀 Starting frontend production server..."
     @echo "Frontend will be at http://localhost:{{port}}"
-    cd {{frontend_dir}} && npm run start -- -p {{port}}
+    cd {{frontend_dir}} && pnpm start -- -p {{port}}
 
-# Lint frontend code
+# Format frontend code with Prettier
 [group('frontend')]
-frontend-lint:
-    @echo "🔍 Linting frontend code..."
-    cd {{frontend_dir}} && npm run lint
+frontend-format:
+    @echo "🔧 Formatting frontend code..."
+    cd {{frontend_dir}} && pnpm exec prettier --write "app/**/*.{ts,tsx}" "components/**/*.{ts,tsx}" "hooks/**/*.{ts,tsx}" "lib/**/*.{ts,tsx}" "providers/**/*.{ts,tsx}" "__tests__/**/*.{ts,tsx}" --log-level warn
+    @echo "✅ Frontend formatted"
 
 # Type check frontend code
 [group('frontend')]
 frontend-type-check:
     @echo "🔍 Type checking frontend code..."
-    cd {{frontend_dir}} && npx tsc --noEmit
-
-# Run frontend linter and fix issues
-[group('frontend')]
-frontend-lint-fix:
-    @echo "🔧 Fixing linting issues..."
-    cd {{frontend_dir}} && npm run lint -- --fix
+    cd {{frontend_dir}} && pnpm exec tsc --noEmit
 
 # Clean frontend build artifacts and cache
 [group('frontend')]
@@ -617,25 +613,25 @@ frontend-clean:
 [group('frontend')]
 frontend-clean-install:
     @echo "🧹 Cleaning and reinstalling frontend dependencies..."
-    cd {{frontend_dir}} && rm -rf node_modules package-lock.json
-    cd {{frontend_dir}} && npm install
+    cd {{frontend_dir}} && rm -rf node_modules pnpm-lock.yaml
+    cd {{frontend_dir}} && pnpm install
     @echo "✅ Frontend dependencies reinstalled"
 
 # Check for outdated frontend packages
 [group('frontend')]
 frontend-deps-check:
     @echo "🔍 Checking for outdated frontend packages..."
-    cd {{frontend_dir}} && npm outdated
+    cd {{frontend_dir}} && pnpm outdated
 
 # Update frontend dependencies
 [group('frontend')]
 frontend-deps-update:
     @echo "🔄 Updating frontend dependencies..."
-    cd {{frontend_dir}} && npm update
+    cd {{frontend_dir}} && pnpm update
 
-# Run all frontend checks (lint + type check)
+# Run all frontend checks (format + type check)
 [group('frontend')]
-frontend-check: frontend-lint frontend-type-check
+frontend-check: frontend-format frontend-type-check
     @echo "✅ All frontend checks passed"
 
 # Start all development services (backend API, worker, and frontend)
@@ -706,7 +702,7 @@ dev-all:
     trap cleanup SIGINT SIGTERM
 
     # Start frontend in foreground (this blocks)
-    cd {{frontend_dir}} && npm run dev -- -p {{frontend_port}}
+    cd {{frontend_dir}} && pnpm dev -- -p {{frontend_port}}
 
     # If frontend exits, cleanup
     cleanup

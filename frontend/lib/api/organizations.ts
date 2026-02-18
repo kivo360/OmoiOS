@@ -2,7 +2,7 @@
  * Organizations API functions
  */
 
-import { apiRequest } from "./client"
+import { apiRequest } from "./client";
 import type {
   Organization,
   OrganizationSummary,
@@ -13,7 +13,7 @@ import type {
   Membership,
   MembershipCreate,
   MessageResponse,
-} from "./types"
+} from "./types";
 
 // ============================================================================
 // Organizations
@@ -23,26 +23,26 @@ import type {
  * List all organizations the current user is a member of
  */
 export async function listOrganizations(): Promise<OrganizationSummary[]> {
-  return apiRequest<OrganizationSummary[]>("/api/v1/organizations")
+  return apiRequest<OrganizationSummary[]>("/api/v1/organizations");
 }
 
 /**
  * Get organization details
  */
 export async function getOrganization(orgId: string): Promise<Organization> {
-  return apiRequest<Organization>(`/api/v1/organizations/${orgId}`)
+  return apiRequest<Organization>(`/api/v1/organizations/${orgId}`);
 }
 
 /**
  * Create a new organization
  */
 export async function createOrganization(
-  data: OrganizationCreate
+  data: OrganizationCreate,
 ): Promise<Organization> {
   return apiRequest<Organization>("/api/v1/organizations", {
     method: "POST",
     body: data,
-  })
+  });
 }
 
 /**
@@ -50,21 +50,23 @@ export async function createOrganization(
  */
 export async function updateOrganization(
   orgId: string,
-  data: OrganizationUpdate
+  data: OrganizationUpdate,
 ): Promise<Organization> {
   return apiRequest<Organization>(`/api/v1/organizations/${orgId}`, {
     method: "PATCH",
     body: data,
-  })
+  });
 }
 
 /**
  * Delete (archive) organization
  */
-export async function deleteOrganization(orgId: string): Promise<MessageResponse> {
+export async function deleteOrganization(
+  orgId: string,
+): Promise<MessageResponse> {
   return apiRequest<MessageResponse>(`/api/v1/organizations/${orgId}`, {
     method: "DELETE",
-  })
+  });
 }
 
 // ============================================================================
@@ -75,7 +77,7 @@ export async function deleteOrganization(orgId: string): Promise<MessageResponse
  * List organization members
  */
 export async function listMembers(orgId: string): Promise<Membership[]> {
-  return apiRequest<Membership[]>(`/api/v1/organizations/${orgId}/members`)
+  return apiRequest<Membership[]>(`/api/v1/organizations/${orgId}/members`);
 }
 
 /**
@@ -83,12 +85,12 @@ export async function listMembers(orgId: string): Promise<Membership[]> {
  */
 export async function addMember(
   orgId: string,
-  data: MembershipCreate
+  data: MembershipCreate,
 ): Promise<Membership> {
   return apiRequest<Membership>(`/api/v1/organizations/${orgId}/members`, {
     method: "POST",
     body: data,
-  })
+  });
 }
 
 /**
@@ -97,15 +99,15 @@ export async function addMember(
 export async function updateMember(
   orgId: string,
   memberId: string,
-  roleId: string
+  roleId: string,
 ): Promise<Membership> {
   return apiRequest<Membership>(
     `/api/v1/organizations/${orgId}/members/${memberId}`,
     {
       method: "PATCH",
       body: { role_id: roleId },
-    }
-  )
+    },
+  );
 }
 
 /**
@@ -113,12 +115,12 @@ export async function updateMember(
  */
 export async function removeMember(
   orgId: string,
-  memberId: string
+  memberId: string,
 ): Promise<MessageResponse> {
   return apiRequest<MessageResponse>(
     `/api/v1/organizations/${orgId}/members/${memberId}`,
-    { method: "DELETE" }
-  )
+    { method: "DELETE" },
+  );
 }
 
 // ============================================================================
@@ -130,10 +132,10 @@ export async function removeMember(
  */
 export async function listRoles(
   orgId: string,
-  includeSystem = true
+  includeSystem = true,
 ): Promise<Role[]> {
-  const url = `/api/v1/organizations/${orgId}/roles?include_system=${includeSystem}`
-  return apiRequest<Role[]>(url)
+  const url = `/api/v1/organizations/${orgId}/roles?include_system=${includeSystem}`;
+  return apiRequest<Role[]>(url);
 }
 
 /**
@@ -141,12 +143,12 @@ export async function listRoles(
  */
 export async function createRole(
   orgId: string,
-  data: Omit<RoleCreate, "organization_id">
+  data: Omit<RoleCreate, "organization_id">,
 ): Promise<Role> {
   return apiRequest<Role>(`/api/v1/organizations/${orgId}/roles`, {
     method: "POST",
     body: { ...data, organization_id: orgId },
-  })
+  });
 }
 
 /**
@@ -155,12 +157,12 @@ export async function createRole(
 export async function updateRole(
   orgId: string,
   roleId: string,
-  data: Partial<Omit<RoleCreate, "organization_id">>
+  data: Partial<Omit<RoleCreate, "organization_id">>,
 ): Promise<Role> {
   return apiRequest<Role>(`/api/v1/organizations/${orgId}/roles/${roleId}`, {
     method: "PATCH",
     body: data,
-  })
+  });
 }
 
 /**
@@ -168,10 +170,10 @@ export async function updateRole(
  */
 export async function deleteRole(
   orgId: string,
-  roleId: string
+  roleId: string,
 ): Promise<MessageResponse> {
   return apiRequest<MessageResponse>(
     `/api/v1/organizations/${orgId}/roles/${roleId}`,
-    { method: "DELETE" }
-  )
+    { method: "DELETE" },
+  );
 }

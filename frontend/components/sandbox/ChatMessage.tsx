@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import { cn } from "@/lib/utils"
-import { Bot, User } from "lucide-react"
+import { cn } from "@/lib/utils";
+import { Bot, User } from "lucide-react";
 
 interface ChatMessageProps {
-  content: string
-  isUser?: boolean
-  isThinking?: boolean
-  timestamp?: string
-  className?: string
+  content: string;
+  isUser?: boolean;
+  isThinking?: boolean;
+  timestamp?: string;
+  className?: string;
 }
 
 export function ChatMessage({
@@ -23,14 +23,14 @@ export function ChatMessage({
       className={cn(
         "flex gap-3",
         isUser ? "flex-row-reverse" : "flex-row",
-        className
+        className,
       )}
     >
       {/* Avatar */}
       <div
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-          isUser ? "bg-primary" : "bg-muted"
+          isUser ? "bg-primary" : "bg-muted",
         )}
       >
         {isUser ? (
@@ -47,8 +47,8 @@ export function ChatMessage({
           isUser
             ? "bg-primary text-primary-foreground"
             : isThinking
-            ? "bg-muted/50 text-muted-foreground italic"
-            : "bg-muted text-foreground"
+              ? "bg-muted/50 text-muted-foreground italic"
+              : "bg-muted text-foreground",
         )}
       >
         <p className="text-sm whitespace-pre-wrap">{content}</p>
@@ -56,7 +56,7 @@ export function ChatMessage({
           <p
             className={cn(
               "mt-1 text-xs",
-              isUser ? "text-primary-foreground/70" : "text-muted-foreground"
+              isUser ? "text-primary-foreground/70" : "text-muted-foreground",
             )}
           >
             {timestamp}
@@ -64,5 +64,5 @@ export function ChatMessage({
         )}
       </div>
     </div>
-  )
+  );
 }

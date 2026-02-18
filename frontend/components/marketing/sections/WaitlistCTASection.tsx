@@ -1,13 +1,20 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
-import { ArrowRight, CheckCircle2, Sparkles, Zap, Shield, Rocket } from "lucide-react"
-import { SparklesCore } from "@/components/ui/sparkles"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Sparkles,
+  Zap,
+  Shield,
+  Rocket,
+} from "lucide-react";
+import { SparklesCore } from "@/components/ui/sparkles";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 const benefits = [
   {
@@ -22,33 +29,33 @@ const benefits = [
     icon: Rocket,
     text: "Free tier included",
   },
-]
+];
 
 interface WaitlistCTASectionProps {
-  className?: string
+  className?: string;
 }
 
 export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
-  const router = useRouter()
-  const [email, setEmail] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email) return
+    e.preventDefault();
+    if (!email) return;
 
-    setIsSubmitting(true)
+    setIsSubmitting(true);
     // Small delay for visual feedback before redirect
     setTimeout(() => {
-      router.push(`/register?email=${encodeURIComponent(email)}`)
-    }, 300)
-  }
+      router.push(`/register?email=${encodeURIComponent(email)}`);
+    }, 300);
+  };
 
   return (
     <section
       className={cn(
         "relative overflow-hidden bg-landing-bg-dark py-16 md:py-24",
-        className
+        className,
       )}
     >
       {/* Sparkles Background */}
@@ -101,7 +108,8 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.2 }}
             className="mt-4 text-lg text-gray-400"
           >
-            Create your free account and start building with AI agents today. No credit card required.
+            Create your free account and start building with AI agents today. No
+            credit card required.
           </motion.p>
 
           {/* Benefits */}
@@ -131,7 +139,10 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.3 }}
             className="mt-10"
           >
-            <form onSubmit={handleSubmit} className="mx-auto flex max-w-md gap-3">
+            <form
+              onSubmit={handleSubmit}
+              className="mx-auto flex max-w-md gap-3"
+            >
               <Input
                 type="email"
                 placeholder="Enter your email"
@@ -157,7 +168,6 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
                 )}
               </Button>
             </form>
-
           </motion.div>
 
           {/* Trust Elements */}
@@ -184,5 +194,5 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
         </div>
       </div>
     </section>
-  )
+  );
 }

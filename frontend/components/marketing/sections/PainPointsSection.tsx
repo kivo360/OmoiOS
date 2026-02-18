@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
-import type { LucideIcon } from "lucide-react"
+import { motion } from "framer-motion";
+import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   Clock,
@@ -11,16 +11,16 @@ import {
   ListChecks,
   Eye,
   TrendingUp,
-} from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type Point = {
-  icon: LucideIcon
-  title: string
-  description: string
-}
+  icon: LucideIcon;
+  title: string;
+  description: string;
+};
 
 const painPoints: Point[] = [
   {
@@ -47,7 +47,7 @@ const painPoints: Point[] = [
     description:
       "More contributors should mean more throughput—not more merge conflicts and regressions.",
   },
-]
+];
 
 const outcomes: Point[] = [
   {
@@ -74,16 +74,19 @@ const outcomes: Point[] = [
     description:
       "Add capacity by adding agents and guardrails—not meetings and coordination overhead.",
   },
-]
+];
 
 interface PainPointsSectionProps {
-  className?: string
-  id?: string
+  className?: string;
+  id?: string;
 }
 
 export function PainPointsSection({ className, id }: PainPointsSectionProps) {
   return (
-    <section id={id} className={cn("bg-landing-bg-warm py-20 md:py-32", className)}>
+    <section
+      id={id}
+      className={cn("bg-landing-bg-warm py-20 md:py-32", className)}
+    >
       <div className="container mx-auto px-4">
         {/* Section Header */}
         <motion.div
@@ -99,8 +102,8 @@ export function PainPointsSection({ className, id }: PainPointsSectionProps) {
             Your bottleneck isn&apos;t ideas. It&apos;s execution.
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            OmoiOS helps you scale output without scaling chaos—by making planning and execution
-            visible, structured, and reviewable.
+            OmoiOS helps you scale output without scaling chaos—by making
+            planning and execution visible, structured, and reviewable.
           </p>
         </motion.div>
 
@@ -181,5 +184,5 @@ export function PainPointsSection({ className, id }: PainPointsSectionProps) {
         </div>
       </div>
     </section>
-  )
+  );
 }

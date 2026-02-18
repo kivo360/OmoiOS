@@ -2,8 +2,8 @@
  * Preview API client for live preview session management
  */
 
-import { api } from "./client"
-import type { PreviewSession } from "./types"
+import { api } from "./client";
+import type { PreviewSession } from "./types";
 
 // ============================================================================
 // Preview API
@@ -13,23 +13,23 @@ import type { PreviewSession } from "./types"
  * Get preview session by sandbox ID
  */
 export async function getPreviewBySandbox(
-  sandboxId: string
+  sandboxId: string,
 ): Promise<PreviewSession> {
-  return api.get<PreviewSession>(`/api/v1/preview/sandbox/${sandboxId}`)
+  return api.get<PreviewSession>(`/api/v1/preview/sandbox/${sandboxId}`);
 }
 
 /**
  * Get preview session by preview ID
  */
 export async function getPreview(previewId: string): Promise<PreviewSession> {
-  return api.get<PreviewSession>(`/api/v1/preview/${previewId}`)
+  return api.get<PreviewSession>(`/api/v1/preview/${previewId}`);
 }
 
 /**
  * Stop a preview session
  */
 export async function stopPreview(previewId: string): Promise<PreviewSession> {
-  return api.delete<PreviewSession>(`/api/v1/preview/${previewId}`)
+  return api.delete<PreviewSession>(`/api/v1/preview/${previewId}`);
 }
 
 // ============================================================================
@@ -40,6 +40,6 @@ export const previewApi = {
   getBySandbox: getPreviewBySandbox,
   get: getPreview,
   stop: stopPreview,
-}
+};
 
-export default previewApi
+export default previewApi;

@@ -1,31 +1,31 @@
-"use client"
+"use client";
 
-import { use, useState, useCallback, useMemo } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
+import { use, useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { CreateTicketDialog } from "@/components/tickets/CreateTicketDialog"
+} from "@/components/ui/dropdown-menu";
+import { CreateTicketDialog } from "@/components/tickets/CreateTicketDialog";
 import {
   DndContext,
   DragOverlay,
@@ -37,14 +37,14 @@ import {
   DragStartEvent,
   DragEndEvent,
   DragOverEvent,
-} from "@dnd-kit/core"
+} from "@dnd-kit/core";
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
-} from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowLeft,
   Plus,
@@ -68,38 +68,47 @@ import {
   GitPullRequest,
   GitMerge,
   ExternalLink,
-} from "lucide-react"
-import { toast } from "sonner"
-import { useBoardView, useMoveTicket } from "@/hooks/useBoard"
-import { useProject, useUpdateProject } from "@/hooks/useProjects"
-import { useBatchSpawnPhaseTasks } from "@/hooks/useTickets"
-import { useBoardEvents, type BoardEvent, type RunningTaskInfo } from "@/hooks/useBoardEvents"
-import { AgentPanel } from "@/components/board"
-import type { Ticket as ApiTicket, BoardColumn, TicketContext, TicketPullRequest } from "@/lib/api/types"
+} from "lucide-react";
+import { toast } from "sonner";
+import { useBoardView, useMoveTicket } from "@/hooks/useBoard";
+import { useProject, useUpdateProject } from "@/hooks/useProjects";
+import { useBatchSpawnPhaseTasks } from "@/hooks/useTickets";
+import {
+  useBoardEvents,
+  type BoardEvent,
+  type RunningTaskInfo,
+} from "@/hooks/useBoardEvents";
+import { AgentPanel } from "@/components/board";
+import type {
+  Ticket as ApiTicket,
+  BoardColumn,
+  TicketContext,
+  TicketPullRequest,
+} from "@/lib/api/types";
 
 interface BoardPageProps {
-  params: Promise<{ projectId: string }>
+  params: Promise<{ projectId: string }>;
 }
 
 // Local ticket type for board display (maps API ticket to board format)
 interface BoardTicket {
-  id: string
-  title: string
-  columnId: string
-  priority: "critical" | "high" | "medium" | "low"
-  status: string
-  phase: string
-  description: string | null
-  approval_status: string | null
-  context?: TicketContext | null
-  pull_requests?: TicketPullRequest[] | null
+  id: string;
+  title: string;
+  columnId: string;
+  priority: "critical" | "high" | "medium" | "low";
+  status: string;
+  phase: string;
+  description: string | null;
+  approval_status: string | null;
+  context?: TicketContext | null;
+  pull_requests?: TicketPullRequest[] | null;
 }
 
 interface Column {
-  id: string
-  title: string
-  wipLimit: number | null
-  phase_mappings: string[]
+  id: string;
+  title: string;
+  wipLimit: number | null;
+  phase_mappings: string[];
 }
 
 const priorityConfig: Record<string, { label: string; color: string }> = {
@@ -111,7 +120,7 @@ const priorityConfig: Record<string, { label: string; color: string }> = {
   high: { label: "High", color: "destructive" },
   medium: { label: "Medium", color: "secondary" },
   low: { label: "Low", color: "outline" },
-}
+};
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   backlog: { label: "Backlog", color: "outline" },
@@ -119,7 +128,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   review: { label: "Review", color: "secondary" },
   done: { label: "Done", color: "default" },
   blocked: { label: "Blocked", color: "destructive" },
-}
+};
 
 // Sortable Ticket Card Component
 function SortableTicketCard({
@@ -128,10 +137,10 @@ function SortableTicketCard({
   runningTasks,
   onViewAgent,
 }: {
-  ticket: BoardTicket
-  projectId: string
-  runningTasks?: RunningTaskInfo[]
-  onViewAgent?: (taskInfo: RunningTaskInfo) => void
+  ticket: BoardTicket;
+  projectId: string;
+  runningTasks?: RunningTaskInfo[];
+  onViewAgent?: (taskInfo: RunningTaskInfo) => void;
 }) {
   const {
     attributes,
@@ -140,13 +149,13 @@ function SortableTicketCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: ticket.id })
+  } = useSortable({ id: ticket.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-  }
+  };
 
   return (
     <div ref={setNodeRef} style={style}>
@@ -158,7 +167,7 @@ function SortableTicketCard({
         onViewAgent={onViewAgent}
       />
     </div>
-  )
+  );
 }
 
 // Ticket Card Component
@@ -170,22 +179,28 @@ function TicketCard({
   runningTasks = [],
   onViewAgent,
 }: {
-  ticket: BoardTicket
-  projectId: string
-  dragHandleProps?: Record<string, unknown>
-  isOverlay?: boolean
-  runningTasks?: RunningTaskInfo[]
-  onViewAgent?: (taskInfo: RunningTaskInfo) => void
+  ticket: BoardTicket;
+  projectId: string;
+  dragHandleProps?: Record<string, unknown>;
+  isOverlay?: boolean;
+  runningTasks?: RunningTaskInfo[];
+  onViewAgent?: (taskInfo: RunningTaskInfo) => void;
 }) {
-  const priorityCfg = priorityConfig[ticket.priority] || { label: ticket.priority, color: "outline" }
-  const statusCfg = statusConfig[ticket.status] || { label: ticket.status, color: "outline" }
-  const hasRunningTasks = runningTasks.length > 0
+  const priorityCfg = priorityConfig[ticket.priority] || {
+    label: ticket.priority,
+    color: "outline",
+  };
+  const statusCfg = statusConfig[ticket.status] || {
+    label: ticket.status,
+    color: "outline",
+  };
+  const hasRunningTasks = runningTasks.length > 0;
 
   const handleAgentClick = (e: React.MouseEvent, taskInfo: RunningTaskInfo) => {
-    e.preventDefault()
-    e.stopPropagation()
-    onViewAgent?.(taskInfo)
-  }
+    e.preventDefault();
+    e.stopPropagation();
+    onViewAgent?.(taskInfo);
+  };
 
   const content = (
     <Card
@@ -224,7 +239,9 @@ function TicketCard({
                   title="View agent output"
                 >
                   <Bot className="h-3.5 w-3.5 animate-pulse" />
-                  <span className="text-xs font-medium">{runningTasks.length}</span>
+                  <span className="text-xs font-medium">
+                    {runningTasks.length}
+                  </span>
                 </button>
               )}
             </div>
@@ -234,38 +251,42 @@ function TicketCard({
         {/* Badges row */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {/* PR badge - show if ticket has linked PRs */}
-          {ticket.pull_requests && ticket.pull_requests.length > 0 && (() => {
-            const latestPR = ticket.pull_requests[0]
-            const isMerged = latestPR.state === "merged"
-            const isOpen = latestPR.state === "open"
-            return (
-              <a
-                href={latestPR.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium transition-colors ${
-                  isMerged
-                    ? "bg-purple-500/10 text-purple-600 border border-purple-500/30 hover:bg-purple-500/20"
-                    : isOpen
-                      ? "bg-green-500/10 text-green-600 border border-green-500/30 hover:bg-green-500/20"
-                      : "bg-gray-500/10 text-gray-600 border border-gray-500/30 hover:bg-gray-500/20"
-                }`}
-                title={`PR #${latestPR.pr_number}: ${latestPR.pr_title}`}
-              >
-                {isMerged ? (
-                  <GitMerge className="h-3 w-3" />
-                ) : (
-                  <GitPullRequest className="h-3 w-3" />
-                )}
-                #{latestPR.pr_number}
-                {ticket.pull_requests.length > 1 && (
-                  <span className="ml-0.5 text-muted-foreground">+{ticket.pull_requests.length - 1}</span>
-                )}
-                <ExternalLink className="h-2.5 w-2.5 opacity-50" />
-              </a>
-            )
-          })()}
+          {ticket.pull_requests &&
+            ticket.pull_requests.length > 0 &&
+            (() => {
+              const latestPR = ticket.pull_requests[0];
+              const isMerged = latestPR.state === "merged";
+              const isOpen = latestPR.state === "open";
+              return (
+                <a
+                  href={latestPR.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium transition-colors ${
+                    isMerged
+                      ? "bg-purple-500/10 text-purple-600 border border-purple-500/30 hover:bg-purple-500/20"
+                      : isOpen
+                        ? "bg-green-500/10 text-green-600 border border-green-500/30 hover:bg-green-500/20"
+                        : "bg-gray-500/10 text-gray-600 border border-gray-500/30 hover:bg-gray-500/20"
+                  }`}
+                  title={`PR #${latestPR.pr_number}: ${latestPR.pr_title}`}
+                >
+                  {isMerged ? (
+                    <GitMerge className="h-3 w-3" />
+                  ) : (
+                    <GitPullRequest className="h-3 w-3" />
+                  )}
+                  #{latestPR.pr_number}
+                  {ticket.pull_requests.length > 1 && (
+                    <span className="ml-0.5 text-muted-foreground">
+                      +{ticket.pull_requests.length - 1}
+                    </span>
+                  )}
+                  <ExternalLink className="h-2.5 w-2.5 opacity-50" />
+                </a>
+              );
+            })()}
           {/* Spec Gen badge - show if ticket triggers spec generation */}
           {ticket.context?.workflow_mode === "spec_driven" && (
             <Badge
@@ -288,10 +309,28 @@ function TicketCard({
               Spec
             </Badge>
           )}
-          <Badge variant={priorityCfg.color as "default" | "destructive" | "secondary" | "outline"} className="text-xs">
+          <Badge
+            variant={
+              priorityCfg.color as
+                | "default"
+                | "destructive"
+                | "secondary"
+                | "outline"
+            }
+            className="text-xs"
+          >
             {priorityCfg.label}
           </Badge>
-          <Badge variant={statusCfg.color as "default" | "destructive" | "secondary" | "outline"} className="text-xs">
+          <Badge
+            variant={
+              statusCfg.color as
+                | "default"
+                | "destructive"
+                | "secondary"
+                | "outline"
+            }
+            className="text-xs"
+          >
             {statusCfg.label}
           </Badge>
           {ticket.approval_status && ticket.approval_status !== "approved" && (
@@ -303,7 +342,9 @@ function TicketCard({
 
         {/* Footer with phase */}
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
-          <span className="capitalize">{ticket.phase.toLowerCase().replace(/_/g, " ")}</span>
+          <span className="capitalize">
+            {ticket.phase.toLowerCase().replace(/_/g, " ")}
+          </span>
           {ticket.status === "blocked" && (
             <span className="flex items-center gap-1 text-orange-500">
               <AlertCircle className="h-3 w-3" />
@@ -313,17 +354,13 @@ function TicketCard({
         </div>
       </CardContent>
     </Card>
-  )
+  );
 
   if (isOverlay) {
-    return content
+    return content;
   }
 
-  return (
-    <Link href={`/board/${projectId}/${ticket.id}`}>
-      {content}
-    </Link>
-  )
+  return <Link href={`/board/${projectId}/${ticket.id}`}>{content}</Link>;
 }
 
 // Column Component
@@ -335,14 +372,17 @@ function KanbanColumn({
   getRunningTasksForTicket,
   onViewAgent,
 }: {
-  column: Column
-  tickets: BoardTicket[]
-  projectId: string
-  isOver?: boolean
-  getRunningTasksForTicket?: (ticketId: string) => RunningTaskInfo[]
-  onViewAgent?: (taskInfo: RunningTaskInfo) => void
+  column: Column;
+  tickets: BoardTicket[];
+  projectId: string;
+  isOver?: boolean;
+  getRunningTasksForTicket?: (ticketId: string) => RunningTaskInfo[];
+  onViewAgent?: (taskInfo: RunningTaskInfo) => void;
 }) {
-  const isOverWipLimit = column.wipLimit !== null && column.wipLimit > 0 && tickets.length > column.wipLimit
+  const isOverWipLimit =
+    column.wipLimit !== null &&
+    column.wipLimit > 0 &&
+    tickets.length > column.wipLimit;
 
   return (
     <div
@@ -359,7 +399,9 @@ function KanbanColumn({
             className="rounded-full"
           >
             {tickets.length}
-            {column.wipLimit !== null && column.wipLimit > 0 && `/${column.wipLimit}`}
+            {column.wipLimit !== null &&
+              column.wipLimit > 0 &&
+              `/${column.wipLimit}`}
           </Badge>
           {isOverWipLimit && (
             <span className="text-xs text-destructive">WIP exceeded</span>
@@ -416,88 +458,107 @@ function KanbanColumn({
         </ScrollArea>
       </SortableContext>
     </div>
-  )
+  );
 }
 
 export default function BoardPage({ params }: BoardPageProps) {
-  const { projectId } = use(params)
-  const router = useRouter()
-  const [searchQuery, setSearchQuery] = useState("")
-  const [filterStatus, setFilterStatus] = useState<string>("all")
-  const [filterPriority, setFilterPriority] = useState<string>("all")
-  const [hideSpecDriven, setHideSpecDriven] = useState(false)
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [overId, setOverId] = useState<string | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const { projectId } = use(params);
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterPriority, setFilterPriority] = useState<string>("all");
+  const [hideSpecDriven, setHideSpecDriven] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   // Agent panel state
-  const [selectedSandboxId, setSelectedSandboxId] = useState<string | null>(null)
-  const [selectedTaskInfo, setSelectedTaskInfo] = useState<{ ticketTitle?: string; taskTitle?: string }>({})
-  const [isAgentPanelExpanded, setIsAgentPanelExpanded] = useState(false)
+  const [selectedSandboxId, setSelectedSandboxId] = useState<string | null>(
+    null,
+  );
+  const [selectedTaskInfo, setSelectedTaskInfo] = useState<{
+    ticketTitle?: string;
+    taskTitle?: string;
+  }>({});
+  const [isAgentPanelExpanded, setIsAgentPanelExpanded] = useState(false);
 
   // Fetch project and board data from API
-  const { data: project, refetch: refetchProject } = useProject(projectId === "all" ? undefined : projectId)
-  const { data: boardData, isLoading, error } = useBoardView(projectId === "all" ? undefined : projectId)
-  const moveTicket = useMoveTicket()
-  const batchSpawn = useBatchSpawnPhaseTasks()
-  const updateProject = useUpdateProject()
+  const { data: project, refetch: refetchProject } = useProject(
+    projectId === "all" ? undefined : projectId,
+  );
+  const {
+    data: boardData,
+    isLoading,
+    error,
+  } = useBoardView(projectId === "all" ? undefined : projectId);
+  const moveTicket = useMoveTicket();
+  const batchSpawn = useBatchSpawnPhaseTasks();
+  const updateProject = useUpdateProject();
 
   // Handle WebSocket events for real-time updates
-  const handleBoardEvent = useCallback((event: BoardEvent) => {
-    // Show toast for significant events
-    switch (event.event_type) {
-      case "TICKET_CREATED":
-        toast.success("New ticket created", {
-          description: (event.payload.title as string) || event.entity_id.slice(0, 8),
-        })
-        break
-      case "TASK_ASSIGNED":
-        toast.info("Task started", {
-          description: `Agent assigned to task ${event.entity_id.slice(0, 8)}`,
-        })
-        break
-      case "TASK_COMPLETED":
-        toast.success("Task completed", {
-          description: `Task ${event.entity_id.slice(0, 8)} finished`,
-        })
-        break
-      case "TICKET_PHASE_ADVANCED":
-        toast.success("Phase advanced", {
-          description: `Ticket moved to ${(event.payload.new_phase as string) || "next phase"}`,
-        })
-        break
-      case "SANDBOX_SPAWNED":
-        // Auto-select sandbox when it spawns
-        const sandboxId = event.entity_id
-        const taskTitle = event.payload.task_title as string | undefined
-        const ticketTitle = event.payload.ticket_title as string | undefined
-        setSelectedSandboxId(sandboxId)
-        setSelectedTaskInfo({ ticketTitle, taskTitle })
-        toast.info("Agent started", {
-          description: taskTitle || `Sandbox ${sandboxId.slice(0, 8)}`,
-          action: {
-            label: "View Sandbox",
-            onClick: () => router.push(`/sandbox/${sandboxId}`),
-          },
-          duration: 10000, // Keep visible longer so user can click
-        })
-        break
-    }
-  }, [router])
+  const handleBoardEvent = useCallback(
+    (event: BoardEvent) => {
+      // Show toast for significant events
+      switch (event.event_type) {
+        case "TICKET_CREATED":
+          toast.success("New ticket created", {
+            description:
+              (event.payload.title as string) || event.entity_id.slice(0, 8),
+          });
+          break;
+        case "TASK_ASSIGNED":
+          toast.info("Task started", {
+            description: `Agent assigned to task ${event.entity_id.slice(0, 8)}`,
+          });
+          break;
+        case "TASK_COMPLETED":
+          toast.success("Task completed", {
+            description: `Task ${event.entity_id.slice(0, 8)} finished`,
+          });
+          break;
+        case "TICKET_PHASE_ADVANCED":
+          toast.success("Phase advanced", {
+            description: `Ticket moved to ${(event.payload.new_phase as string) || "next phase"}`,
+          });
+          break;
+        case "SANDBOX_SPAWNED":
+          // Auto-select sandbox when it spawns
+          const sandboxId = event.entity_id;
+          const taskTitle = event.payload.task_title as string | undefined;
+          const ticketTitle = event.payload.ticket_title as string | undefined;
+          setSelectedSandboxId(sandboxId);
+          setSelectedTaskInfo({ ticketTitle, taskTitle });
+          toast.info("Agent started", {
+            description: taskTitle || `Sandbox ${sandboxId.slice(0, 8)}`,
+            action: {
+              label: "View Sandbox",
+              onClick: () => router.push(`/sandbox/${sandboxId}`),
+            },
+            duration: 10000, // Keep visible longer so user can click
+          });
+          break;
+      }
+    },
+    [router],
+  );
 
-  const { isConnected: wsConnected, runningTasks, getRunningTasksForTicket } = useBoardEvents({
+  const {
+    isConnected: wsConnected,
+    runningTasks,
+    getRunningTasksForTicket,
+  } = useBoardEvents({
     projectId: projectId === "all" ? undefined : projectId,
     onEvent: handleBoardEvent,
     enabled: true, // Always enable WebSocket events, even for "all" projects view
-  })
+  });
 
   // Handler for clicking on agent indicator
   const handleViewAgent = useCallback((taskInfo: RunningTaskInfo) => {
     if (taskInfo.sandboxId) {
-      setSelectedSandboxId(taskInfo.sandboxId)
-      setSelectedTaskInfo({ taskTitle: taskInfo.taskTitle })
+      setSelectedSandboxId(taskInfo.sandboxId);
+      setSelectedTaskInfo({ taskTitle: taskInfo.taskTitle });
     }
-  }, [])
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -507,185 +568,212 @@ export default function BoardPage({ params }: BoardPageProps) {
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
+    }),
+  );
 
   // Transform API data to local format
   const columns: Column[] = useMemo(() => {
-    if (!boardData?.columns) return []
+    if (!boardData?.columns) return [];
     return boardData.columns.map((col) => ({
       id: col.id,
       title: col.name,
       wipLimit: col.wip_limit,
       phase_mappings: col.phase_mappings,
-    }))
-  }, [boardData])
+    }));
+  }, [boardData]);
 
   // Transform tickets from columns
   const allTickets: BoardTicket[] = useMemo(() => {
-    if (!boardData?.columns) return []
+    if (!boardData?.columns) return [];
     return boardData.columns.flatMap((col) =>
       col.tickets.map((t: ApiTicket) => ({
         id: t.id,
         title: t.title,
         columnId: col.id,
-        priority: (t.priority?.toLowerCase() || "medium") as "critical" | "high" | "medium" | "low",
+        priority: (t.priority?.toLowerCase() || "medium") as
+          | "critical"
+          | "high"
+          | "medium"
+          | "low",
         status: t.status,
         phase: t.phase_id,
         description: t.description,
         approval_status: t.approval_status,
         context: t.context,
         pull_requests: t.pull_requests,
-      }))
-    )
-  }, [boardData])
+      })),
+    );
+  }, [boardData]);
 
   // Filter tickets
   const filteredTickets = allTickets.filter((ticket) => {
     const matchesSearch =
       searchQuery === "" ||
       ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ticket.id.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = filterStatus === "all" || ticket.status === filterStatus
+      ticket.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      filterStatus === "all" || ticket.status === filterStatus;
     const matchesPriority =
-      filterPriority === "all" || ticket.priority === filterPriority.toLowerCase()
+      filterPriority === "all" ||
+      ticket.priority === filterPriority.toLowerCase();
     // Hide spec-driven tickets if toggle is enabled
-    const matchesSpecFilter = !hideSpecDriven || ticket.context?.workflow_mode !== "spec_driven"
-    return matchesSearch && matchesStatus && matchesPriority && matchesSpecFilter
-  })
+    const matchesSpecFilter =
+      !hideSpecDriven || ticket.context?.workflow_mode !== "spec_driven";
+    return (
+      matchesSearch && matchesStatus && matchesPriority && matchesSpecFilter
+    );
+  });
 
   // Group tickets by column
-  const ticketsByColumn = columns.reduce((acc, column) => {
-    acc[column.id] = filteredTickets.filter((t) => t.columnId === column.id)
-    return acc
-  }, {} as Record<string, BoardTicket[]>)
+  const ticketsByColumn = columns.reduce(
+    (acc, column) => {
+      acc[column.id] = filteredTickets.filter((t) => t.columnId === column.id);
+      return acc;
+    },
+    {} as Record<string, BoardTicket[]>,
+  );
 
   // Get active ticket for drag overlay
   const activeTicket = activeId
     ? allTickets.find((t) => t.id === activeId)
-    : null
+    : null;
 
   // Find which column a ticket belongs to
-  const findColumn = useCallback((id: string) => {
-    const ticket = allTickets.find((t) => t.id === id)
-    if (ticket) return ticket.columnId
-    // Check if id is a column id
-    if (columns.find((c) => c.id === id)) return id
-    return null
-  }, [allTickets, columns])
+  const findColumn = useCallback(
+    (id: string) => {
+      const ticket = allTickets.find((t) => t.id === id);
+      if (ticket) return ticket.columnId;
+      // Check if id is a column id
+      if (columns.find((c) => c.id === id)) return id;
+      return null;
+    },
+    [allTickets, columns],
+  );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id as string)
-  }, [])
+    setActiveId(event.active.id as string);
+  }, []);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
-    const { over } = event
-    setOverId(over?.id as string | null)
-  }, [])
+    const { over } = event;
+    setOverId(over?.id as string | null);
+  }, []);
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
 
-    setActiveId(null)
-    setOverId(null)
+      setActiveId(null);
+      setOverId(null);
 
-    if (!over) return
+      if (!over) return;
 
-    const draggedId = active.id as string
-    const droppedId = over.id as string
+      const draggedId = active.id as string;
+      const droppedId = over.id as string;
 
-    const activeColumn = findColumn(draggedId)
-    let overColumn = findColumn(droppedId)
+      const activeColumn = findColumn(draggedId);
+      let overColumn = findColumn(droppedId);
 
-    // If dropping on a column directly
-    if (columns.find((c) => c.id === droppedId)) {
-      overColumn = droppedId
-    }
+      // If dropping on a column directly
+      if (columns.find((c) => c.id === droppedId)) {
+        overColumn = droppedId;
+      }
 
-    if (!activeColumn || !overColumn) return
-    if (activeColumn === overColumn) return
+      if (!activeColumn || !overColumn) return;
+      if (activeColumn === overColumn) return;
 
-    // Move ticket via API
-    moveTicket.mutate({
-      ticket_id: draggedId,
-      target_column_id: overColumn,
-    })
-  }, [columns, findColumn, moveTicket])
+      // Move ticket via API
+      moveTicket.mutate({
+        ticket_id: draggedId,
+        target_column_id: overColumn,
+      });
+    },
+    [columns, findColumn, moveTicket],
+  );
 
   const clearFilters = () => {
-    setSearchQuery("")
-    setFilterStatus("all")
-    setFilterPriority("all")
-    setHideSpecDriven(false)
-  }
+    setSearchQuery("");
+    setFilterStatus("all");
+    setFilterPriority("all");
+    setHideSpecDriven(false);
+  };
 
-  const hasFilters = searchQuery || filterStatus !== "all" || filterPriority !== "all" || hideSpecDriven
+  const hasFilters =
+    searchQuery ||
+    filterStatus !== "all" ||
+    filterPriority !== "all" ||
+    hideSpecDriven;
 
   // Get processable tickets (backlog/in_progress that aren't blocked)
   const processableTickets = allTickets.filter(
-    (t) => t.status !== "done" && t.status !== "blocked"
-  )
+    (t) => t.status !== "done" && t.status !== "blocked",
+  );
 
   // Start processing all eligible tickets
   const handleStartProcessing = async () => {
     if (processableTickets.length === 0) {
       toast.info("No tickets to process", {
         description: "All tickets are either done or blocked.",
-      })
-      return
+      });
+      return;
     }
 
-    const ticketIds = processableTickets.map((t) => t.id)
+    const ticketIds = processableTickets.map((t) => t.id);
 
     try {
-      const results = await batchSpawn.mutateAsync(ticketIds)
+      const results = await batchSpawn.mutateAsync(ticketIds);
 
       // Count successes and failures
-      const successes = results.filter((r) => r.tasks_spawned > 0)
-      const failures = results.filter((r) => r.error)
-      const totalTasks = successes.reduce((sum, r) => sum + r.tasks_spawned, 0)
+      const successes = results.filter((r) => r.tasks_spawned > 0);
+      const failures = results.filter((r) => r.error);
+      const totalTasks = successes.reduce((sum, r) => sum + r.tasks_spawned, 0);
 
       if (failures.length === 0) {
         toast.success(`Started processing ${successes.length} tickets`, {
           description: `Spawned ${totalTasks} tasks. They will be picked up by the orchestrator.`,
-        })
+        });
       } else if (successes.length > 0) {
         toast.warning(`Partial success`, {
           description: `Spawned ${totalTasks} tasks for ${successes.length} tickets. ${failures.length} tickets failed.`,
-        })
+        });
       } else {
         toast.error("Failed to start processing", {
           description: failures[0]?.error || "Unknown error occurred",
-        })
+        });
       }
     } catch (error) {
       toast.error("Failed to start processing", {
         description: error instanceof Error ? error.message : "Unknown error",
-      })
+      });
     }
-  }
+  };
 
   // Toggle autonomous execution
   const handleToggleAutonomousExecution = async (enabled: boolean) => {
-    if (projectId === "all") return
+    if (projectId === "all") return;
 
     try {
       await updateProject.mutateAsync({
         projectId,
         data: { autonomous_execution_enabled: enabled },
-      })
-      await refetchProject()
-      toast.success(enabled ? "Autonomous execution enabled" : "Autonomous execution disabled", {
-        description: enabled
-          ? "Tasks will be automatically executed by agents."
-          : "Tasks will require manual triggering.",
-      })
+      });
+      await refetchProject();
+      toast.success(
+        enabled
+          ? "Autonomous execution enabled"
+          : "Autonomous execution disabled",
+        {
+          description: enabled
+            ? "Tasks will be automatically executed by agents."
+            : "Tasks will require manual triggering.",
+        },
+      );
     } catch (error) {
       toast.error("Failed to update project", {
         description: error instanceof Error ? error.message : "Unknown error",
-      })
+      });
     }
-  }
+  };
 
   // Loading state
   if (isLoading) {
@@ -699,7 +787,10 @@ export default function BoardPage({ params }: BoardPageProps) {
         </div>
         <div className="flex gap-4 p-4">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="w-[320px] shrink-0 rounded-lg bg-muted/30 p-3">
+            <div
+              key={i}
+              className="w-[320px] shrink-0 rounded-lg bg-muted/30 p-3"
+            >
               <Skeleton className="h-6 w-32 mb-4" />
               <div className="space-y-2">
                 <Skeleton className="h-24 w-full" />
@@ -709,7 +800,7 @@ export default function BoardPage({ params }: BoardPageProps) {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -727,7 +818,7 @@ export default function BoardPage({ params }: BoardPageProps) {
           </Button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -747,22 +838,30 @@ export default function BoardPage({ params }: BoardPageProps) {
               {/* Project Context Breadcrumb */}
               <div className="flex items-center gap-2 text-sm">
                 <Link
-                  href={projectId === "all" ? "/projects" : `/projects/${projectId}`}
+                  href={
+                    projectId === "all" ? "/projects" : `/projects/${projectId}`
+                  }
                   className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <FolderGit2 className="h-4 w-4" />
-                  <span className="font-medium text-foreground">{project?.name || (projectId === "all" ? "All Projects" : "Project")}</span>
+                  <span className="font-medium text-foreground">
+                    {project?.name ||
+                      (projectId === "all" ? "All Projects" : "Project")}
+                  </span>
                 </Link>
                 <span className="text-muted-foreground">/</span>
                 <span className="text-muted-foreground">Kanban Board</span>
               </div>
               <h1 className="text-xl font-bold">Kanban Board</h1>
-              <Badge variant="outline">
-                {filteredTickets.length} tickets
-              </Badge>
+              <Badge variant="outline">{filteredTickets.length} tickets</Badge>
               {/* WebSocket connection indicator */}
-              <div className="flex items-center gap-1.5" title={wsConnected ? "Live updates connected" : "Connecting..."}>
-                <CircleDot className={`h-3 w-3 ${wsConnected ? "text-green-500 animate-pulse" : "text-yellow-500"}`} />
+              <div
+                className="flex items-center gap-1.5"
+                title={wsConnected ? "Live updates connected" : "Connecting..."}
+              >
+                <CircleDot
+                  className={`h-3 w-3 ${wsConnected ? "text-green-500 animate-pulse" : "text-yellow-500"}`}
+                />
                 <span className="text-xs text-muted-foreground">
                   {wsConnected ? "Live" : "..."}
                 </span>
@@ -782,7 +881,9 @@ export default function BoardPage({ params }: BoardPageProps) {
                 variant="default"
                 size="sm"
                 onClick={handleStartProcessing}
-                disabled={batchSpawn.isPending || processableTickets.length === 0}
+                disabled={
+                  batchSpawn.isPending || processableTickets.length === 0
+                }
                 className="bg-green-600 hover:bg-green-700"
               >
                 {batchSpawn.isPending ? (
@@ -858,7 +959,12 @@ export default function BoardPage({ params }: BoardPageProps) {
 
               {/* Clear Filters */}
               {hasFilters && (
-                <Button variant="ghost" size="sm" className="h-8" onClick={clearFilters}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8"
+                  onClick={clearFilters}
+                >
                   <X className="mr-1 h-3.5 w-3.5" />
                   Clear
                 </Button>
@@ -874,15 +980,23 @@ export default function BoardPage({ params }: BoardPageProps) {
                     checked={project.autonomous_execution_enabled}
                     onCheckedChange={handleToggleAutonomousExecution}
                     disabled={updateProject.isPending}
-                    className={project.autonomous_execution_enabled ? "data-[state=checked]:bg-amber-500" : ""}
+                    className={
+                      project.autonomous_execution_enabled
+                        ? "data-[state=checked]:bg-amber-500"
+                        : ""
+                    }
                   />
                   <Label
                     htmlFor="autonomous-execution"
                     className={`text-sm cursor-pointer flex items-center gap-1.5 ${
-                      project.autonomous_execution_enabled ? "text-amber-600 font-medium" : "text-muted-foreground"
+                      project.autonomous_execution_enabled
+                        ? "text-amber-600 font-medium"
+                        : "text-muted-foreground"
                     }`}
                   >
-                    <Zap className={`h-3.5 w-3.5 ${project.autonomous_execution_enabled ? "fill-amber-500" : ""}`} />
+                    <Zap
+                      className={`h-3.5 w-3.5 ${project.autonomous_execution_enabled ? "fill-amber-500" : ""}`}
+                    />
                     Auto
                   </Label>
                 </div>
@@ -895,7 +1009,10 @@ export default function BoardPage({ params }: BoardPageProps) {
                   checked={hideSpecDriven}
                   onCheckedChange={setHideSpecDriven}
                 />
-                <Label htmlFor="hide-spec-driven" className="text-sm text-muted-foreground cursor-pointer">
+                <Label
+                  htmlFor="hide-spec-driven"
+                  className="text-sm text-muted-foreground cursor-pointer"
+                >
                   Hide Spec-Driven
                 </Label>
               </div>
@@ -906,7 +1023,9 @@ export default function BoardPage({ params }: BoardPageProps) {
         {/* Main Content Area - Board + Agent Panel */}
         <div className="flex-1 flex overflow-hidden">
           {/* Board */}
-          <div className={`flex-1 transition-all duration-300 overflow-hidden ${selectedSandboxId && !isAgentPanelExpanded ? "mr-0" : ""}`}>
+          <div
+            className={`flex-1 transition-all duration-300 overflow-hidden ${selectedSandboxId && !isAgentPanelExpanded ? "mr-0" : ""}`}
+          >
             <div className="h-full overflow-x-auto overflow-y-hidden">
               <div className="flex gap-4 p-4 pb-8 min-w-max">
                 {columns.map((column) => (
@@ -915,7 +1034,10 @@ export default function BoardPage({ params }: BoardPageProps) {
                     column={column}
                     tickets={ticketsByColumn[column.id] || []}
                     projectId={projectId}
-                    isOver={overId === column.id || ticketsByColumn[column.id]?.some(t => t.id === overId)}
+                    isOver={
+                      overId === column.id ||
+                      ticketsByColumn[column.id]?.some((t) => t.id === overId)
+                    }
                     getRunningTasksForTicket={getRunningTasksForTicket}
                     onViewAgent={handleViewAgent}
                   />
@@ -936,11 +1058,13 @@ export default function BoardPage({ params }: BoardPageProps) {
                 ticketTitle={selectedTaskInfo.ticketTitle}
                 taskTitle={selectedTaskInfo.taskTitle}
                 onClose={() => {
-                  setSelectedSandboxId(null)
-                  setSelectedTaskInfo({})
+                  setSelectedSandboxId(null);
+                  setSelectedTaskInfo({});
                 }}
                 isExpanded={isAgentPanelExpanded}
-                onToggleExpand={() => setIsAgentPanelExpanded(!isAgentPanelExpanded)}
+                onToggleExpand={() =>
+                  setIsAgentPanelExpanded(!isAgentPanelExpanded)
+                }
               />
             </div>
           )}
@@ -949,11 +1073,7 @@ export default function BoardPage({ params }: BoardPageProps) {
         {/* Drag Overlay */}
         <DragOverlay>
           {activeTicket && (
-            <TicketCard
-              ticket={activeTicket}
-              projectId={projectId}
-              isOverlay
-            />
+            <TicketCard ticket={activeTicket} projectId={projectId} isOverlay />
           )}
         </DragOverlay>
 
@@ -965,5 +1085,5 @@ export default function BoardPage({ params }: BoardPageProps) {
         />
       </div>
     </DndContext>
-  )
+  );
 }

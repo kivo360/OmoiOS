@@ -1,69 +1,74 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Search, Filter, SortAsc, Plus, AlertCircle } from "lucide-react"
-import { AgentCard, TimeGroupHeader } from "@/components/custom"
-import { useAgents } from "@/hooks/useAgents"
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Search, Filter, SortAsc, Plus, AlertCircle } from "lucide-react";
+import { AgentCard, TimeGroupHeader } from "@/components/custom";
+import { useAgents } from "@/hooks/useAgents";
 
 // Map API agent status to component status
-type AgentCardStatus = "running" | "completed" | "failed" | "blocked"
+type AgentCardStatus = "running" | "completed" | "failed" | "blocked";
 
 function mapAgentStatus(status: string): AgentCardStatus {
   switch (status.toLowerCase()) {
     case "active":
     case "running":
-      return "running"
+      return "running";
     case "completed":
     case "done":
-      return "completed"
+      return "completed";
     case "failed":
     case "error":
-      return "failed"
+      return "failed";
     case "blocked":
     case "stalled":
-      return "blocked"
+      return "blocked";
     default:
-      return "completed"
+      return "completed";
   }
 }
 
 function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-  
-  if (diffMins < 60) return `${diffMins}m`
-  if (diffHours < 24) return `${diffHours}h`
-  if (diffDays < 7) return `${diffDays}d`
-  return `${Math.floor(diffDays / 7)}w`
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24) return `${diffHours}h`;
+  if (diffDays < 7) return `${diffDays}d`;
+  return `${Math.floor(diffDays / 7)}w`;
 }
 
 export function AgentsPanel() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const { data: agents, isLoading, error } = useAgents()
+  const [searchQuery, setSearchQuery] = useState("");
+  const { data: agents, isLoading, error } = useAgents();
 
   const filteredAgents = useMemo(() => {
-    if (!agents) return []
-    return agents.filter((agent) =>
-      agent.agent_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      agent.agent_id.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [agents, searchQuery])
+    if (!agents) return [];
+    return agents.filter(
+      (agent) =>
+        agent.agent_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        agent.agent_id.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
+  }, [agents, searchQuery]);
 
-  const todayAgents = filteredAgents.filter((a) => mapAgentStatus(a.status) === "running")
-  const weekAgents = filteredAgents.filter((a) => mapAgentStatus(a.status) === "completed")
+  const todayAgents = filteredAgents.filter(
+    (a) => mapAgentStatus(a.status) === "running",
+  );
+  const weekAgents = filteredAgents.filter(
+    (a) => mapAgentStatus(a.status) === "completed",
+  );
   const erroredAgents = filteredAgents.filter((a) => {
-    const status = mapAgentStatus(a.status)
-    return status === "failed" || status === "blocked"
-  })
+    const status = mapAgentStatus(a.status);
+    return status === "failed" || status === "blocked";
+  });
 
   return (
     <div className="flex h-full flex-col">
@@ -118,7 +123,11 @@ export function AgentsPanel() {
                       id={agent.agent_id}
                       taskName={agent.agent_type}
                       status={mapAgentStatus(agent.status)}
-                      timeAgo={agent.created_at ? formatTimeAgo(agent.created_at) : "N/A"}
+                      timeAgo={
+                        agent.created_at
+                          ? formatTimeAgo(agent.created_at)
+                          : "N/A"
+                      }
                     />
                   ))}
                 </div>
@@ -133,7 +142,11 @@ export function AgentsPanel() {
                       id={agent.agent_id}
                       taskName={agent.agent_type}
                       status={mapAgentStatus(agent.status)}
-                      timeAgo={agent.created_at ? formatTimeAgo(agent.created_at) : "N/A"}
+                      timeAgo={
+                        agent.created_at
+                          ? formatTimeAgo(agent.created_at)
+                          : "N/A"
+                      }
                     />
                   ))}
                 </div>
@@ -148,7 +161,11 @@ export function AgentsPanel() {
                       id={agent.agent_id}
                       taskName={agent.agent_type}
                       status={mapAgentStatus(agent.status)}
-                      timeAgo={agent.created_at ? formatTimeAgo(agent.created_at) : "N/A"}
+                      timeAgo={
+                        agent.created_at
+                          ? formatTimeAgo(agent.created_at)
+                          : "N/A"
+                      }
                     />
                   ))}
                 </div>
@@ -164,5 +181,5 @@ export function AgentsPanel() {
         </div>
       </ScrollArea>
     </div>
-  )
+  );
 }

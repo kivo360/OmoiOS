@@ -1,27 +1,27 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { motion, AnimatePresence } from "framer-motion"
-import { Menu, X, ArrowRight, Github } from "lucide-react"
-import { FloatingNav } from "@/components/ui/floating-navbar"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import { OmoiOSLogo } from "@/components/ui/omoios-logo"
+import { useState } from "react";
+import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import { Menu, X, ArrowRight, Github } from "lucide-react";
+import { FloatingNav } from "@/components/ui/floating-navbar";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { OmoiOSLogo } from "@/components/ui/omoios-logo";
 
 const navItems = [
   { name: "Why", link: "#why" },
   { name: "Features", link: "#features" },
   { name: "How It Works", link: "#how-it-works" },
   { name: "Pricing", link: "#pricing" },
-]
+];
 
 interface MarketingNavbarProps {
-  className?: string
+  className?: string;
 }
 
 export function MarketingNavbar({ className }: MarketingNavbarProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <>
@@ -77,7 +77,11 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
                 </ul>
 
                 <div className="mt-4 space-y-2 border-t border-landing-border pt-4">
-                  <Button variant="ghost" className="w-full justify-start" asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start"
+                    asChild
+                  >
                     <a
                       href="https://github.com/kivo360/OmoiOS"
                       target="_blank"
@@ -88,8 +92,15 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
                       GitHub
                     </a>
                   </Button>
-                  <Button variant="ghost" className="w-full justify-start" asChild>
-                    <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
                       Sign in
                     </Link>
                   </Button>
@@ -97,7 +108,10 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
                     className="w-full bg-landing-accent hover:bg-landing-accent-dark"
                     asChild
                   >
-                    <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
+                    <Link
+                      href="/register"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
                       Get Started Free
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
@@ -109,5 +123,5 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
         </AnimatePresence>
       </header>
     </>
-  )
+  );
 }

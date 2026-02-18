@@ -1,9 +1,9 @@
-import { loader } from 'fumadocs-core/source';
-import { toFumadocsSource } from 'fumadocs-mdx/runtime/server';
-import { blogPosts } from '@/.source/server';
+import { loader } from "fumadocs-core/source";
+import { toFumadocsSource } from "fumadocs-mdx/runtime/server";
+import { blogPosts } from "@/.source/server";
 
 export const blog = loader({
-  baseUrl: '/blog',
+  baseUrl: "/blog",
   source: toFumadocsSource(blogPosts, []),
 });
 
@@ -14,7 +14,7 @@ export function getAllPosts() {
     .filter((post) => !post.data.draft)
     .sort(
       (a, b) =>
-        new Date(b.data.date).getTime() - new Date(a.data.date).getTime()
+        new Date(b.data.date).getTime() - new Date(a.data.date).getTime(),
     );
 }
 

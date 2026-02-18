@@ -1,58 +1,68 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Search, Plus, FolderGit2, Star, Clock, AlertCircle, ChevronRight } from "lucide-react"
-import { useProjects } from "@/hooks/useProjects"
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Search,
+  Plus,
+  FolderGit2,
+  Star,
+  Clock,
+  AlertCircle,
+  ChevronRight,
+} from "lucide-react";
+import { useProjects } from "@/hooks/useProjects";
 
 // Extract project ID from various route patterns
 function extractProjectIdFromPath(pathname: string): string | null {
   // /projects/[id]/... pattern
-  const projectMatch = pathname.match(/^\/projects\/([^/]+)/)
-  if (projectMatch) return projectMatch[1]
+  const projectMatch = pathname.match(/^\/projects\/([^/]+)/);
+  if (projectMatch) return projectMatch[1];
 
   // /board/[projectId]/... pattern
-  const boardMatch = pathname.match(/^\/board\/([^/]+)/)
-  if (boardMatch && boardMatch[1] !== "all") return boardMatch[1]
+  const boardMatch = pathname.match(/^\/board\/([^/]+)/);
+  if (boardMatch && boardMatch[1] !== "all") return boardMatch[1];
 
   // /graph/[projectId]/... pattern
-  const graphMatch = pathname.match(/^\/graph\/([^/]+)/)
-  if (graphMatch) return graphMatch[1]
+  const graphMatch = pathname.match(/^\/graph\/([^/]+)/);
+  if (graphMatch) return graphMatch[1];
 
-  return null
+  return null;
 }
 
 export function ProjectsPanel() {
-  const pathname = usePathname()
-  const [searchQuery, setSearchQuery] = useState("")
-  const { data: projects, isLoading, error } = useProjects()
+  const pathname = usePathname();
+  const [searchQuery, setSearchQuery] = useState("");
+  const { data: projects, isLoading, error } = useProjects();
 
   // Extract current project ID from URL
-  const currentProjectId = extractProjectIdFromPath(pathname)
+  const currentProjectId = extractProjectIdFromPath(pathname);
 
   const filteredProjects = useMemo(() => {
-    const projectList = projects?.projects ?? []
+    const projectList = projects?.projects ?? [];
     return projectList.filter((project) =>
-      project.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [projects, searchQuery])
+      project.name.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
+  }, [projects, searchQuery]);
 
-  const activeProjects = filteredProjects.filter((p) => p.status === "active")
-  const pausedProjects = filteredProjects.filter((p) => p.status === "paused" || p.status === "archived")
+  const activeProjects = filteredProjects.filter((p) => p.status === "active");
+  const pausedProjects = filteredProjects.filter(
+    (p) => p.status === "paused" || p.status === "archived",
+  );
 
   // Find the current project for display
   const currentProject = useMemo(() => {
-    if (!currentProjectId) return null
-    const allProjects = projects?.projects ?? []
-    return allProjects.find((p) => p.id === currentProjectId)
-  }, [currentProjectId, projects])
+    if (!currentProjectId) return null;
+    const allProjects = projects?.projects ?? [];
+    return allProjects.find((p) => p.id === currentProjectId);
+  }, [currentProjectId, projects]);
 
   return (
     <div className="flex h-full flex-col">
@@ -76,7 +86,8 @@ export function ProjectsPanel() {
               href={`/board/${currentProject.id}`}
               className={cn(
                 "text-xs px-2 py-1 rounded hover:bg-accent transition-colors",
-                pathname.startsWith(`/board/${currentProject.id}`) && "bg-accent font-medium"
+                pathname.startsWith(`/board/${currentProject.id}`) &&
+                  "bg-accent font-medium",
               )}
             >
               Board
@@ -85,7 +96,8 @@ export function ProjectsPanel() {
               href={`/projects/${currentProject.id}/specs`}
               className={cn(
                 "text-xs px-2 py-1 rounded hover:bg-accent transition-colors",
-                pathname.includes(`/projects/${currentProject.id}/specs`) && "bg-accent font-medium"
+                pathname.includes(`/projects/${currentProject.id}/specs`) &&
+                  "bg-accent font-medium",
               )}
             >
               Specs
@@ -94,7 +106,8 @@ export function ProjectsPanel() {
               href={`/graph/${currentProject.id}`}
               className={cn(
                 "text-xs px-2 py-1 rounded hover:bg-accent transition-colors",
-                pathname.startsWith(`/graph/${currentProject.id}`) && "bg-accent font-medium"
+                pathname.startsWith(`/graph/${currentProject.id}`) &&
+                  "bg-accent font-medium",
               )}
             >
               Graph
@@ -103,7 +116,8 @@ export function ProjectsPanel() {
               href={`/projects/${currentProject.id}/settings`}
               className={cn(
                 "text-xs px-2 py-1 rounded hover:bg-accent transition-colors",
-                pathname.includes(`/projects/${currentProject.id}/settings`) && "bg-accent font-medium"
+                pathname.includes(`/projects/${currentProject.id}/settings`) &&
+                  "bg-accent font-medium",
               )}
             >
               Settings
@@ -154,7 +168,7 @@ export function ProjectsPanel() {
                     Favorites
                   </div>
                   {activeProjects.slice(0, 2).map((project) => {
-                    const isCurrentProject = project.id === currentProjectId
+                    const isCurrentProject = project.id === currentProjectId;
                     return (
                       <Link
                         key={project.id}
@@ -163,16 +177,23 @@ export function ProjectsPanel() {
                           "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
                           isCurrentProject
                             ? "bg-primary/10 text-primary font-medium border border-primary/20"
-                            : "hover:bg-accent"
+                            : "hover:bg-accent",
                         )}
                       >
-                        <FolderGit2 className={cn("h-4 w-4", isCurrentProject ? "text-primary" : "text-muted-foreground")} />
+                        <FolderGit2
+                          className={cn(
+                            "h-4 w-4",
+                            isCurrentProject
+                              ? "text-primary"
+                              : "text-muted-foreground",
+                          )}
+                        />
                         <span className="flex-1 truncate">{project.name}</span>
                         {isCurrentProject && (
                           <ChevronRight className="h-4 w-4 text-primary opacity-50" />
                         )}
                       </Link>
-                    )
+                    );
                   })}
                 </div>
               )}
@@ -185,7 +206,7 @@ export function ProjectsPanel() {
                     Active
                   </div>
                   {activeProjects.map((project) => {
-                    const isCurrentProject = project.id === currentProjectId
+                    const isCurrentProject = project.id === currentProjectId;
                     return (
                       <Link
                         key={project.id}
@@ -194,10 +215,17 @@ export function ProjectsPanel() {
                           "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
                           isCurrentProject
                             ? "bg-primary/10 text-primary font-medium border border-primary/20"
-                            : "hover:bg-accent"
+                            : "hover:bg-accent",
                         )}
                       >
-                        <FolderGit2 className={cn("h-4 w-4", isCurrentProject ? "text-primary" : "text-muted-foreground")} />
+                        <FolderGit2
+                          className={cn(
+                            "h-4 w-4",
+                            isCurrentProject
+                              ? "text-primary"
+                              : "text-muted-foreground",
+                          )}
+                        />
                         <span className="flex-1 truncate">{project.name}</span>
                         {project.status === "active" && !isCurrentProject && (
                           <span className="flex h-2 w-2 rounded-full bg-success" />
@@ -206,7 +234,7 @@ export function ProjectsPanel() {
                           <ChevronRight className="h-4 w-4 text-primary opacity-50" />
                         )}
                       </Link>
-                    )
+                    );
                   })}
                 </div>
               )}
@@ -250,5 +278,5 @@ export function ProjectsPanel() {
         </Link>
       </div>
     </div>
-  )
+  );
 }

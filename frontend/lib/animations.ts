@@ -1,15 +1,15 @@
 // Animation utilities for landing page components
-import { Variants } from "framer-motion"
+import { Variants } from "framer-motion";
 
 export const fadeInUp: Variants = {
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0 },
-}
+};
 
 export const fadeIn: Variants = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
-}
+};
 
 export const staggerContainer: Variants = {
   animate: {
@@ -17,22 +17,22 @@ export const staggerContainer: Variants = {
       staggerChildren: 0.1,
     },
   },
-}
+};
 
 export const scaleIn: Variants = {
   initial: { scale: 0, opacity: 0 },
   animate: { scale: 1, opacity: 1 },
-}
+};
 
 export const slideInFromLeft: Variants = {
   initial: { x: -50, opacity: 0 },
   animate: { x: 0, opacity: 1 },
-}
+};
 
 export const slideInFromRight: Variants = {
   initial: { x: 50, opacity: 0 },
   animate: { x: 0, opacity: 1 },
-}
+};
 
 // For typewriter effect
 export const typewriterContainer: Variants = {
@@ -43,12 +43,12 @@ export const typewriterContainer: Variants = {
       staggerChildren: 0.03,
     },
   },
-}
+};
 
 export const typewriterChar: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1 },
-}
+};
 
 // For task card spawn burst
 export const taskSpawnVariants: Variants = {
@@ -65,7 +65,7 @@ export const taskSpawnVariants: Variants = {
       delay: i * 0.1,
     },
   }),
-}
+};
 
 // For phase node pulse
 export const pulseVariants: Variants = {
@@ -78,7 +78,7 @@ export const pulseVariants: Variants = {
       ease: "easeInOut",
     },
   },
-}
+};
 
 // For checkmark draw
 export const checkmarkVariants: Variants = {
@@ -91,7 +91,7 @@ export const checkmarkVariants: Variants = {
       opacity: { duration: 0.1 },
     },
   },
-}
+};
 
 // For feedback loop arrow
 export const arrowDrawVariants: Variants = {
@@ -103,7 +103,7 @@ export const arrowDrawVariants: Variants = {
       ease: "easeInOut",
     },
   },
-}
+};
 
 // Terminal animation defaults
 export const terminalDefaults = {
@@ -113,4 +113,4 @@ export const terminalDefaults = {
   yellowAccent: "#FFD93D",
   redAccent: "#FF4444",
   blueAccent: "#0366D6",
-}
+};

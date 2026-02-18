@@ -1,9 +1,15 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { XCircle } from "lucide-react"
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { XCircle } from "lucide-react";
 
 export default function BillingCancelPage() {
   return (
@@ -14,9 +20,7 @@ export default function BillingCancelPage() {
             <XCircle className="h-10 w-10 text-muted-foreground" />
           </div>
           <CardTitle className="text-2xl">Payment Cancelled</CardTitle>
-          <CardDescription>
-            Your payment was not completed.
-          </CardDescription>
+          <CardDescription>Your payment was not completed.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-center text-muted-foreground">
@@ -30,5 +34,5 @@ export default function BillingCancelPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

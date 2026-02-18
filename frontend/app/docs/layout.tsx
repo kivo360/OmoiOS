@@ -1,7 +1,7 @@
-import { DocsLayout } from 'fumadocs-ui/layouts/docs';
-import type { ReactNode } from 'react';
-import Image from 'next/image';
-import { source } from '@/lib/source';
+import { DocsLayout } from "fumadocs-ui/layouts/docs";
+import type { ReactNode } from "react";
+import Image from "next/image";
+import { source } from "@/lib/source";
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
@@ -20,15 +20,15 @@ export default function Layout({ children }: { children: ReactNode }) {
             <span className="font-semibold">OmoiOS Docs</span>
           </div>
         ),
-        url: '/docs',
+        url: "/docs",
       }}
       sidebar={{
         defaultOpenLevel: 1,
         collapsible: true,
       }}
       links={[
-        { text: 'App', url: '/', active: 'none' },
-        { text: 'Blog', url: '/blog', active: 'none' },
+        { text: "App", url: "/", active: "none" },
+        { text: "Blog", url: "/blog", active: "none" },
       ]}
     >
       {children}

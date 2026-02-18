@@ -1,77 +1,90 @@
-"use client"
+"use client";
 
-import { useState, useEffect, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { CardDescription, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { Github, Mail, Loader2, CheckCircle2, XCircle } from "lucide-react"
-import { register as apiRegister } from "@/lib/api/auth"
-import { ApiError } from "@/lib/api/client"
-import { startOAuthFlow } from "@/lib/api/oauth"
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CardDescription, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Github, Mail, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { register as apiRegister } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
+import { startOAuthFlow } from "@/lib/api/oauth";
 
 // Password requirements
 const PASSWORD_REQUIREMENTS = [
-  { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
-  { id: "uppercase", label: "One uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
-  { id: "lowercase", label: "One lowercase letter", test: (p: string) => /[a-z]/.test(p) },
+  {
+    id: "length",
+    label: "At least 8 characters",
+    test: (p: string) => p.length >= 8,
+  },
+  {
+    id: "uppercase",
+    label: "One uppercase letter",
+    test: (p: string) => /[A-Z]/.test(p),
+  },
+  {
+    id: "lowercase",
+    label: "One lowercase letter",
+    test: (p: string) => /[a-z]/.test(p),
+  },
   { id: "number", label: "One number", test: (p: string) => /\d/.test(p) },
-]
+];
 
 function RegisterForm() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const prefillEmail = searchParams.get("email") || ""
+  const prefillEmail = searchParams.get("email") || "";
 
   // Check for plan selection from pricing page
-  const selectedPlan = searchParams.get("plan") as "pro" | "team" | null
+  const selectedPlan = searchParams.get("plan") as "pro" | "team" | null;
 
   const [formData, setFormData] = useState({
     full_name: "",
     email: prefillEmail,
     password: "",
     confirmPassword: "",
-  })
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false)
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPasswordRequirements, setShowPasswordRequirements] =
+    useState(false);
 
   // Update email if prefill changes (e.g., on navigation)
   useEffect(() => {
     if (prefillEmail && !formData.email) {
-      setFormData(prev => ({ ...prev, email: prefillEmail }))
+      setFormData((prev) => ({ ...prev, email: prefillEmail }));
     }
-  }, [prefillEmail, formData.email])
+  }, [prefillEmail, formData.email]);
 
   // Check which password requirements are met
   const passwordChecks = PASSWORD_REQUIREMENTS.map((req) => ({
     ...req,
     met: req.test(formData.password),
-  }))
+  }));
 
-  const allPasswordRequirementsMet = passwordChecks.every((check) => check.met)
+  const allPasswordRequirementsMet = passwordChecks.every((check) => check.met);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match")
-      setIsLoading(false)
-      return
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
     }
 
     // Validate password strength
     if (!allPasswordRequirementsMet) {
-      setError("Password does not meet all requirements")
-      setIsLoading(false)
-      return
+      setError("Password does not meet all requirements");
+      setIsLoading(false);
+      return;
     }
 
     try {
@@ -79,37 +92,37 @@ function RegisterForm() {
         email: formData.email,
         password: formData.password,
         full_name: formData.full_name || undefined,
-      })
+      });
 
       // Store selected plan for after org creation (if selected from pricing page)
       if (selectedPlan && (selectedPlan === "pro" || selectedPlan === "team")) {
-        localStorage.setItem("pending_plan", selectedPlan)
+        localStorage.setItem("pending_plan", selectedPlan);
       }
 
-      router.push("/verify-email?email=" + encodeURIComponent(formData.email))
+      router.push("/verify-email?email=" + encodeURIComponent(formData.email));
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setError(err.message);
       } else {
-        setError("Registration failed. Please try again.")
+        setError("Registration failed. Please try again.");
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleOAuth = (provider: "github" | "google") => {
     try {
-      startOAuthFlow(provider)
+      startOAuthFlow(provider);
     } catch (error) {
-      console.error(`Failed to start OAuth flow for ${provider}:`, error)
-      setError(`Failed to start ${provider} authentication. Please try again.`)
+      console.error(`Failed to start OAuth flow for ${provider}:`, error);
+      setError(`Failed to start ${provider} authentication. Please try again.`);
     }
-  }
+  };
 
   const updateFormData = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-  }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   return (
     <div className="space-y-6">
@@ -118,8 +131,11 @@ function RegisterForm() {
           <>
             <CardTitle className="text-2xl">Create your account</CardTitle>
             <CardDescription>
-              You selected the <strong className="text-primary">{selectedPlan === "pro" ? "Pro" : "Team"}</strong> plan.
-              Create your account to continue to checkout.
+              You selected the{" "}
+              <strong className="text-primary">
+                {selectedPlan === "pro" ? "Pro" : "Team"}
+              </strong>{" "}
+              plan. Create your account to continue to checkout.
             </CardDescription>
           </>
         ) : (
@@ -212,9 +228,10 @@ function RegisterForm() {
             disabled={isLoading}
             autoComplete="new-password"
           />
-          {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-            <p className="text-xs text-destructive">Passwords do not match</p>
-          )}
+          {formData.confirmPassword &&
+            formData.password !== formData.confirmPassword && (
+              <p className="text-xs text-destructive">Passwords do not match</p>
+            )}
         </div>
 
         <Button
@@ -243,9 +260,9 @@ function RegisterForm() {
           type="button"
           variant="outline"
           onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            handleOAuth("github")
+            e.preventDefault();
+            e.stopPropagation();
+            handleOAuth("github");
           }}
           disabled={isLoading}
         >
@@ -256,9 +273,9 @@ function RegisterForm() {
           type="button"
           variant="outline"
           onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            handleOAuth("google")
+            e.preventDefault();
+            e.stopPropagation();
+            handleOAuth("google");
           }}
           disabled={isLoading}
         >
@@ -274,7 +291,7 @@ function RegisterForm() {
         </Link>
       </div>
     </div>
-  )
+  );
 }
 
 function RegisterFormSkeleton() {
@@ -294,7 +311,7 @@ function RegisterFormSkeleton() {
         <div className="h-10 w-full animate-pulse rounded bg-muted" />
       </div>
     </div>
-  )
+  );
 }
 
 export default function RegisterPage() {
@@ -302,5 +319,5 @@ export default function RegisterPage() {
     <Suspense fallback={<RegisterFormSkeleton />}>
       <RegisterForm />
     </Suspense>
-  )
+  );
 }

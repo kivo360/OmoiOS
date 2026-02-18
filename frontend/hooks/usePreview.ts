@@ -2,12 +2,12 @@
  * React hook for live preview session management
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useCallback, useRef, useEffect, useState } from "react"
-import { previewApi } from "@/lib/api/preview"
-import { ApiError } from "@/lib/api/client"
-import { useEvents, type SystemEvent } from "./useEvents"
-import type { PreviewSession } from "@/lib/api/types"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useRef, useEffect, useState } from "react";
+import { previewApi } from "@/lib/api/preview";
+import { ApiError } from "@/lib/api/client";
+import { useEvents, type SystemEvent } from "./useEvents";
+import type { PreviewSession } from "@/lib/api/types";
 
 // ============================================================================
 // Query Keys
@@ -17,7 +17,7 @@ export const previewKeys = {
   all: ["previews"] as const,
   bySandbox: (sandboxId: string) =>
     [...previewKeys.all, "sandbox", sandboxId] as const,
-}
+};
 
 // ============================================================================
 // Hook
@@ -33,9 +33,9 @@ export const previewKeys = {
  * - Graceful 404 handling (returns null when no preview exists)
  */
 export function usePreview(sandboxId: string | null) {
-  const queryClient = useQueryClient()
-  const [justBecameReady, setJustBecameReady] = useState(false)
-  const prevStatusRef = useRef<string | null>(null)
+  const queryClient = useQueryClient();
+  const [justBecameReady, setJustBecameReady] = useState(false);
+  const prevStatusRef = useRef<string | null>(null);
 
   // Fetch preview by sandbox ID, gracefully handling 404
   const {
@@ -46,49 +46,50 @@ export function usePreview(sandboxId: string | null) {
     queryKey: previewKeys.bySandbox(sandboxId || ""),
     queryFn: async () => {
       try {
-        return await previewApi.getBySandbox(sandboxId!)
+        return await previewApi.getBySandbox(sandboxId!);
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
-          return null
+          return null;
         }
-        throw err
+        throw err;
       }
     },
     enabled: !!sandboxId,
     refetchInterval: (query) => {
-      const data = query.state.data
-      if (!data) return 30_000 // No preview yet — poll slowly
-      if (data.status === "pending" || data.status === "starting") return 10_000
+      const data = query.state.data;
+      if (!data) return 30_000; // No preview yet — poll slowly
+      if (data.status === "pending" || data.status === "starting")
+        return 10_000;
       // Terminal states: don't poll
       if (
         data.status === "ready" ||
         data.status === "stopped" ||
         data.status === "failed"
       )
-        return false
-      return 30_000
+        return false;
+      return 30_000;
     },
-  })
+  });
 
   // Track status transitions to detect when preview becomes ready
   useEffect(() => {
-    const currentStatus = preview?.status ?? null
+    const currentStatus = preview?.status ?? null;
     if (
       prevStatusRef.current !== null &&
       prevStatusRef.current !== "ready" &&
       currentStatus === "ready"
     ) {
-      setJustBecameReady(true)
+      setJustBecameReady(true);
     }
-    prevStatusRef.current = currentStatus
-  }, [preview?.status])
+    prevStatusRef.current = currentStatus;
+  }, [preview?.status]);
 
   // Auto-clear justBecameReady after a short delay
   useEffect(() => {
-    if (!justBecameReady) return
-    const timer = setTimeout(() => setJustBecameReady(false), 500)
-    return () => clearTimeout(timer)
-  }, [justBecameReady])
+    if (!justBecameReady) return;
+    const timer = setTimeout(() => setJustBecameReady(false), 500);
+    return () => clearTimeout(timer);
+  }, [justBecameReady]);
 
   // Listen for PREVIEW_READY WebSocket event
   const handleEvent = useCallback(
@@ -99,11 +100,11 @@ export function usePreview(sandboxId: string | null) {
       ) {
         queryClient.invalidateQueries({
           queryKey: previewKeys.bySandbox(sandboxId!),
-        })
+        });
       }
     },
-    [sandboxId, queryClient]
-  )
+    [sandboxId, queryClient],
+  );
 
   useEvents({
     enabled: !!sandboxId,
@@ -111,7 +112,7 @@ export function usePreview(sandboxId: string | null) {
       event_types: ["PREVIEW_READY"],
     },
     onEvent: handleEvent,
-  })
+  });
 
   // Stop mutation
   const stopMutation = useMutation({
@@ -120,31 +121,31 @@ export function usePreview(sandboxId: string | null) {
       if (sandboxId) {
         queryClient.invalidateQueries({
           queryKey: previewKeys.bySandbox(sandboxId),
-        })
+        });
       }
     },
-  })
+  });
 
   const stop = useCallback(() => {
     if (preview?.id) {
-      stopMutation.mutate(preview.id)
+      stopMutation.mutate(preview.id);
     }
-  }, [preview?.id, stopMutation])
+  }, [preview?.id, stopMutation]);
 
   const refresh = useCallback(() => {
     if (sandboxId) {
       queryClient.invalidateQueries({
         queryKey: previewKeys.bySandbox(sandboxId),
-      })
+      });
     }
-  }, [sandboxId, queryClient])
+  }, [sandboxId, queryClient]);
 
-  const hasPreview = preview !== null && preview !== undefined
-  const isReady = preview?.status === "ready"
+  const hasPreview = preview !== null && preview !== undefined;
+  const isReady = preview?.status === "ready";
   const isPending =
-    preview?.status === "pending" || preview?.status === "starting"
-  const isFailed = preview?.status === "failed"
-  const isStopped = preview?.status === "stopped"
+    preview?.status === "pending" || preview?.status === "starting";
+  const isFailed = preview?.status === "failed";
+  const isStopped = preview?.status === "stopped";
 
   return {
     preview: preview ?? null,
@@ -159,5 +160,5 @@ export function usePreview(sandboxId: string | null) {
     isStopping: stopMutation.isPending,
     refresh,
     justBecameReady,
-  }
+  };
 }

@@ -1,25 +1,31 @@
-"use client"
+"use client";
 
-import { use, useMemo, useState } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
-import { Skeleton } from "@/components/ui/skeleton"
+import { use, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -27,7 +33,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +44,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
   Save,
@@ -53,66 +59,75 @@ import {
   ArrowRight,
   X,
   Info,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { getPhaseById, ALL_PHASE_IDS, type PhaseConfig } from "@/lib/phases-config"
-import { useTasks } from "@/hooks/useTasks"
-import { useAgents } from "@/hooks/useAgents"
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  getPhaseById,
+  ALL_PHASE_IDS,
+  type PhaseConfig,
+} from "@/lib/phases-config";
+import { useTasks } from "@/hooks/useTasks";
+import { useAgents } from "@/hooks/useAgents";
 
 interface PhaseDetailPageProps {
-  params: Promise<{ phaseId: string }>
+  params: Promise<{ phaseId: string }>;
 }
 
 export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
-  const { phaseId } = use(params)
-  const phase = getPhaseById(phaseId)
-  
+  const { phaseId } = use(params);
+  const phase = getPhaseById(phaseId);
+
   // Fetch real data
-  const { data: tasks, isLoading: tasksLoading } = useTasks()
-  const { data: agents, isLoading: agentsLoading } = useAgents()
-  
-  const isLoading = tasksLoading || agentsLoading
+  const { data: tasks, isLoading: tasksLoading } = useTasks();
+  const { data: agents, isLoading: agentsLoading } = useAgents();
+
+  const isLoading = tasksLoading || agentsLoading;
 
   // Compute task stats for this phase
   const taskStats = useMemo(() => {
-    const stats = { total: 0, done: 0, active: 0, pending: 0 }
-    
+    const stats = { total: 0, done: 0, active: 0, pending: 0 };
+
     tasks?.forEach((task) => {
       if (task.phase_id === phaseId) {
-        stats.total++
+        stats.total++;
         if (task.status === "completed") {
-          stats.done++
+          stats.done++;
         } else if (task.status === "in_progress") {
-          stats.active++
+          stats.active++;
         } else {
-          stats.pending++
+          stats.pending++;
         }
       }
-    })
+    });
 
-    return stats
-  }, [tasks, phaseId])
+    return stats;
+  }, [tasks, phaseId]);
 
   // Count active agents (simplified)
   const activeAgents = useMemo(() => {
-    return agents?.filter((a) => a.status === "active" || a.status === "busy").length ?? 0
-  }, [agents])
-  
-  const [isEditing, setIsEditing] = useState(false)
-  const [name, setName] = useState(phase?.name ?? "")
-  const [description, setDescription] = useState(phase?.description ?? "")
-  const [order, setOrder] = useState(phase?.order ?? 0)
-  const [isTerminal, setIsTerminal] = useState(phase?.isTerminal ?? false)
-  const [transitions, setTransitions] = useState<string[]>(phase?.transitions ?? [])
-  const [phasePrompt, setPhasePrompt] = useState(phase?.phasePrompt ?? "")
+    return (
+      agents?.filter((a) => a.status === "active" || a.status === "busy")
+        .length ?? 0
+    );
+  }, [agents]);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [name, setName] = useState(phase?.name ?? "");
+  const [description, setDescription] = useState(phase?.description ?? "");
+  const [order, setOrder] = useState(phase?.order ?? 0);
+  const [isTerminal, setIsTerminal] = useState(phase?.isTerminal ?? false);
+  const [transitions, setTransitions] = useState<string[]>(
+    phase?.transitions ?? [],
+  );
+  const [phasePrompt, setPhasePrompt] = useState(phase?.phasePrompt ?? "");
 
   const handleToggleTransition = (phaseTransition: string) => {
     if (transitions.includes(phaseTransition)) {
-      setTransitions(transitions.filter(t => t !== phaseTransition))
+      setTransitions(transitions.filter((t) => t !== phaseTransition));
     } else {
-      setTransitions([...transitions, phaseTransition])
+      setTransitions([...transitions, phaseTransition]);
     }
-  }
+  };
 
   // Handle unknown phase
   if (!phase) {
@@ -138,7 +153,7 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -164,14 +179,12 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold">{phase.name}</h1>
-              {phase.isTerminal && (
-                <Badge variant="outline">Terminal</Badge>
-              )}
-              {phase.isSystem && (
-                <Badge variant="secondary">System</Badge>
-              )}
+              {phase.isTerminal && <Badge variant="outline">Terminal</Badge>}
+              {phase.isSystem && <Badge variant="secondary">System</Badge>}
             </div>
-            <p className="font-mono text-sm text-muted-foreground">{phase.id}</p>
+            <p className="font-mono text-sm text-muted-foreground">
+              {phase.id}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -272,7 +285,9 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Basic Information</CardTitle>
-              <CardDescription>Core phase settings and metadata</CardDescription>
+              <CardDescription>
+                Core phase settings and metadata
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
@@ -344,7 +359,9 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Done Definitions</CardTitle>
-                <CardDescription>Criteria that must be met to complete this phase</CardDescription>
+                <CardDescription>
+                  Criteria that must be met to complete this phase
+                </CardDescription>
               </div>
               {isEditing && (
                 <Button size="sm">
@@ -357,7 +374,9 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
               {phase.doneCriteria.length === 0 ? (
                 <div className="py-8 text-center">
                   <CheckCircle2 className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                  <p className="mt-4 text-muted-foreground">No done criteria defined</p>
+                  <p className="mt-4 text-muted-foreground">
+                    No done criteria defined
+                  </p>
                   {isEditing && (
                     <Button variant="outline" className="mt-4">
                       <Plus className="mr-2 h-4 w-4" />
@@ -378,7 +397,11 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
                       </div>
                       {isEditing && (
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                          >
                             <Pencil className="h-3 w-3" />
                           </Button>
                           <Button
@@ -404,7 +427,9 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Expected Outputs</CardTitle>
-                <CardDescription>Files and artifacts expected from this phase</CardDescription>
+                <CardDescription>
+                  Files and artifacts expected from this phase
+                </CardDescription>
               </div>
               {isEditing && (
                 <Button size="sm">
@@ -417,7 +442,9 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
               {phase.expectedOutputs.length === 0 ? (
                 <div className="py-8 text-center">
                   <FileCode className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                  <p className="mt-4 text-muted-foreground">No expected outputs defined</p>
+                  <p className="mt-4 text-muted-foreground">
+                    No expected outputs defined
+                  </p>
                 </div>
               ) : (
                 <Table>
@@ -426,7 +453,9 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
                       <TableHead>Type</TableHead>
                       <TableHead>Pattern</TableHead>
                       <TableHead>Required</TableHead>
-                      {isEditing && <TableHead className="w-24">Actions</TableHead>}
+                      {isEditing && (
+                        <TableHead className="w-24">Actions</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -448,7 +477,11 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
                         {isEditing && (
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                              >
                                 <Pencil className="h-3 w-3" />
                               </Button>
                               <Button
@@ -489,8 +522,8 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
                 placeholder="Enter instructions for agents..."
               />
               <p className="mt-2 text-xs text-muted-foreground">
-                Supports Markdown formatting. These instructions are provided to agents
-                when they enter this phase.
+                Supports Markdown formatting. These instructions are provided to
+                agents when they enter this phase.
               </p>
             </CardContent>
           </Card>
@@ -515,28 +548,33 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
                 </div>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {ALL_PHASE_IDS.filter(p => p !== phase.id).map((phaseOption) => (
-                    <div
-                      key={phaseOption}
-                      className={cn(
-                        "flex items-center space-x-3 rounded-lg border p-3 transition-colors",
-                        transitions.includes(phaseOption) && "border-primary/50 bg-primary/5"
-                      )}
-                    >
-                      <Checkbox
-                        id={phaseOption}
-                        checked={transitions.includes(phaseOption)}
-                        onCheckedChange={() => isEditing && handleToggleTransition(phaseOption)}
-                        disabled={!isEditing}
-                      />
-                      <Label
-                        htmlFor={phaseOption}
-                        className="flex-1 cursor-pointer font-mono text-sm"
+                  {ALL_PHASE_IDS.filter((p) => p !== phase.id).map(
+                    (phaseOption) => (
+                      <div
+                        key={phaseOption}
+                        className={cn(
+                          "flex items-center space-x-3 rounded-lg border p-3 transition-colors",
+                          transitions.includes(phaseOption) &&
+                            "border-primary/50 bg-primary/5",
+                        )}
                       >
-                        {phaseOption.replace("PHASE_", "")}
-                      </Label>
-                    </div>
-                  ))}
+                        <Checkbox
+                          id={phaseOption}
+                          checked={transitions.includes(phaseOption)}
+                          onCheckedChange={() =>
+                            isEditing && handleToggleTransition(phaseOption)
+                          }
+                          disabled={!isEditing}
+                        />
+                        <Label
+                          htmlFor={phaseOption}
+                          className="flex-1 cursor-pointer font-mono text-sm"
+                        >
+                          {phaseOption.replace("PHASE_", "")}
+                        </Label>
+                      </div>
+                    ),
+                  )}
                 </div>
               )}
             </CardContent>
@@ -548,7 +586,9 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Phase Configuration</CardTitle>
-              <CardDescription>Advanced settings for phase behavior</CardDescription>
+              <CardDescription>
+                Advanced settings for phase behavior
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
@@ -577,14 +617,19 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="retryStrategy">Retry Strategy</Label>
-                  <Select defaultValue={phase.config.retryStrategy} disabled={!isEditing}>
+                  <Select
+                    defaultValue={phase.config.retryStrategy}
+                    disabled={!isEditing}
+                  >
                     <SelectTrigger id="retryStrategy">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
                       <SelectItem value="linear">Linear</SelectItem>
-                      <SelectItem value="exponential">Exponential Backoff</SelectItem>
+                      <SelectItem value="exponential">
+                        Exponential Backoff
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -597,9 +642,7 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
                     defaultValue={phase.config.wipLimit}
                     disabled={!isEditing}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    0 = unlimited
-                  </p>
+                  <p className="text-xs text-muted-foreground">0 = unlimited</p>
                 </div>
               </div>
             </CardContent>
@@ -612,7 +655,9 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
         <Card className="border-destructive/50">
           <CardHeader>
             <CardTitle className="text-destructive">Danger Zone</CardTitle>
-            <CardDescription>Irreversible actions for this phase</CardDescription>
+            <CardDescription>
+              Irreversible actions for this phase
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
@@ -633,9 +678,9 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete Phase?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will permanently delete the phase &quot;{phase.name}&quot;.
-                      Tasks in this phase will be moved to PHASE_BACKLOG.
-                      This action cannot be undone.
+                      This will permanently delete the phase &quot;{phase.name}
+                      &quot;. Tasks in this phase will be moved to
+                      PHASE_BACKLOG. This action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -651,5 +696,5 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
         </Card>
       )}
     </div>
-  )
+  );
 }
