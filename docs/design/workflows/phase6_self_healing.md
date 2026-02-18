@@ -178,7 +178,7 @@ If PASS + on_result_found="stop_all":
   → Terminate all agents
   → Mark workflow complete
   → Store in Memory
-  
+
 If FAIL:
   → Deliver feedback to agent
   → Allow re-submission
@@ -203,7 +203,7 @@ If needs work:
   → Deliver feedback to worker
   → Worker fixes
   → Re-submit for review (iteration N+1)
-  
+
 If repeated failures (3+ iterations):
   → Spawn diagnostic agent
   → Analyze why validation keeps failing
@@ -286,20 +286,20 @@ CREATE TABLE result_submissions (
     workflow_id VARCHAR NOT NULL,  -- ticket_id
     agent_id VARCHAR NOT NULL,
     markdown_file_path TEXT NOT NULL,
-    
+
     -- Validation
     validated_at TIMESTAMP WITH TIME ZONE,
     passed BOOLEAN,
     feedback TEXT,
     evidence_index JSONB,
-    
+
     -- Versioning
     version INTEGER NOT NULL,
     result_criteria_snapshot TEXT NOT NULL,
     status VARCHAR(32) NOT NULL,  -- submitted, validated
-    
+
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    
+
     UNIQUE(workflow_id, version)
 );
 ```
@@ -311,28 +311,28 @@ CREATE TABLE diagnostic_runs (
     workflow_id VARCHAR NOT NULL,  -- ticket_id
     diagnostic_agent_id VARCHAR,
     diagnostic_task_id VARCHAR,
-    
+
     -- Trigger context
     triggered_at TIMESTAMP WITH TIME ZONE NOT NULL,
     total_tasks_at_trigger INTEGER NOT NULL,
     done_tasks_at_trigger INTEGER NOT NULL,
     failed_tasks_at_trigger INTEGER NOT NULL,
     time_since_last_task_seconds INTEGER NOT NULL,
-    
+
     -- Recovery
     tasks_created_count INTEGER DEFAULT 0,
     tasks_created_ids JSONB,
-    
+
     -- Analysis
     workflow_goal TEXT,
     phases_analyzed JSONB,
     agents_reviewed JSONB,
     diagnosis TEXT,
-    
+
     -- Lifecycle
     completed_at TIMESTAMP WITH TIME ZONE,
     status VARCHAR(32) NOT NULL,  -- created, running, completed, failed
-    
+
     created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 ```
@@ -343,21 +343,21 @@ CREATE TABLE validation_reviews (
     id VARCHAR PRIMARY KEY,
     task_id VARCHAR NOT NULL,
     validator_agent_id VARCHAR NOT NULL,
-    
+
     -- Review details
     iteration INTEGER NOT NULL,
     decision VARCHAR(32) NOT NULL,  -- approved, needs_work, rejected
     feedback TEXT NOT NULL,
     review_artifacts JSONB,
-    
+
     -- Timing
     reviewed_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    
+
     -- Memory integration
     stored_in_memory BOOLEAN DEFAULT FALSE,
-    
+
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    
+
     UNIQUE(task_id, iteration)
 );
 ```
@@ -695,4 +695,3 @@ Integration Testing:
 ---
 
 **Ready to build Phase 6?** Use this document as the implementation spec! 🚀
-

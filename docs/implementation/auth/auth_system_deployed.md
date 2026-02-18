@@ -53,7 +53,7 @@ api_keys                  -- Programmatic access
 
 ### Tables Updated ✅
 ```sql
-users      -- Added: hashed_password, is_verified, is_super_admin, 
+users      -- Added: hashed_password, is_verified, is_super_admin,
            --        department, attributes, last_login_at, is_active
 
 projects   -- Added: organization_id, created_by
@@ -227,6 +227,7 @@ uv run uvicorn omoi_os.api.main:app --reload --port 8000
 curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
+    # pragma: allowlist secret
     "email": "demo@example.com",
     "password": "SecurePass123",
     "full_name": "Demo User",
@@ -237,6 +238,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
+  # pragma: allowlist secret
     "email": "demo@example.com",
     "password": "SecurePass123"
   }'
@@ -483,6 +485,7 @@ print_migration_summary()          # Database overview
 from omoi_os.services.auth_service import AuthService
 
 user = await auth_service.register_user(
+    # pragma: allowlist secret
     email="dev@company.com",
     password="SecurePass123",
     department="Engineering"
@@ -492,6 +495,7 @@ user = await auth_service.register_user(
 2. **Login**:
 ```python
 user = await auth_service.authenticate_user(
+    # pragma: allowlist secret
     email="dev@company.com",
     password="SecurePass123"
 )
@@ -537,6 +541,7 @@ See curl examples above or use the Swagger UI at `http://localhost:8000/docs`
 Current settings (from `omoi_os.config.AuthSettings`):
 
 ```python
+# pragma: allowlist secret
 jwt_secret_key = "dev-secret-key-change-in-production"
 jwt_algorithm = "HS256"
 access_token_expire_minutes = 15
@@ -696,4 +701,3 @@ SELECT id, email, is_verified, is_super_admin FROM users;
 ---
 
 *Built with ❤️ using SQLAlchemy 2.0, FastAPI, and modern Python best practices*
-

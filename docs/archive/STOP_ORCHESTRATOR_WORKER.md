@@ -127,7 +127,7 @@ DELETE FROM tasks
 WHERE id IN (
     SELECT id FROM (
         SELECT id, ROW_NUMBER() OVER (
-            PARTITION BY description 
+            PARTITION BY description
             ORDER BY created_at ASC
         ) as rn
         FROM tasks

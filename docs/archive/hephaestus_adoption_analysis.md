@@ -75,11 +75,11 @@ allowed_transitions: List[str] = ["PHASE_TESTING", "PHASE_BLOCKED"]
 
 **Gap**: OmoiOS restricts phase transitions, preventing free-form discovery branching.
 
-**Recommendation**: 
+**Recommendation**:
 - **Option A (Recommended)**: Allow discovery-based phase spawning to bypass `allowed_transitions`
   - Normal phase transitions: Enforce `allowed_transitions`
   - Discovery-based spawning: Allow any phase (via DiscoveryService)
-  
+
 - **Option B**: Make `allowed_transitions` optional/advisory
   - Use as guidance, not restriction
   - Log when agents spawn outside allowed transitions
@@ -112,7 +112,7 @@ Phase 3: Move ticket to 'testing' → Pass to Phase 2 (if fails)
 - ❌ No explicit ticket status transitions tied to phases
 - ❌ No "pass ticket to next phase" pattern
 
-**Recommendation**: 
+**Recommendation**:
 - Add ticket status transitions tied to phase progress
 - Add explicit "pass ticket" pattern in phase prompts
 - Track ticket movement through Kanban columns
@@ -146,7 +146,7 @@ Continues validation work (doesn't stop)
 - ✅ Agents can spawn tasks via discovery
 - ⚠️ Need to ensure agents continue original work
 
-**Recommendation**: 
+**Recommendation**:
 - ✅ Already implemented
 - Add guidance in phase prompts: "Continue your work after spawning discovery task"
 
@@ -163,7 +163,7 @@ Loop until tests pass
 - ❌ No explicit feedback loop pattern
 - ❌ No "loop until success" guidance
 
-**Recommendation**: 
+**Recommendation**:
 - Add explicit feedback loop pattern in Phase 3 prompts
 - Guide agents to spawn fix tasks when validation fails
 - Track retry loops in DiscoveryService
@@ -214,7 +214,7 @@ Marks implementation task as blocked
 - ❌ No explicit "phase jumping" guidance
 - ❌ No task blocking pattern
 
-**Recommendation**: 
+**Recommendation**:
 - Add phase jumping guidance in phase prompts
 - Add task blocking when waiting for clarification
 - Track phase jumps in DiscoveryService
@@ -234,7 +234,7 @@ If you discover:
       spawn_phase_id="PHASE_INITIAL",  # Jump back
       spawn_description="Clarify [What's unclear] - Needed for [Component]"
   )
-  
+
   Mark your task as blocked until clarification received
 """
 ```
@@ -408,13 +408,13 @@ def record_discovery_and_branch(
 ) -> Tuple[TaskDiscovery, Task]:
     """
     Record discovery and spawn task in ANY phase.
-    
+
     This bypasses PhaseModel.allowed_transitions for discovery-based
     spawning, enabling Hephaestus-style free-form branching.
     """
     # Create discovery record
     discovery = TaskDiscovery(...)
-    
+
     # Spawn task in ANY phase (bypass phase restrictions)
     spawned_task = self._create_task_in_phase(
         phase_id=spawn_phase_id,  # No allowed_transitions check
@@ -422,7 +422,7 @@ def record_discovery_and_branch(
         parent_task_id=source_task_id,
         priority_boost=priority_boost,
     )
-    
+
     return discovery, spawned_task
 ```
 
@@ -452,7 +452,7 @@ IF you discover:
   - Missing requirements → Spawn Phase 1 clarification task
   - Optimization opportunity → Spawn Phase 1 investigation task
   - Security issue → Spawn Phase 1 investigation task
-  
+
   Continue your implementation work after spawning discovery task.
 """
 ```

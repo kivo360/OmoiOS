@@ -194,7 +194,7 @@ class QualityCheckerService:
         # Checks: coverage, lint errors, complexity
         # Compares against thresholds
         # Records QualityMetric records
-    
+
     def evaluate_gate(task_id, gate_id):
         """Evaluate quality gate requirements."""
         # Checks all requirements
@@ -450,12 +450,12 @@ discovery_service.record_discovery_and_branch(
 # Extend DiscoveryService
 class DiscoveryService:
     # Existing methods...
-    
+
     def detect_stuck_workflows(self, session: Session) -> List[str]:
         """Find workflows with all tasks done but no result."""
         # Simple query logic
         pass
-    
+
     def spawn_diagnostic_discovery(
         self,
         session: Session,
@@ -489,11 +489,11 @@ class DiscoveryService:
 class DiagnosticService:
     def __init__(self, discovery_service: DiscoveryService):
         self.discovery = discovery_service
-    
+
     def detect_and_intervene(self, session: Session):
         """Find stuck workflows and spawn diagnostics."""
         stuck = self._find_stuck_workflows(session)
-        
+
         for ticket_id in stuck:
             # Use Discovery system for actual task spawning!
             self.discovery.spawn_diagnostic_discovery(

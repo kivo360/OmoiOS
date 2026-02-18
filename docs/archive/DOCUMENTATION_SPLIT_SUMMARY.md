@@ -95,5 +95,3 @@ When updating documentation:
 2. Update the README if structure changes
 3. Keep files focused on single topics
 4. If a file grows beyond ~600 lines, consider splitting further
-
-

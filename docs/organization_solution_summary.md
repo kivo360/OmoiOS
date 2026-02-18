@@ -94,7 +94,7 @@ class OmoiBaseSettings(BaseSettings):
 class FeatureSettings(OmoiBaseSettings):
     yaml_section = "feature"  # → config/base.yaml
     model_config = SettingsConfigDict(env_prefix="FEATURE_")
-    
+
     timeout: int = 60          # From YAML
     api_key: Optional[str] = None  # From .env
 ```
@@ -392,4 +392,3 @@ All 5 questions answered with:
 4. Continue incrementally
 
 Let me know when you'd like to proceed with test migration!
-

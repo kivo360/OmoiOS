@@ -548,4 +548,3 @@ The sidebar content changes based on the current route:
 - API key management is implemented (`omoi_os/models/auth.py`)
 
 The documentation now accurately reflects the current codebase state and can be used to guide UI implementation.
-

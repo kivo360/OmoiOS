@@ -865,5 +865,3 @@ class TaskQueueConfig(BaseSettings):
 - [x] Database schemas and Pydantic models match requirements.
 - [x] Integration points documented with related subsystems.
 - [x] Configuration parameters aligned with requirements.
-
-

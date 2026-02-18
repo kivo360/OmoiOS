@@ -74,4 +74,3 @@ This document summarizes authoritative references from the OpenHands SDK documen
 - **LLM Strategy (Q1.3)** – The flexibility of the `LLM` model plus router patterns supports configuring dedicated providers/models per agent role, enabling the adaptive strategy described in the implementation questions.
 
 These grounded references should be used when drafting ADRs or resolving each question block in `docs/implementation_questions.md`.
-

@@ -230,7 +230,7 @@ phases:
       - "Tests passing locally"
       - "Phase 3 validation task created"
       - "update_task_status called with status='done'"
-    
+
     expected_outputs:
       - type: "file"
         pattern: "src/**/*.py"
@@ -238,7 +238,7 @@ phases:
       - type: "test"
         pattern: "tests/test_*.py"
         required: true
-    
+
     phase_prompt: |
       YOU ARE A SOFTWARE ENGINEER IN THE IMPLEMENTATION PHASE
       STEP 1: Understand requirements
@@ -600,23 +600,23 @@ done_definitions:
 ```python
 class WorkflowResult(Base):
     __tablename__ = "result_submissions"
-    
+
     submission_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     workflow_id: Mapped[str] = mapped_column(String, ForeignKey("tickets.id"), nullable=False)
     agent_id: Mapped[str] = mapped_column(String, ForeignKey("agents.id"), nullable=False)
     markdown_file_path: Mapped[str] = mapped_column(Text, nullable=False)
-    
+
     # Validation
     validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     passed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     evidence_index: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    
+
     # Versioning
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     result_criteria_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # submitted, validated
-    
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 ```
 
@@ -638,40 +638,40 @@ class MonitorService:
         """Find workflows with all tasks done but no validated result."""
         with self.db.get_session() as session:
             stuck = []
-            
+
             # Get all non-terminal tickets
             tickets = session.query(Ticket).filter(Ticket.status != "done").all()
-            
+
             for ticket in tickets:
                 # Check all tasks are finished
                 pending = session.query(Task).filter(
                     Task.ticket_id == ticket.id,
                     Task.status.in_(["pending", "assigned", "running"])
                 ).count()
-                
+
                 if pending > 0:
                     continue
-                
+
                 # Check no validated result
                 validated = session.query(WorkflowResult).filter(
                     WorkflowResult.workflow_id == ticket.id,
                     WorkflowResult.status == "validated",
                     WorkflowResult.passed == True
                 ).first()
-                
+
                 if validated:
                     continue
-                
+
                 # Check time since last activity
                 last_task = session.query(Task).filter(
                     Task.ticket_id == ticket.id
                 ).order_by(Task.completed_at.desc()).first()
-                
+
                 if last_task and last_task.completed_at:
                     time_since = (utc_now() - last_task.completed_at).total_seconds()
                     if time_since >= stuck_threshold:
                         stuck.append(ticket.id)
-            
+
             return stuck
 ```
 
@@ -684,33 +684,33 @@ class MonitorService:
 ```python
 class DiagnosticRun(Base):
     __tablename__ = "diagnostic_runs"
-    
+
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     workflow_id: Mapped[str] = mapped_column(String, ForeignKey("tickets.id"), nullable=False)
     diagnostic_agent_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("agents.id"), nullable=True)
     diagnostic_task_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("tasks.id"), nullable=True)
-    
+
     # Trigger context
     triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     total_tasks_at_trigger: Mapped[int] = mapped_column(Integer, nullable=False)
     done_tasks_at_trigger: Mapped[int] = mapped_column(Integer, nullable=False)
     failed_tasks_at_trigger: Mapped[int] = mapped_column(Integer, nullable=False)
     time_since_last_task_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
-    
+
     # Recovery
     tasks_created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tasks_created_ids: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    
+
     # Analysis
     workflow_goal: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     phases_analyzed: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     agents_reviewed: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     diagnosis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+
     # Lifecycle
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # created, running, completed, failed
-    
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 ```
 
@@ -752,7 +752,7 @@ class DiagnosticService:
         self.memory = memory
         self.monitor = monitor
         self.discovery = discovery
-    
+
     def build_diagnostic_context(self, session: Session, ticket_id: str) -> dict:
         """Build rich context for diagnostic agent."""
         # Use existing services!

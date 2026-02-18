@@ -162,7 +162,7 @@ Root Layout
    ```tsx
    // Before
    const notifications = [...]
-   
+
    // After
    const { data: notifications = [] } = useNotifications()
    ```
@@ -171,7 +171,7 @@ Root Layout
    ```tsx
    // Before
    const [open, setOpen] = useState(false)
-   
+
    // After
    const { isOpen, openModal, closeModal } = useUIStore()
    ```
@@ -254,4 +254,3 @@ Root Layout
 ---
 
 **Status**: ✅ All documentation updated and ready for implementation
-

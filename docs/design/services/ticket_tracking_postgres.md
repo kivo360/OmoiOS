@@ -131,5 +131,3 @@ Environment variables (loaded via `pydantic-settings`):
 - Large JSONB fields: keep payloads minimal; avoid storing large blobs.
 - Search performance: start simple; later add GIN indexes and tsvector materialization.
 - Migrations: Alembic planned; initial bootstrap via script.
-
-

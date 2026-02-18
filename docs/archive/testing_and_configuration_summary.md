@@ -143,9 +143,9 @@ from functools import lru_cache
 
 class MonitoringSettings(OmoiBaseSettings):
     """Loads from config/base.yaml (or config/test.yaml in tests)."""
-    
+
     yaml_section = "monitoring"
-    
+
     guardian_interval_seconds: int = 60
 
 
@@ -166,10 +166,10 @@ interval = settings.guardian_interval_seconds  # From YAML
 
 class LLMSettings(OmoiBaseSettings):
     """API key comes from LLM_API_KEY environment variable."""
-    
+
     yaml_section = "llm"
     model_config = SettingsConfigDict(env_prefix="LLM_")
-    
+
     api_key: Optional[str] = None  # From .env file
     model: str = "..."  # From YAML
 
@@ -292,4 +292,3 @@ $ make test
 
 **Status**: ✅ All design documents ready for implementation
 **Next**: Run `./scripts/setup_test_environment.sh` to begin
-

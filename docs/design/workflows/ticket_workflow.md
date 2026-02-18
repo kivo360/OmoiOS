@@ -299,25 +299,25 @@ The **Ticket Store** provides persistence for ticket records, phase artifacts, a
 stateDiagram-v2
     [*] --> backlog
     backlog --> analyzing
-    
+
     analyzing --> building : Phase tasks complete\nGate criteria met
     analyzing --> blocked : Threshold exceeded\nNo task progress
-    
+
     building --> building-done : Phase tasks complete\nGate criteria met
     building --> blocked : Threshold exceeded\nNo task progress
-    
+
     building-done --> testing : Phase tasks complete\nGate criteria met
     building-done --> blocked : Threshold exceeded\nNo task progress
-    
+
     testing --> done : Phase tasks complete\nGate criteria met\nAll tests passing
     testing --> building : Fix needed\nValidation fails
     testing --> blocked : Threshold exceeded\nNo task progress
-    
+
     blocked --> analyzing : Unblocked
     blocked --> building : Unblocked
     blocked --> building-done : Unblocked
     blocked --> testing : Unblocked
-    
+
     done --> [*]
 ```
 
@@ -426,26 +426,26 @@ The Blocking Detector runs periodically (default: every 5 minutes) to monitor ti
 ```python
 def detect_blocking(ticket: Ticket, threshold: timedelta) -> Optional[BlockingCondition]:
     """Detect if ticket is blocked based on state duration and task progress."""
-    
+
     # Check if ticket is in a non-terminal state
     if ticket.status in [TicketStatusEnum.DONE]:
         return None
-    
+
     # Calculate time in current state
     time_in_state = now() - ticket.state_entered_at
-    
+
     # Check threshold
     if time_in_state < threshold:
         return None
-    
+
     # Check task progress
     recent_progress = check_recent_task_progress(ticket.id, threshold)
     if recent_progress:
         return None  # Task progress detected, not blocked
-    
+
     # Classify blocker type
     blocker_type = classify_blocker(ticket)
-    
+
     return BlockingCondition(
         ticket_id=ticket.id,
         blocker_type=blocker_type,
@@ -459,23 +459,23 @@ def detect_blocking(ticket: Ticket, threshold: timedelta) -> Optional[BlockingCo
 ```python
 def classify_blocker(ticket: Ticket) -> BlockerType:
     """Classify blocker type based on ticket context and task analysis."""
-    
+
     # Check for dependency blockers
     if has_unresolved_dependencies(ticket):
         return BlockerType.DEPENDENCY
-    
+
     # Check for clarification blockers
     if has_pending_clarifications(ticket):
         return BlockerType.WAITING_ON_CLARIFICATION
-    
+
     # Check for failing checks
     if has_failing_checks(ticket):
         return BlockerType.FAILING_CHECKS
-    
+
     # Check for environment issues
     if has_environment_issues(ticket):
         return BlockerType.ENVIRONMENT
-    
+
     # Default to dependency if unknown
     return BlockerType.DEPENDENCY
 ```
@@ -487,9 +487,9 @@ When blocking is detected, remediation tasks are auto-created:
 ```python
 def create_remediation_tasks(ticket: Ticket, blocker_type: BlockerType) -> List[Task]:
     """Create remediation tasks based on blocker classification."""
-    
+
     tasks = []
-    
+
     if blocker_type == BlockerType.DEPENDENCY:
         tasks.append(Task(
             ticket_id=ticket.id,
@@ -498,7 +498,7 @@ def create_remediation_tasks(ticket: Ticket, blocker_type: BlockerType) -> List[
             capability="dependency_resolution",
             priority="HIGH"
         ))
-    
+
     elif blocker_type == BlockerType.WAITING_ON_CLARIFICATION:
         tasks.append(Task(
             ticket_id=ticket.id,
@@ -507,7 +507,7 @@ def create_remediation_tasks(ticket: Ticket, blocker_type: BlockerType) -> List[
             capability="communication",
             priority="HIGH"
         ))
-    
+
     elif blocker_type == BlockerType.FAILING_CHECKS:
         tasks.append(Task(
             ticket_id=ticket.id,
@@ -517,7 +517,7 @@ def create_remediation_tasks(ticket: Ticket, blocker_type: BlockerType) -> List[
             priority="HIGH",
             metadata={"validation_feedback": ticket.last_validation_feedback}
         ))
-    
+
     elif blocker_type == BlockerType.ENVIRONMENT:
         tasks.append(Task(
             ticket_id=ticket.id,
@@ -526,7 +526,7 @@ def create_remediation_tasks(ticket: Ticket, blocker_type: BlockerType) -> List[
             capability="infrastructure",
             priority="CRITICAL"
         ))
-    
+
     return tasks
 ```
 
@@ -543,13 +543,13 @@ Tickets without inter-ticket dependencies may run in parallel up to `MAX_CONCURR
 ```python
 def check_ticket_dependencies(ticket: Ticket) -> List[str]:
     """Check for inter-ticket dependencies."""
-    
+
     dependencies = []
-    
+
     # Check explicit dependencies in metadata
     if "depends_on" in ticket.metadata:
         dependencies.extend(ticket.metadata["depends_on"])
-    
+
     # Check for implicit dependencies (same workspace, conflicting files)
     if "workspace_id" in ticket.metadata:
         conflicting_tickets = find_conflicting_tickets(
@@ -557,7 +557,7 @@ def check_ticket_dependencies(ticket: Ticket) -> List[str]:
             files=ticket.metadata.get("files", [])
         )
         dependencies.extend(conflicting_tickets)
-    
+
     return dependencies
 ```
 
@@ -578,22 +578,22 @@ Parallelism must respect resource budgets; Monitoring Service may throttle globa
 ```python
 def check_resource_availability() -> bool:
     """Check if system has capacity for additional parallel tickets."""
-    
+
     # Check resource utilization
     cpu_utilization = monitoring_service.get_cpu_utilization()
     memory_utilization = monitoring_service.get_memory_utilization()
     agent_count = monitoring_service.get_active_agent_count()
-    
+
     # Enforce resource limits
     if cpu_utilization > 0.8:
         return False  # CPU threshold exceeded
-    
+
     if memory_utilization > 0.85:
         return False  # Memory threshold exceeded
-    
+
     if agent_count >= MAX_AGENTS:
         return False  # Agent capacity reached
-    
+
     return True
 ```
 
@@ -606,14 +606,14 @@ Prefer agent affinity for continuity but apply anti-affinity to avoid hotspots w
 ```python
 def assign_ticket_to_agent(ticket: Ticket, agents: List[Agent]) -> Optional[Agent]:
     """Assign ticket to agent with preference for continuity."""
-    
+
     # Prefer agents that previously worked on this ticket
     previous_agents = get_previous_agents(ticket.id)
     if previous_agents:
         available_previous = [a for a in previous_agents if a.is_available() and a.utilization < 0.8]
         if available_previous:
             return available_previous[0]
-    
+
     # Apply anti-affinity if utilization high
     utilization = monitoring_service.get_system_utilization()
     if utilization > 0.8:
@@ -621,12 +621,12 @@ def assign_ticket_to_agent(ticket: Ticket, agents: List[Agent]) -> Optional[Agen
         available_agents = [a for a in agents if a.utilization < 0.8 and a.is_available()]
         if available_agents:
             return min(available_agents, key=lambda a: a.utilization)
-    
+
     # Default: assign to least utilized available agent
     available_agents = [a for a in agents if a.is_available()]
     if available_agents:
         return min(available_agents, key=lambda a: a.utilization)
-    
+
     return None
 ```
 
@@ -656,7 +656,7 @@ CREATE TABLE tickets (
     assigned_agents UUID[] DEFAULT ARRAY[]::UUID[],
     tasks UUID[] DEFAULT ARRAY[]::UUID[],
     metadata JSONB DEFAULT '{}'::JSONB,
-    
+
     CONSTRAINT tickets_status_check CHECK (
         (status = 'done' AND blocked = FALSE) OR
         (status != 'done')
@@ -685,7 +685,7 @@ CREATE TABLE phase_gate_artifacts (
     last_phase_passed_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    
+
     CONSTRAINT phase_gate_artifacts_ticket_phase_unique UNIQUE (ticket_id, phase)
 );
 
@@ -709,7 +709,7 @@ CREATE TABLE ticket_state_history (
     metadata JSONB DEFAULT '{}'::JSONB,
     transitioned_at TIMESTAMP NOT NULL DEFAULT NOW(),
     transitioned_by UUID, -- Agent ID if automated
-    
+
     CONSTRAINT ticket_state_history_status_check CHECK (
         to_status IN ('backlog', 'analyzing', 'building', 'building-done', 'testing', 'done')
     )
@@ -980,44 +980,44 @@ The Ticket Workflow System emits lifecycle events via Event Bus for real-time up
 ```python
 def transition_phase(ticket: Ticket, to_phase: str) -> Ticket:
     """Transition ticket to new phase with validation and task seeding."""
-    
+
     # Validate transition
     if not is_valid_transition(ticket.current_phase, to_phase):
         raise InvalidTransitionError(f"Cannot transition from {ticket.current_phase} to {to_phase}")
-    
+
     # Check blocking conditions
     if ticket.blocked:
         raise TicketBlockedError("Ticket is blocked, cannot transition")
-    
+
     # Validate phase gate criteria
     if ticket.current_phase != "backlog":
         validation_result = phase_gate_manager.validate_phase_gate(ticket.id, ticket.current_phase)
         if not validation_result.passed:
             raise GateCriteriaNotMetError(validation_result.feedback)
-    
+
     # Collect phase artifacts
     artifacts = collect_phase_artifacts(ticket.id, ticket.current_phase)
-    
+
     # Store artifacts in PhaseGateArtifacts
     phase_gate_artifacts = store_phase_artifacts(ticket.id, ticket.current_phase, artifacts)
-    
+
     # Update ticket state
     previous_phase = ticket.current_phase
     ticket.current_phase = to_phase
     ticket.status = map_phase_to_status(to_phase)
     ticket.state_entered_at = now()
     ticket.updated_at = now()
-    
+
     # Persist ticket
     ticket = ticket_store.update_ticket(ticket)
-    
+
     # Record state history
     record_state_transition(ticket.id, previous_phase, to_phase)
-    
+
     # Seed tasks for new phase
     tasks = seed_phase_tasks(ticket.id, to_phase, previous_phase)
     ticket.tasks.extend([task.id for task in tasks])
-    
+
     # Emit event
     event_bus.publish(TicketPhaseTransitionedEvent(
         ticket_id=ticket.id,
@@ -1025,7 +1025,7 @@ def transition_phase(ticket: Ticket, to_phase: str) -> Ticket:
         to_phase=to_phase,
         timestamp=now()
     ))
-    
+
     return ticket
 ```
 
@@ -1034,7 +1034,7 @@ def transition_phase(ticket: Ticket, to_phase: str) -> Ticket:
 ```python
 def run_blocking_detection():
     """Periodic blocking detection job."""
-    
+
     # Find tickets in non-terminal states
     tickets = ticket_store.find_tickets_by_status([
         TicketStatusEnum.BACKLOG,
@@ -1043,29 +1043,29 @@ def run_blocking_detection():
         TicketStatusEnum.BUILDING_DONE,
         TicketStatusEnum.TESTING
     ])
-    
+
     threshold = timedelta(minutes=config.BLOCKING_THRESHOLD)
-    
+
     for ticket in tickets:
         # Skip if already blocked
         if ticket.blocked:
             continue
-        
+
         # Check blocking condition
         blocking_condition = detect_blocking(ticket, threshold)
-        
+
         if blocking_condition:
             # Mark ticket as blocked
             ticket.blocked = True
             ticket.blocked_reason = blocking_condition.blocker_type
             ticket.blocked_at = blocking_condition.detected_at
             ticket_store.update_ticket(ticket)
-            
+
             # Create remediation tasks
             remediation_tasks = create_remediation_tasks(ticket, blocking_condition.blocker_type)
             for task in remediation_tasks:
                 task_queue_service.create_task(task)
-            
+
             # Emit alert event
             event_bus.publish(TicketBlockedEvent(
                 ticket_id=ticket.id,
@@ -1125,7 +1125,7 @@ def calculate_phase_cycle_time(ticket: Ticket, phase: str) -> timedelta:
     )
     if not phase_transitions:
         return timedelta(0)
-    
+
     entry_time = phase_transitions[0].transitioned_at
     exit_transitions = ticket_state_history.filter(
         ticket_id=ticket.id,
@@ -1134,7 +1134,7 @@ def calculate_phase_cycle_time(ticket: Ticket, phase: str) -> timedelta:
     if exit_transitions:
         exit_time = exit_transitions[0].transitioned_at
         return exit_time - entry_time
-    
+
     # Phase still in progress
     return now() - entry_time
 ```
@@ -1156,21 +1156,21 @@ def calculate_blocked_time_ratio(ticket: Ticket) -> float:
     """Calculate blocked time ratio."""
     total_time = (ticket.updated_at or now()) - ticket.created_at
     blocked_time = calculate_total_blocked_time(ticket)
-    
+
     if total_time == timedelta(0):
         return 0.0
-    
+
     return (blocked_time.total_seconds() / total_time.total_seconds()) * 100
 
 def aggregate_blocker_types(start_date: datetime, end_date: datetime) -> Dict[str, int]:
     """Aggregate blocker types for date range."""
     blocked_tickets = ticket_store.find_blocked_tickets(start_date, end_date)
-    
+
     blocker_counts = {}
     for ticket in blocked_tickets:
         blocker_type = ticket.blocked_reason or "unknown"
         blocker_counts[blocker_type] = blocker_counts.get(blocker_type, 0) + 1
-    
+
     return blocker_counts
 ```
 
@@ -1243,4 +1243,3 @@ def check_reopen_rate_threshold(ticket: Ticket, threshold: int = 2) -> bool:
 | 1.0 | 2025-11-16 | AI Design Agent | Initial design document for Ticket Workflow System |
 
 ---
-

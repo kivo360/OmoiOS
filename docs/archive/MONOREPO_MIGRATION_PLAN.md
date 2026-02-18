@@ -139,7 +139,7 @@ cp .env backend/.env.example  # Or create template
 
 ### Phase 4: Update Backend Import Paths (5 minutes)
 
-**Good News**: Python imports stay the same! 
+**Good News**: Python imports stay the same!
 
 Since we're moving the entire `omoi_os/` package to `backend/omoi_os/`, and we run commands from the `backend/` directory, all imports like `from omoi_os.models import Task` remain unchanged.
 
@@ -268,6 +268,7 @@ services:
     ports:
       - "18000:8000"
     environment:
+      # pragma: allowlist secret
       - DATABASE_URL=postgresql://omoios:omoios@postgres:5432/omoios
       - REDIS_URL=redis://redis:6379
     depends_on:
@@ -518,4 +519,3 @@ cp -r senior_sandbox_backup senior_sandbox
 5. Commit changes
 
 **Ready to proceed?**
-

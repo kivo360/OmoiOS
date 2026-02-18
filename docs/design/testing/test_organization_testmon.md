@@ -197,6 +197,7 @@ Only secrets and URLs go in `.env.test`:
 
 ```bash
 # .env.test (GITIGNORED)
+# pragma: allowlist secret
 DATABASE_URL_TEST=postgresql+psycopg://postgres:postgres@localhost:15432/app_db_test
 REDIS_URL_TEST=redis://localhost:16379/1
 LLM_API_KEY=test-key-mock
@@ -223,11 +224,11 @@ def setup_test_environment():
 def clear_settings_cache():
     """Clear cached settings before each test."""
     from omoi_os.config import load_monitoring_settings, load_task_queue_settings
-    
+
     # Clear LRU caches so tests get fresh config
     load_monitoring_settings.cache_clear()
     load_task_queue_settings.cache_clear()
-    
+
     yield
 ```
 
@@ -401,7 +402,7 @@ def clear_config_cache():
     load_redis_settings.cache_clear()
     load_monitoring_settings.cache_clear()
     load_task_queue_settings.cache_clear()
-    
+
     yield
 
 
@@ -413,10 +414,10 @@ def db_service(test_database_url: str) -> Generator[DatabaseService, None, None]
     """
     from urllib.parse import urlparse
     from sqlalchemy import text
-    
+
     parsed = urlparse(test_database_url)
     db_name = parsed.path.lstrip('/')
-    
+
     admin_url = test_database_url.rsplit('/', 1)[0] + '/postgres'
     try:
         admin_db = DatabaseService(admin_url)
@@ -429,7 +430,7 @@ def db_service(test_database_url: str) -> Generator[DatabaseService, None, None]
                 session.commit()
     except Exception:
         pass
-    
+
     db = DatabaseService(test_database_url)
     db.create_tables()
     try:
@@ -464,7 +465,7 @@ def event_bus_service(test_redis_url: str) -> EventBusService:
 def override_monitoring_config(monkeypatch):
     """
     Helper to override monitoring settings in tests.
-    
+
     Usage:
         def test_fast_monitoring(override_monitoring_config):
             override_monitoring_config(guardian_interval_seconds=0.1)
@@ -473,7 +474,7 @@ def override_monitoring_config(monkeypatch):
         for key, value in kwargs.items():
             monkeypatch.setenv(f'MONITORING_{key.upper()}', str(value))
         load_monitoring_settings.cache_clear()
-    
+
     return _override
 
 
@@ -481,7 +482,7 @@ def override_monitoring_config(monkeypatch):
 def override_task_queue_config(monkeypatch):
     """
     Helper to override task queue settings in tests.
-    
+
     Usage:
         def test_custom_weights(override_task_queue_config):
             override_task_queue_config(w_p=0.5, w_a=0.3)
@@ -490,7 +491,7 @@ def override_task_queue_config(monkeypatch):
         for key, value in kwargs.items():
             monkeypatch.setenv(f'TASK_QUEUE_{key.upper()}', str(value))
         load_task_queue_settings.cache_clear()
-    
+
     return _override
 
 
@@ -502,7 +503,7 @@ def pytest_configure(config):
     """Configure pytest with custom settings."""
     # Ensure test environment is set
     os.environ['OMOIOS_ENV'] = 'test'
-    
+
     config.addinivalue_line(
         "markers", "wip: Tests that are work in progress"
     )
@@ -528,11 +529,11 @@ def pytest_collection_modifyitems(config, items):
         elif "performance/" in str(item.fspath):
             item.add_marker(pytest.mark.performance)
             item.add_marker(pytest.mark.slow)
-        
+
         # Auto-mark database requirements
         if "db_service" in item.fixturenames:
             item.add_marker(pytest.mark.requires_db)
-        
+
         # Auto-mark Redis requirements
         if "event_bus_service" in item.fixturenames or "redis" in str(item.fixturenames):
             item.add_marker(pytest.mark.requires_redis)
@@ -545,7 +546,7 @@ def pytest_sessionstart(session):
     """
     # Verify test environment is set
     assert os.getenv('OMOIOS_ENV') == 'test', "OMOIOS_ENV must be 'test'"
-    
+
     # Verify config/test.yaml exists
     from pathlib import Path
     test_config = Path("config/test.yaml")
@@ -699,7 +700,7 @@ from omoi_os.utils.datetime import utc_now
 
 class TicketBuilder:
     """Builder for creating test tickets with fluent API."""
-    
+
     def __init__(self):
         self._title = "Test Ticket"
         self._description = "Test description"
@@ -707,35 +708,35 @@ class TicketBuilder:
         self._status = "pending"
         self._priority = "MEDIUM"
         self._created_at = utc_now()
-    
+
     def with_title(self, title: str) -> 'TicketBuilder':
         self._title = title
         return self
-    
+
     def with_description(self, description: str) -> 'TicketBuilder':
         self._description = description
         return self
-    
+
     def with_phase(self, phase_id: str) -> 'TicketBuilder':
         self._phase_id = phase_id
         return self
-    
+
     def with_status(self, status: str) -> 'TicketBuilder':
         self._status = status
         return self
-    
+
     def with_priority(self, priority: str) -> 'TicketBuilder':
         self._priority = priority
         return self
-    
+
     def in_progress(self) -> 'TicketBuilder':
         self._status = "in_progress"
         return self
-    
+
     def high_priority(self) -> 'TicketBuilder':
         self._priority = "HIGH"
         return self
-    
+
     def build(self) -> Ticket:
         """Build the ticket."""
         return Ticket(
@@ -750,7 +751,7 @@ class TicketBuilder:
 
 class TaskBuilder:
     """Builder for creating test tasks."""
-    
+
     def __init__(self, ticket_id: Optional[str] = None):
         self._ticket_id = ticket_id or "test-ticket-id"
         self._phase_id = "PHASE_REQUIREMENTS"
@@ -758,27 +759,27 @@ class TaskBuilder:
         self._description = "Test task"
         self._priority = "MEDIUM"
         self._status = "pending"
-    
+
     def for_ticket(self, ticket_id: str) -> 'TaskBuilder':
         self._ticket_id = ticket_id
         return self
-    
+
     def with_type(self, task_type: str) -> 'TaskBuilder':
         self._task_type = task_type
         return self
-    
+
     def with_status(self, status: str) -> 'TaskBuilder':
         self._status = status
         return self
-    
+
     def assigned(self) -> 'TaskBuilder':
         self._status = "assigned"
         return self
-    
+
     def completed(self) -> 'TaskBuilder':
         self._status = "done"
         return self
-    
+
     def build(self) -> Task:
         """Build the task."""
         return Task(
@@ -838,7 +839,7 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:18
@@ -852,7 +853,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       redis:
         image: redis:7
         ports:
@@ -862,40 +863,41 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Full history for testmon
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install UV
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      
+
       - name: Install dependencies
         run: uv sync --group test
-      
+
       - name: Create .env.test
         run: |
           cat > .env.test << EOF
-          DATABASE_URL_TEST=postgresql+psycopg://postgres:postgres@localhost:15432/app_db_test
+# pragma: allowlist secret
+DATABASE_URL_TEST=postgresql+psycopg://postgres:postgres@localhost:15432/app_db_test
           REDIS_URL_TEST=redis://localhost:16379/1
           LLM_API_KEY=test-key-mock
           AUTH_JWT_SECRET_KEY=test-secret-ci-${{ github.sha }}
           OMOIOS_ENV=test
           EOF
-      
+
       - name: Verify config/test.yaml exists
         run: |
           if [ ! -f config/test.yaml ]; then
             echo "Error: config/test.yaml not found"
             exit 1
           fi
-      
+
       - name: Cache testmon data
         uses: actions/cache@v3
         with:
@@ -904,12 +906,12 @@ jobs:
           restore-keys: |
             testmon-${{ github.base_ref }}-
             testmon-main-
-      
+
       - name: Run tests with testmon
         run: uv run pytest --testmon --cov
         env:
           OMOIOS_ENV: test
-      
+
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
@@ -1197,4 +1199,3 @@ test-help:
 ---
 
 This plan provides a clear path to reorganizing tests, implementing intelligent test execution with pytest-testmon, and using YAML-first configuration.
-

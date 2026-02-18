@@ -115,7 +115,7 @@ OmoiOS has a **sophisticated memory system** (`MemoryService`) that implements m
 - **Collections**: Single collection (task_memories table)
 - **Access**: Via `MemoryService.search_similar()` API
 - **Results**: Top K configurable (default 5) with similarity scores
-- **Features**: 
+- **Features**:
   - Semantic search using cosine similarity
   - Keyword search using PostgreSQL tsvector
   - Hybrid search using Reciprocal Rank Fusion (RRF)
@@ -129,7 +129,7 @@ OmoiOS has a **sophisticated memory system** (`MemoryService`) that implements m
 
 ### Hephaestus
 - **Method**: Similarity threshold check (0.95)
-- **Process**: 
+- **Process**:
   1. Generate embedding for new memory
   2. Search for similar memories
   3. If score > 0.95 → Mark as duplicate, store in SQLite only
@@ -187,7 +187,7 @@ qdrant_find(
 
 ### Hephaestus
 - **When**: At agent spawn time
-- **Process**: 
+- **Process**:
   1. Generate embedding for task description
   2. Search all collections (top 5 from each)
   3. Rerank and select top 20
@@ -341,13 +341,13 @@ def store_execution_with_dedup(
     """Store memory with deduplication check."""
     # Generate embedding
     embedding = self.embedding_service.generate_embedding(execution_summary)
-    
+
     # Search for similar memories
     similar = self._semantic_search(
-        session, execution_summary, top_k=1, 
+        session, execution_summary, top_k=1,
         similarity_threshold=similarity_threshold
     )
-    
+
     if similar and similar[0].similarity_score >= similarity_threshold:
         # Mark as duplicate, store metadata only
         return self._store_duplicate(session, task_id, execution_summary, similar[0])

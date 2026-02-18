@@ -145,7 +145,7 @@ Requirements → Design → Tasks → Execution
 - View switcher options
 - Detailed filter UI
 
-**Terminology Conflict**: 
+**Terminology Conflict**:
 - Provided: "Tickets" → "Tasks" (parent-child)
 - Existing: "Tickets" and "Tasks" used somewhat interchangeably
 - **Need to clarify**: Ticket = work item, Task = execution unit?

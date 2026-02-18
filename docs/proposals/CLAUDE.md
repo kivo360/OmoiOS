@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #3664 | 6:36 PM | 🔵 | New Organization Page Has Pending Plan Flow for Pricing Page Signups | ~484 |
+| #3860 | 8:34 PM | 🔵 | Staged Commit Contains 4,410 Line Documentation Overhaul Across 24 Files | ~473 |
 </claude-mem-context>
