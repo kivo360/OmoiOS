@@ -99,8 +99,8 @@ pnpm-lock.yaml
 scripts/lead-generation/*.csv
 
 # Marketing & business strategy (private)
-docs/marketing/
-marketing/
+/docs/marketing/
+/marketing/
 
 # Cache databases
 .instructor_cache/

@@ -4,25 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  Play,
-  Loader2,
-  Code,
-  FileText,
-  Github,
-} from "lucide-react";
-import { FlipWords } from "@/components/ui/flip-words";
+import { ArrowRight, Play, Loader2, Code, FileText, Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-
-const heroWords = [
-  "shipped features",
-  "merged PRs",
-  "done work",
-  "real results",
-];
 
 const heroVideos = [
   {
@@ -90,7 +75,7 @@ export function HeroSection({ className }: HeroSectionProps) {
       <div className="container relative mx-auto max-w-5xl">
         {/* Main Content */}
         <div className="mx-auto max-w-3xl text-center">
-          {/* Eyebrow */}
+          {/* Badge */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -98,11 +83,7 @@ export function HeroSection({ className }: HeroSectionProps) {
             className="mb-6"
           >
             <span className="inline-flex items-center gap-2 rounded-full bg-landing-accent/10 px-4 py-1.5 text-sm font-medium text-landing-accent">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-landing-accent opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-landing-accent" />
-              </span>
-              Now Available
+              Open Source &middot; Spec-Driven &middot; Autonomous
             </span>
           </motion.div>
 
@@ -113,13 +94,9 @@ export function HeroSection({ className }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-4xl font-bold tracking-tight text-landing-text sm:text-5xl md:text-6xl lg:text-7xl"
           >
-            Describe it. Wake up to{" "}
+            Open-source spec-to-PR.{" "}
             <span className="text-landing-accent">
-              <FlipWords
-                words={heroWords}
-                duration={3000}
-                className="text-landing-accent"
-              />
+              No IDE. No vendor lock.
             </span>
           </motion.h1>
 
@@ -130,9 +107,9 @@ export function HeroSection({ className }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-6 max-w-2xl text-lg text-landing-text-muted md:text-xl"
           >
-            Describe what you want. We turn it into a plan with a clear schedule
-            and traceable outputs—requirements, design, and tested code—until a
-            pull request is ready for your review.
+            Describe what you want built. OmoiOS turns it into requirements, a
+            design, and an implementation plan — then agents execute autonomously
+            in the cloud and deliver a pull request by morning. No IDE required.
           </motion.p>
 
           {/* CTAs */}
@@ -201,6 +178,25 @@ export function HeroSection({ className }: HeroSectionProps) {
                 </a>
               </Button>
             </div>
+
+            {/* Social Proof Strip */}
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+              className="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm text-landing-text-muted"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://img.shields.io/github/stars/kivo360/OmoiOS?style=social"
+                alt="GitHub stars"
+                className="h-5"
+              />
+              <span>&middot;</span>
+              <span>Listed on OpenAlternative</span>
+              <span>&middot;</span>
+              <span>Built by a solo founder, open to everyone</span>
+            </motion.p>
           </motion.div>
         </div>
 

@@ -7,12 +7,14 @@ import {
   MarketingNavbar,
   HeroSection,
   PainPointsSection,
+  ComparisonTableSection,
   LogoCloudSection,
   FeaturesSection,
   WorkflowSection,
   ProductShowcaseSection,
   NightShiftSection,
   StatsSection,
+  FounderSection,
   PricingSection,
   FAQSection,
   WaitlistCTASection,
@@ -56,6 +58,9 @@ function LandingPage() {
       {/* Pain Points */}
       <PainPointsSection id="why" />
 
+      {/* Comparison Table */}
+      <ComparisonTableSection id="compare" />
+
       {/* Logo Cloud */}
       <LogoCloudSection />
 
@@ -73,6 +78,9 @@ function LandingPage() {
 
       {/* Stats Section */}
       <StatsSection />
+
+      {/* Founder Story */}
+      <FounderSection />
 
       {/* Pricing Section */}
       <PricingSection id="pricing" />

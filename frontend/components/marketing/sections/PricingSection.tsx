@@ -33,7 +33,7 @@ const pricingTiers: PricingTier[] = [
     description: "Try autonomous engineering",
     features: [
       "1 concurrent agent",
-      "5 workflows per month",
+      "10 workflows per month",
       "2 GB storage",
       "Community support",
     ],
@@ -49,7 +49,7 @@ const pricingTiers: PricingTier[] = [
       "5 concurrent agents",
       "100 workflows per month",
       "50 GB storage",
-      "Bring your own API keys",
+      "Bring your own API keys (Anthropic, OpenAI)",
       "Priority support",
       "Advanced analytics",
     ],

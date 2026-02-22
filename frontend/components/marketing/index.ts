@@ -14,3 +14,5 @@ export { PricingSection } from "./sections/PricingSection";
 export { FAQSection } from "./sections/FAQSection";
 export { WaitlistCTASection } from "./sections/WaitlistCTASection";
 export { FooterSection } from "./sections/FooterSection";
+export { ComparisonTableSection } from "./sections/ComparisonTableSection";
+export { FounderSection } from "./sections/FounderSection";

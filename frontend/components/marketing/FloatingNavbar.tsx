@@ -14,6 +14,7 @@ const navItems = [
   { name: "Features", link: "#features" },
   { name: "How It Works", link: "#how-it-works" },
   { name: "Pricing", link: "#pricing" },
+  { name: "Compare", link: "#compare" },
 ];
 
 interface MarketingNavbarProps {

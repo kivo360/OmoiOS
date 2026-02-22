@@ -23,11 +23,12 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omoios.dev";
 
 export const metadata: Metadata = {
   title: {
-    default: "OmoiOS - Go to sleep. Wake up to finished features.",
+    default:
+      "OmoiOS — Open-Source Spec-Driven AI Development Platform | Kiro Alternative",
     template: "%s | OmoiOS",
   },
   description:
-    "AI agents that build while you rest. Deploy autonomous agents that ship features, fix bugs, and handle complex workflows overnight. Wake up to progress.",
+    "The open-source alternative to Kiro. Describe features, approve a plan, and wake up to pull requests. Autonomous agent orchestration with specs, tests, and traceability. Free tier available.",
   keywords: [
     "AI agents",
     "autonomous coding",
@@ -36,6 +37,9 @@ export const metadata: Metadata = {
     "overnight automation",
     "AI pair programming",
     "agent orchestration",
+    "Kiro alternative",
+    "spec-driven development",
+    "open source AI development",
   ],
   authors: [{ name: "OmoiOS Team" }],
   creator: "OmoiOS",
@@ -46,16 +50,16 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: siteUrl,
     siteName: "OmoiOS",
-    title: "Go to sleep. Wake up to finished features.",
+    title: "OmoiOS — Spec-driven development that ships while you sleep",
     description:
-      "AI agents that build while you rest. Deploy autonomous agents that ship features, fix bugs, and handle complex workflows overnight.",
+      "Open-source autonomous agent orchestration. Write a spec, agents deliver a tested PR by morning. The open-source Kiro alternative.",
     // images handled automatically by app/opengraph-image.tsx
   },
   twitter: {
     card: "summary_large_image",
-    title: "Go to sleep. Wake up to finished features.",
+    title: "OmoiOS — Spec-driven development that ships while you sleep",
     description:
-      "AI agents that build while you rest. Ship features overnight with autonomous agents.",
+      "Open-source autonomous agent orchestration. Write a spec, agents deliver a tested PR by morning. The open-source Kiro alternative.",
     // images handled automatically by app/twitter-image.tsx
     creator: "@TheGeodexes",
   },
