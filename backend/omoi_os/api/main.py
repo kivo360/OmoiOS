@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import importlib.metadata
 import asyncio
 import os
 from contextlib import asynccontextmanager
@@ -1002,7 +1003,7 @@ _is_production = _env == "production"
 app = FastAPI(
     title="OmoiOS API",
     description="Multi-Agent Orchestration System API",
-    version="0.1.0",
+    version=importlib.metadata.version("omoi-os"),
     lifespan=combined_lifespan,
     docs_url=None if _is_production else "/docs",
     redoc_url=None if _is_production else "/redoc",
@@ -1239,7 +1240,7 @@ async def serve_ui():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "version": "0.1.0"}
+    return {"status": "healthy", "version": importlib.metadata.version("omoi-os")}
 
 
 if __name__ == "__main__":

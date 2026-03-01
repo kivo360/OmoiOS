@@ -1102,3 +1102,18 @@ groups:
     @echo "  just dev-watch                  - Full stack (backend + frontend)"
     @echo ""
     @echo "Use 'just --list' to see all commands"
+
+# ── Version Management ─────────────────────────────────────────────────────────
+
+# Set project version and sync to all manifests
+set-version version:
+    echo "{{version}}" > VERSION
+    python3 scripts/sync-version.py
+
+# Check all version files are in sync (for CI)
+check-version:
+    python3 scripts/sync-version.py --check
+
+# Sync VERSION file to all package manifests
+sync-version:
+    python3 scripts/sync-version.py

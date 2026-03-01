@@ -1,6 +1,7 @@
 """Tests for the /health endpoint."""
 
 import pytest
+import importlib.metadata
 from fastapi.testclient import TestClient
 
 from omoi_os.api.main import app
@@ -27,7 +28,7 @@ class TestHealthEndpoint:
         assert "status" in data
         assert "version" in data
         assert data["status"] == "healthy"
-        assert data["version"] == "0.1.0"
+        assert data["version"] == importlib.metadata.version("omoi-os")
 
     def test_health_endpoint_content_type(self, client: TestClient):
         """Test that /health endpoint returns correct content type."""
