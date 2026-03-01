@@ -23,8 +23,9 @@ The app uses Next.js route groups for layout separation:
 
 | Group | Layout | Purpose |
 |-------|--------|---------|
-| `(auth)` | Centered card | Login, register, OAuth, email verification, password reset |
-| `(dashboard)` | Sidebar shell | All protected routes, project-scoped paths |
+| `(app)` | Full shell | Authenticated routes (projects, settings, sandbox, etc.) — 41 pages |
+| `(auth)` | Centered card | Login, register, OAuth, email verification, password reset — 6 pages |
+| `(dashboard)` | Sidebar shell | Root redirect to /command — 1 page |
 
 ### Key Page Categories
 
@@ -83,5 +84,5 @@ WebSocket events bridge to both state layers:
 | Document | Content |
 |----------|---------|
 | [Frontend Architecture (ShadCN + Next.js)](../design/frontend/frontend_architecture_shadcn_nextjs.md) | Full component system, route architecture, middleware stack |
-| [Page Architecture](../page_architecture.md) | All ~94 pages with layouts, data requirements, interactions |
+#TR|| [Page Architecture](../page_architecture.md) | All ~67 pages with layouts, data requirements, interactions |
 | [React Query + WebSocket Integration](../design/frontend/react_query_websocket.md) | Detailed real-time data flow, cache strategies |

@@ -127,7 +127,7 @@ Monitor agent trajectories and system coherence, intervening when agents drift f
 
 ### 5. Frontend Architecture
 
-Next.js 15 App Router with ShadCN UI, dual state management (Zustand + React Query), and real-time WebSocket integration. Route groups separate auth flows from the dashboard shell. ~94 pages covering organization management, spec workspaces, Kanban boards, dependency graphs, statistics dashboards, and agent management.
+Next.js 15 App Router with ShadCN UI, dual state management (Zustand + React Query), and real-time WebSocket integration. Route groups separate auth flows from the dashboard shell. ~67 pages covering organization management, spec workspaces, Kanban boards, dependency graphs, statistics dashboards, and agent management.
 
 **Key components**: Route groups, Zustand middleware stack, React Query cache, WebSocket bridge
 
@@ -157,7 +157,7 @@ Self-hosted JWT authentication with bcrypt password hashing, refresh tokens, OAu
 
 ### 8. Billing & Subscriptions
 
-Full Stripe integration with 5 subscription tiers (Free/Pro/Team/Enterprise/Lifetime), prepaid credit purchases, usage-based billing, automated dunning (3 retries before suspension), promo codes, and per-task LLM cost tracking. Workflow execution is gated by `check_and_reserve_workflow()` before sandbox spawning. Background tasks handle monthly invoice generation, payment reminders, and low credit warnings.
+Full Stripe integration with 6 subscription tiers (Free/Pro/Team/Enterprise/Lifetime/BYO Platform), prepaid credit purchases, usage-based billing, automated dunning (3 retries before suspension), promo codes, and per-task LLM cost tracking. Workflow execution is gated by `check_and_reserve_workflow()` before sandbox spawning. Background tasks handle monthly invoice generation, payment reminders, and low credit warnings.
 
 **Key components**: BillingService, StripeService, SubscriptionService, CostTrackingService, BudgetEnforcerService
 
@@ -187,7 +187,7 @@ Branch management, commit tracking, pull request workflows, and webhook processi
 
 ### 11. Database Schema
 
-PostgreSQL 16 with pgvector for semantic search and deduplication, ~60 domain entities across SQLAlchemy 2.0+ models, and 71 Alembic migrations. 8 tables use `Vector(1536)` columns with IVFFlat indexes for cosine similarity search. PostgreSQL `tsvector` provides full-text keyword search for hybrid retrieval. Models cover core resources, workflow state, agent execution, monitoring, auth/billing, version control, memory, and quality.
+PostgreSQL 16 with pgvector for semantic search and deduplication, ~77 model classes across 61 model files, and 73 Alembic migrations. 5 tables use `Vector(1536)` columns with IVFFlat indexes for cosine similarity search; 3 additional tables use `ARRAY(Float)` for embedding storage. PostgreSQL `tsvector` provides full-text keyword search for hybrid retrieval. Models cover core resources, workflow state, agent execution, monitoring, auth/billing, version control, memory, and quality.
 
 **Key components**: SQLAlchemy models, Alembic migrations, pgvector embeddings, tsvector full-text search
 
@@ -207,7 +207,7 @@ Dual configuration: YAML files (version-controlled) for application settings wit
 
 ### 13. API Route Catalog
 
-FastAPI REST API with ~30 route files organized by domain. All protected routes require JWT authentication. Auto-generated Swagger UI at `/docs` and ReDoc at `/redoc`.
+FastAPI REST API with 38 route files organized by domain. All protected routes require JWT authentication. Auto-generated Swagger UI at `/docs` and ReDoc at `/redoc`.
 
 **Key components**: FastAPI routes, auth middleware, service injection
 
@@ -273,19 +273,18 @@ Prevent duplicate work across specs, requirements, tasks, and tickets using dual
 
 ### pgvector Usage
 
-All vector columns use `Vector(1536)` with IVFFlat indexes (`vector_cosine_ops`, lists=100). Similarity queries use cosine distance: `1 - (embedding <=> query_vector)`. Default embedding provider: Fireworks (`qwen3-embedding-8b`), with OpenAI and local FastEmbed as alternatives.
+All vector columns use `Vector(1536)` with IVFFlat indexes (`vector_cosine_ops`, lists=100). Similarity queries use cosine distance: `1 - (embedding <=> query_vector)`. Default embedding provider: Fireworks (`qwen3-embedding-8b`), with OpenAI and local FastEmbed as alternatives. 5 tables use Vector(1536) for pgvector similarity search; 3 additional tables use ARRAY(Float) for embedding storage.
 
-| Table | Vector Column | Purpose |
-|-------|--------------|---------|
-| `specs` | `embedding_vector` | Spec-level dedup within project |
-| `spec_requirements` | `embedding_vector` | Requirement dedup within spec |
-| `spec_tasks` | `embedding_vector` | Task dedup within spec |
-| `tasks` | `embedding_vector` | Queue task dedup within ticket |
-| `tickets` | `embedding_vector` | Global ticket dedup |
-| `task_memories` | `context_embedding` | Memory similarity search |
-| `learned_patterns` | `embedding` | Pattern matching |
-| `playbook_entries` | `embedding` | Playbook entry search (ACE) |
-
+KS|| Table | Vector Column | Purpose | Notes |
+YW||-------|--------------|---------|-------|
+ZN|| `specs` | `embedding_vector` | Spec-level dedup within project | Vector(1536) |
+YY|| `spec_requirements` | `embedding_vector` | Requirement dedup within spec | Vector(1536) |
+HJ|| `spec_tasks` | `embedding_vector` | Task dedup within spec | Vector(1536) |
+RN|| `tasks` | `embedding_vector` | Queue task dedup within ticket | Vector(1536) |
+ZS|| `tickets` | `embedding_vector` | Global ticket dedup | Vector(1536) |
+NN|| `task_memories` | `context_embedding` | Memory similarity search | ARRAY(Float) |
+NT|| `learned_patterns` | `embedding` | Pattern matching | ARRAY(Float) |
+WK|| `playbook_entries` | `embedding` | Playbook entry search (ACE) | ARRAY(Float) |
 ---
 
 ## DAG Merge System
@@ -310,8 +309,8 @@ OmoiOS has **two separate service initialization points** that don't share state
 
 | Location | File | Function | Purpose | Services |
 |----------|------|----------|---------|----------|
-| **API Server** | `api/main.py` | `lifespan()` | FastAPI app startup | 25+ services |
-| **Orchestrator Worker** | `workers/orchestrator_worker.py` | `init_services()` | Background worker | 9 services |
+PS|| **API Server** | `api/main.py` | `lifespan()` | FastAPI app startup | 25+ services |
+RV|| **Orchestrator Worker** | `workers/orchestrator_worker.py` | `init_services()` | Background worker | 8 services |
 
 **These run as separate processes.** Services initialized in one are NOT available in the other.
 
@@ -325,18 +324,10 @@ OmoiOS has **two separate service initialization points** that don't share state
 | AgentRegistryService | **yes** | **yes** | Both have own instances |
 | PhaseGateService | **yes** | **yes** | Both have own instances |
 | PhaseManager | **yes** | no | API-only (routes use it) |
-| PhaseProgressionService | no | **yes** | Worker-only (auto-advance) |
-| SynthesisService | no | **yes** | Worker-only (result merging) |
-| MonitoringLoop | **yes** | no | API-only (Guardian + Conductor) |
-| MemoryService | **yes** | no | API-only (pattern RAG) |
-| DiscoveryService | **yes** | no | API-only (adaptive branching) |
-| DiagnosticService | **yes** | no | API-only |
-| ValidationOrchestrator | **yes** | no | API-only |
-| BillingService | **yes** | no | API-only |
-| LLMService | **yes** | no | API-only |
-| CoordinationService | no | **yes** | Worker-only (SYNC/SPLIT/JOIN/MERGE patterns) |
-| ConvergenceMergeService | no | **yes** | Worker-only (git branch merging at convergence) |
-| OwnershipValidationService | no | **yes** | Worker-only (file conflict prevention) |
+RP|| PhaseProgressionService | no | **yes** | Worker-only (auto-advance) |
+YQ|| TaskRequirementsAnalyzer | no | **yes** | Worker-only (task analysis) |
+YM|| TicketWorkflowOrchestrator | no | **yes** | Worker-only (ticket workflow) |
+TJ|| MonitoringLoop | **yes** | no | API-only (Guardian + Conductor) |
 
 See [Integration Gaps →](docs/architecture/14-integration-gaps.md) for the full gap analysis and fix instructions.
 
@@ -384,6 +375,8 @@ See [Integration Gaps →](docs/architecture/14-integration-gaps.md) for the ful
 | [Spec-Sandbox Subsystem Strategy](docs/architecture/spec_sandbox_subsystem_strategy.md) | Extraction strategy for independent spec-sandbox subsystem |
 | [Architecture: Current vs Target](docs/architecture/services/architecture_comparison_current_vs_target.md) | Gap analysis between implemented and designed architecture |
 | [Integration Gaps & Known Issues](docs/architecture/14-integration-gaps.md) | Orphaned services, event gaps, DAG wiring, TODOs, fix instructions |
+| [LLM Service Layer](docs/architecture/15-llm-service.md) | LLMService, PydanticAIService, structured outputs, Fireworks.ai |
+| [Service Catalog](docs/architecture/16-service-catalog.md) | Complete catalog of all ~94 backend services by domain |
 
 ---
 

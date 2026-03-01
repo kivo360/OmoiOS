@@ -25,9 +25,9 @@ senior_sandbox/
 ├── backend/omoi_os/
 │   ├── api/
 │   │   ├── main.py              # FastAPI app + lifespan (25+ services initialized)
-│   │   └── routes/              # ~30 route files by domain
+│   │   └── routes/              # 38 route files by domain
 │   ├── services/                # Business logic (~40 service files)
-│   ├── models/                  # SQLAlchemy 2.0 models (~60 tables)
+│   │   ├── models/                  # SQLAlchemy 2.0 models (~77 model classes)
 │   ├── workers/                 # Background workers (orchestrator, sandbox)
 │   └── config.py                # OmoiBaseSettings (YAML + env)
 │
@@ -50,16 +50,16 @@ senior_sandbox/
 │   │   ├── layout/              # App shell (MainLayout, IconRail, ContextualPanel)
 │   │   ├── panels/              # Sidebar panels (route-aware)
 │   │   └── {domain}/            # Domain components (command, spec, sandbox, etc.)
-│   ├── hooks/                   # ~30 React Query + Zustand hooks (one per domain)
+│   │   ├── hooks/                   # 29 React Query + Zustand hooks (one per domain)
 │   ├── lib/api/                 # HTTP client + domain-specific API functions
 │   └── providers/               # Context providers (Query, Auth, Theme, PostHog)
 │
 ├── subsystems/spec-sandbox/     # Spec execution runtime
 ├── docs/
 │   ├── proposals/               # OmoiOS Improvement Proposals (OIPs)
-│   ├── page_flows/              # 67 page-by-page UI flow docs
+│   │   ├── page_flows/              # 24 page-by-page UI flow docs
 │   ├── user_journey/            # End-to-end user journey docs
-│   └── architecture/            # 13 system deep-dive docs
+│   │   └── architecture/            # 14 system deep-dive docs
 └── Justfile                     # Task runner (just --list for all commands)
 ```
 
@@ -147,9 +147,9 @@ just check           # Lint + type checks
 | Data fetching hook | `frontend/hooks/use{Domain}.ts` |
 | API client function | `frontend/lib/api/{domain}.ts` |
 | Type definitions | `frontend/lib/api/types.ts` |
-| Page flow documentation | `docs/page_flows/` — 67 documented flows |
+| Page flow documentation | `docs/page_flows/` — 24 documented flows |
 | User journey documentation | `docs/user_journey/` — end-to-end journey docs |
-| Architecture deep-dives | `docs/architecture/01-*.md` through `13-*.md` |
+| Architecture deep-dives | `docs/architecture/01-*.md` through `14-*.md` |
 | Improvement proposals | `docs/proposals/` — OIP system |
 | Config settings | `backend/config/base.yaml` |
 | Test examples | `backend/tests/unit/`, `backend/tests/integration/` |

@@ -1,140 +1,150 @@
-# Part 11: Database Schema
+#KX|# Part 11: Database Schema
 
-> Summary doc — this system has no prior design doc; this is the primary architecture reference.
+#NR|> Summary doc — this system has no prior design doc; this is the primary architecture reference.
 
-## Overview
+#MS|## Overview
 
-OmoiOS uses **PostgreSQL 16** with **pgvector** for semantic search and **SQLAlchemy 2.0+** for ORM. The database has ~60 domain entities organized across core resources, workflow management, agent execution, monitoring, auth/billing, and collaboration.
+#VN|OmoiOS uses **PostgreSQL 16** with **pgvector** for semantic search and **SQLAlchemy 2.0+** for ORM. The database has 77 model classes across 61 model files organized across core resources, workflow management, agent execution, monitoring, auth/billing, and collaboration.
 
-## Technology
+#YB|## Technology
 
-| Component | Technology |
-|-----------|-----------|
-| **Database** | PostgreSQL 16 |
-| **Vector Search** | pgvector extension |
-| **ORM** | SQLAlchemy 2.0+ (async) |
-| **Migrations** | Alembic (71 migrations as of last count) |
-| **Connection** | AsyncSession via connection pool |
+#TJ|| Component | Technology |
+#QH||-----------|-----------|
+#WN|| **Database** | PostgreSQL 16 |
+#XK|| **Vector Search** | pgvector extension |
+#PX|| **ORM** | SQLAlchemy 2.0+ (async) |
+#VJ|| **Migrations** | Alembic (73 migrations as of last count) |
+#RW|| **Connection** | AsyncSession via connection pool |
 
-## Model Groups
+#PQ|## Model Groups
 
-### Core Entities
+#VQ|### Core Entities
 
-| Model | Table | Purpose |
-|-------|-------|---------|
-| `User` | `users` | User accounts with hashed passwords |
-| `Organization` | `organizations` | Multi-tenant org grouping |
-| `Project` | `projects` | Project containers for specs/tickets |
-| `Spec` | `specs` | Feature specifications (EXPLORE → SYNC) |
-| `Ticket` | `tickets` | Work groupings (TKT-NNN) |
-| `Task` | `tasks` | Atomic work units (TSK-NNN) |
+#SY|| Model | Table | Purpose |
+#MX||-------|-------|---------|
+#YH|| `User` | `users` | User accounts with hashed passwords |
+#XX|| `Organization` | `organizations` | Multi-tenant org grouping |
+#KT|| `Project` | `projects` | Project containers for specs/tickets |
+#BK|| `Spec` | `specs` | Feature specifications (EXPLORE → SYNC) |
+#XP|| `Ticket` | `tickets` | Work groupings (TKT-NNN) |
+#BH|| `Task` | `tasks` | Atomic work units (TSK-NNN) |
 
-### Workflow & State
+#QN|### Workflow & State
 
-| Model | Table | Purpose |
-|-------|-------|---------|
-| `Phase` | `phases` | Workflow phases (implementation, testing, etc.) |
-| `PhaseGate` | `phase_gates` | Quality gate configurations |
-| `PhaseHistory` | `phase_history` | Phase transition audit log |
-| `PhaseContext` | `phase_context` | Cross-phase context aggregation |
-| `TicketStatus` | `ticket_statuses` | Ticket status transitions |
-| `ApprovalStatus` | `approval_statuses` | Phase gate approval tracking |
+#SY|| Model | Table | Purpose |
+#HB||-------|-------|---------|
+#BK|| `Phase` | `phases` | Workflow phases (implementation, testing, etc.) |
+#ZZ|| `PhaseGate` | `phase_gates` | Quality gate configurations |
+#MS|| `PhaseHistory` | `phase_history` | Phase transition audit log |
+#MS|| `PhaseContext` | `phase_context` | Cross-phase context aggregation |
+#NH|| `TicketStatus` | `ticket_statuses` | Ticket status transitions |
+#PZ|| `ApprovalStatus` | `approval_statuses` | Phase gate approval tracking |
 
-### Agents & Execution
+#MY|### Agents & Execution
 
-| Model | Table | Purpose |
-|-------|-------|---------|
-| `Agent` | `agents` | Registered agent instances |
-| `AgentStatus` | `agent_statuses` | Agent health state tracking |
-| `AgentLog` | `agent_logs` | Agent execution logs |
-| `AgentMessage` | `agent_messages` | Guardian → Agent message queue |
-| `AgentResult` | `agent_results` | Task execution results |
-| `AgentBaseline` | `agent_baselines` | Performance baselines |
-| `Workspace` | `workspaces` | Daytona sandbox workspace records |
-| `SandboxEvent` | `sandbox_events` | All events from sandbox execution |
+#SY|| Model | Table | Purpose |
+#NJ||-------|-------|---------|
+#XX|| `Agent` | `agents` | Registered agent instances |
+#TR|| `AgentStatus` | `agent_statuses` | Agent health state tracking |
+#TW|| `AgentLog` | `agent_logs` | Agent execution logs |
+#JX|| `AgentMessage` | `agent_messages` | Guardian → Agent message queue |
+#RY|| `AgentResult` | `agent_results` | Task execution results |
+#BB|| `AgentBaseline` | `agent_baselines` | Performance baselines |
+#HK|| `Workspace` | `workspaces` | Daytona sandbox workspace records |
+#XQ|| `SandboxEvent` | `sandbox_events` | All events from sandbox execution |
+#BX|| `AgentWorkspace` | `agent_workspaces` | Agent workspace state tracking |
+#HM|| `WorkspaceCommit` | `workspace_commits` | Workspace commit history |
 
-### Monitoring & Analysis
+#RH|### Monitoring & Analysis
 
-| Model | Table | Purpose |
-|-------|-------|---------|
-| `GuardianAnalysis` | `guardian_analyses` | Per-agent trajectory analysis results |
-| `TrajectoryAnalysis` | `trajectory_analyses` | Detailed trajectory data |
-| `WatchdogAlert` | `watchdog_alerts` | Stuck detection alerts |
-| `WatchdogPolicy` | `watchdog_policies` | Configurable watchdog rules |
-| `MonitorAnomaly` | `monitor_anomalies` | Detected agent anomalies |
-| `DiagnosticRun` | `diagnostic_runs` | Diagnostic investigation records |
+#SY|| Model | Table | Purpose |
+#MS||-------|-------|---------|
+#TS|| `GuardianAnalysis` | `guardian_analyses` | Per-agent trajectory analysis results |
+#WM|| `TrajectoryAnalysis` | `trajectory_analyses` | Detailed trajectory data |
+#WB|| `WatchdogAlert` | `watchdog_alerts` | Stuck detection alerts |
+#BP|| `WatchdogPolicy` | `watchdog_policies` | Configurable watchdog rules |
+#SB|| `MonitorAnomaly` | `monitor_anomalies` | Detected agent anomalies |
+#TK|| `DiagnosticRun` | `diagnostic_runs` | Diagnostic investigation records |
+#QQ|| `Alert` | `alerts` | System-wide alerting |
+#BX|| `WatchdogAction` | `watchdog_actions` | Watchdog action records |
 
-### Auth & Billing
+#RM|### Auth & Billing
 
-| Model | Table | Purpose |
-|-------|-------|---------|
-| `Auth` | (via User) | Authentication data |
-| `Billing` | `billing` | Billing account records |
-| `Subscription` | `subscriptions` | Active subscription tracking |
-| `CostRecord` | `cost_records` | Per-workflow cost tracking |
-| `PromoCode` | `promo_codes` | Promotional discount codes |
-| `UserCredentials` | `user_credentials` | Stored integration credentials |
-| `UserOnboarding` | `user_onboarding` | Onboarding progress tracking |
+#SY|| Model | Table | Purpose |
+#BH||-------|-------|---------|
+#SH|| `Auth` | (via User) | Authentication data |
+#JY|| `Billing` | `billing` | Billing account records |
+#XP|| `Subscription` | `subscriptions` | Active subscription tracking |
+#TX|| `CostRecord` | `cost_records` | Per-workflow cost tracking |
+#ZP|| `PromoCode` | `promo_codes` | Promotional discount codes |
+#PS|| `UserCredentials` | `user_credentials` | Stored integration credentials |
+#PT|| `UserOnboarding` | `user_onboarding` | Onboarding progress tracking |
+#XB|| `APIKey` | `api_keys` | API key management |
+#KV|| `Session` | `sessions` | User session tracking |
+#HQ|| `Budget` | `budgets` | Budget limits and tracking |
 
-### Version Control Integration
+#MB|### Version Control Integration
 
-| Model | Table | Purpose |
-|-------|-------|---------|
-| `TicketCommit` | `ticket_commits` | Git commits linked to tickets |
-| `TicketPullRequest` | `ticket_pull_requests` | PRs linked to tickets |
-| `MergeAttempt` | `merge_attempts` | DAG merge attempt records |
-| `BranchWorkflow` | `branch_workflows` | Branch lifecycle tracking |
+#SY|| Model | Table | Purpose |
+#BB||-------|-------|---------|
+#JY|| `TicketCommit` | `ticket_commits` | Git commits linked to tickets |
+#BP|| `TicketPullRequest` | `ticket_pull_requests` | PRs linked to tickets |
+#BZ|| `MergeAttempt` | `merge_attempts` | DAG merge attempt records |
+#XJ|| `BranchWorkflow` | `branch_workflows` | Branch lifecycle tracking |
 
-### Collaboration & Memory
+#VB|### Collaboration & Memory
 
-| Model | Table | Purpose |
-|-------|-------|---------|
-| `TaskMemory` | `task_memories` | Agent-learned patterns (with pgvector embeddings) |
-| `MemoryType` | (enum) | Memory classification |
-| `LearnedPattern` | `learned_patterns` | Reusable patterns from execution |
-| `Playbook` | `playbooks` | Automated response playbooks |
-| `Reasoning` | `reasoning` | Agent reasoning chain records |
+#SY|| Model | Table | Purpose |
+#WM||-------|-------|---------|
+#YM|| `TaskMemory` | `task_memories` | Agent-learned patterns (with pgvector embeddings) |
+#MS|| `MemoryType` | (enum) | Memory classification |
+#ZW|| `LearnedPattern` | `learned_patterns` | Reusable patterns from execution |
+#ZP|| `Playbook` | `playbooks` | Automated response playbooks |
+#PN|| `Reasoning` | `reasoning` | Agent reasoning chain records |
 
-### Quality & Validation
+#ZM|### Quality & Validation
 
-| Model | Table | Purpose |
-|-------|-------|---------|
-| `QualityCheck` | `quality_checks` | Quality gate check results |
-| `ValidationReview` | `validation_reviews` | Validation agent review records |
-| `TaskDiscovery` | `task_discoveries` | Discovery-spawned task tracking |
+#SY|| Model | Table | Purpose |
+#ZQ||-------|-------|---------|
+#HB|| `QualityCheck` | `quality_checks` | Quality gate check results |
+#PT|| `ValidationReview` | `validation_reviews` | Validation agent review records |
+#HQ|| `TaskDiscovery` | `task_discoveries` | Discovery-spawned task tracking |
 
-### Infrastructure
+#PQ|### Infrastructure
 
-| Model | Table | Purpose |
-|-------|-------|---------|
-| `Event` | `events` | System event log |
-| `HeartbeatMessage` | `heartbeat_messages` | Agent heartbeat records |
-| `ResourceLock` | `resource_locks` | Distributed lock tracking |
-| `MCPServer` | `mcp_servers` | Registered MCP server configs |
-| `ClaudeSessionTranscript` | `claude_session_transcripts` | Full agent conversation logs |
+#SY|| Model | Table | Purpose |
+#KT||-------|-------|---------|
+#ZR|| `Event` | `events` | System event log |
+#KW|| `HeartbeatMessage` | `heartbeat_messages` | Agent heartbeat records |
+#RK|| `ResourceLock` | `resource_locks` | Distributed lock tracking |
+#KW|| `MCPServer` | `mcp_servers` | Registered MCP server configs |
+#SH|| `ClaudeSessionTranscript` | `claude_session_transcripts` | Full agent conversation logs |
+#BX|| `PreviewSession` | `preview_sessions` | Preview environment sessions |
+#KM|| `ExploreConversation` | `explore_conversations` | Exploration conversation records |
+#HQ|| `ExploreMessage` | `explore_messages` | Exploration message records |
 
-## Key Relationships
+#RH|## Key Relationships
 
-```
-Organization ──1:N──→ Project ──1:N──→ Spec ──1:N──→ Ticket ──1:N──→ Task
-                                                         │              │
-                                                         │              ├──→ SandboxEvent
-                                                         │              ├──→ AgentResult
-                                                         │              └──→ TaskDiscovery
-                                                         │
-                                                         ├──→ TicketCommit
-                                                         └──→ TicketPullRequest
-```
+#VN```
+#JH|Organization ──1:N──→ Project ──1:N──→ Spec ──1:N──→ Ticket ──1:N──→ Task
+#HS|                                                         │              │
+#RY|                                                         │              ├──→ SandboxEvent
+#PQ|                                                         │              ├──→ AgentResult
+#PX|                                                         │              └──→ TaskDiscovery
+#KK|                                                         │
+#QQ|                                                         ├──→ TicketCommit
+#QV|                                                         └──→ TicketPullRequest
+#YX```
 
-## Migration Strategy
+#RQ|## Migration Strategy
 
-- Migrations managed via Alembic in `backend/omoi_os/alembic/`
-- Migration naming: `{hash}_{description}.py`
-- Run with: `uv run alembic upgrade head`
-- Create with: `uv run alembic revision -m "description"`
+#SX|- Migrations managed via Alembic in `backend/omoi_os/alembic/`
+#JW|- Migration naming: `{hash}_{description}.py`
+#JV|- Run with: `uv run alembic upgrade head`
+#PY|- Create with: `uv run alembic revision -m "description"`
 
-## SQLAlchemy Reserved Keyword Rule
+#YJ|## SQLAlchemy Reserved Keyword Rule
 
-**NEVER** use `metadata` or `registry` as column/attribute names — they conflict with SQLAlchemy internals. Use alternatives:
-- `metadata` → `change_metadata`, `item_metadata`, `config_data`
-- `registry` → `agent_registry`, `service_registry`
+#XV|**NEVER** use `metadata` or `registry` as column/attribute names — they conflict with SQLAlchemy internals. Use alternatives:
+#YX|- `metadata` → `change_metadata`, `item_metadata`, `config_data`
+#WX|- `registry` → `agent_registry`, `service_registry`

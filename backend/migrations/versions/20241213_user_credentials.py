@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "user_credentials_001"
-down_revision: Union[str, None] = None  # Set to latest migration
+down_revision: Union[str, None] = "025_supabase_auth_integration"  # Depends on users table
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

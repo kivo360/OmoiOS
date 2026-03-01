@@ -1,5 +1,7 @@
 # Part 14: Integration Gaps & Known Issues
 
+Last Updated: 2026-03-01
+
 > Extracted from [ARCHITECTURE.md](../../ARCHITECTURE.md) — see hub doc for full system overview.
 
 > **CRITICAL**: This document covers known integration gaps where features were coded but not properly wired together.
@@ -9,13 +11,19 @@
 
 | Category | Issue | Severity |
 |----------|-------|----------|
-| **Orphaned Services** | 4 services with getters that are never called | Critical |
+| **Orphaned Services** | 4 services with getters that are never called | ✅ Resolved (2026-03) |
 | **Event System** | 153 event publishes vs 18 subscribes | Critical |
-| **DAG System** | CoordinationService not initialized in orchestrator | Critical |
+| **DAG System** | CoordinationService not initialized in orchestrator | ✅ Resolved (2026-03) |
 | **Test Coverage** | 20 integration tests for 100 services | High |
 | **TODO Items** | 51 TODO/FIXME comments in codebase | High |
 
 ---
+
+> **✅ RESOLVED (March 2026)**: All four services are now initialized in orchestrator_worker.py.
+> - CoordinationService: line ~1425
+> - ConvergenceMergeService: line ~1442
+> - OwnershipValidationService: line ~1466
+> - SynthesisService was already initialized
 
 ## Gap 1: Orphaned Services (Never Called)
 
@@ -96,6 +104,10 @@ convergence_merge = get_convergence_merge_service(db=db, event_bus=event_bus)
 
 ---
 
+> **✅ RESOLVED (March 2026)**: The DAG system is now fully wired in orchestrator_worker.py.
+> All three services (CoordinationService, ConvergenceMergeService, OwnershipValidationService)
+> are initialized and connected via event subscriptions.
+
 ## Gap 3: DAG System Not Wired
 
 The DAG system has 4 services that should work together but aren't connected:
@@ -115,8 +127,9 @@ WHAT'S CONNECTED:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  orchestrator_worker.py                                                  │
 │  ├── SynthesisService ✅ (initialized, subscribes to events)            │
-│  ├── CoordinationService ❌ (NOT initialized, events not created)        │
-│  └── ConvergenceMergeService ❌ (NOT initialized)                        │
+│  ├── CoordinationService ✅ (initialized, line ~1425)                   │
+│  ├── ConvergenceMergeService ✅ (initialized, line ~1442)               │
+│  └── OwnershipValidationService ✅ (initialized, line ~1466)            │
 │                                                                          │
 │  spec_task_execution.py                                                  │
 │  └── CoordinationService ✅ (initialized for spec execution only)        │
@@ -213,8 +226,8 @@ Some API routes import services that may not be initialized at startup:
 
 ### Phase 1: Critical
 
-1. Wire CoordinationService into orchestrator_worker.py
-2. Wire ConvergenceMergeService into orchestrator_worker.py
+1. ~~Wire CoordinationService into orchestrator_worker.py~~ ✅ Done (March 2026)
+2. ~~Wire ConvergenceMergeService into orchestrator_worker.py~~ ✅ Done (March 2026)
 3. Add subscribers for critical events (BUDGET_*, ALERT_*)
 4. Fix admin auth TODOs in billing routes
 

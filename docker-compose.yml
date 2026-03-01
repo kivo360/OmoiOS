@@ -1,62 +1,96 @@
-version: '3.8'
+# OmoiOS — Full-stack development compose
+#
+# Usage:
+#   cp .env.example .env.local   # fill in your API keys
+#   docker compose up             # start everything
+#
+# Services: postgres, redis, backend (API), worker, frontend
+# Ports: postgres=15432, redis=16379, backend=18000, frontend=3000
+#
+# For hot-reload backend development, use the backend-specific compose:
+#   cd backend && docker compose watch
+# Or via Justfile:
+#   just watch
 
 services:
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
+    container_name: omoios_postgres
     environment:
-      POSTGRES_USER: omoios
-      POSTGRES_PASSWORD: omoios
-      POSTGRES_DB: omoios
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
     ports:
       - "15432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/docker/initdb:/docker-entrypoint-initdb.d
+      - ./backend/docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U omoios"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app_db"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    container_name: omoios_redis
     ports:
       - "16379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
+    restart: unless-stopped
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.api
+      context: .
+      dockerfile: backend/Dockerfile.api
+    container_name: omoios_backend
     ports:
       - "18000:8000"
     environment:
-      - DATABASE_URL=postgresql://omoios:omoios@postgres:5432/omoios
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/app_db
       - REDIS_URL=redis://redis:6379
       - OMOIOS_ENV=development
+      - PYTHONUNBUFFERED=1
+      - RELOAD_MODE=false
       - LLM_API_KEY=${LLM_API_KEY:-}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
+      # Disable background loops — they need Daytona/external services
+      - ORCHESTRATOR_ENABLED=false
+      - MONITORING_ENABLED=false
+      - MCP_ENABLED=false
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
-      - /app/.venv  # Prevent overwriting container venv
-    command: uvicorn omoi_os.api.main:app --host 0.0.0.0 --port 8000 --reload
+    # Note: For hot-reload development, use 'just watch' instead.
+    # This compose file builds clean images — no volume mounts.
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   worker:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
+      context: .
+      dockerfile: backend/Dockerfile.worker
+    container_name: omoios_worker
     environment:
-      - DATABASE_URL=postgresql://omoios:omoios@postgres:5432/omoios
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/app_db
       - REDIS_URL=redis://redis:6379
       - OMOIOS_ENV=development
+      - PYTHONUNBUFFERED=1
       - LLM_API_KEY=${LLM_API_KEY:-}
     depends_on:
       postgres:
@@ -65,28 +99,26 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-    volumes:
-      - ./backend:/app
-      - /app/.venv
-    command: python -m omoi_os.worker
+    # Note: For hot-reload development, use 'just watch' instead.
+    restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: dev
+    container_name: omoios_frontend
     ports:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:18000
       - NEXT_PUBLIC_WS_URL=ws://localhost:18000/ws
+      - NEXT_TELEMETRY_DISABLED=1
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-    command: npm run dev
+    # Note: For hot-reload development, mount volumes and use 'just watch'.
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-
+  redis_data:

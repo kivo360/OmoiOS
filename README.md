@@ -91,7 +91,7 @@ Beyond orchestrating agent swarms, OmoiOS includes a built-in code assistant tha
                     |                           |
                     |  39 Route Modules          |
                     |  ~100 Service Modules      |
-                    |  61 SQLAlchemy Models      |
+                    |  77 SQLAlchemy model classes |
                     |                           |
                     |  --- Core Services ---     |
                     |  SpecStateMachine          |
@@ -149,8 +149,11 @@ Beyond orchestrating agent swarms, OmoiOS includes a built-in code assistant tha
 git clone https://github.com/kivo360/OmoiOS.git
 cd OmoiOS
 
+# Copy env template and add your API keys
+cp .env.example .env.local
+
 # Start all services
-docker-compose up
+docker compose up
 
 # Services available at:
 # - Frontend:  http://localhost:3000
@@ -205,7 +208,7 @@ just check           # All quality checks
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Frontend** | Next.js 15 (App Router) | ~94-page dashboard with SSR |
+| **Frontend** | Next.js 15 (App Router) | 67-page dashboard with SSR |
 | **UI** | ShadCN UI + Tailwind | Component library (Radix primitives) |
 | **State** | Zustand + React Query | Client + server state management |
 | **Visualization** | React Flow v12 | Dependency graphs + workflow DAGs |
@@ -226,7 +229,7 @@ OmoiOS/
 ├── backend/                  # Python FastAPI backend
 │   ├── omoi_os/
 │   │   ├── api/routes/       # 39 route modules
-│   │   ├── models/           # 61 SQLAlchemy models
+│   │   ├── models/           # 77 SQLAlchemy model classes across 61 model files
 │   │   ├── services/         # ~100 service modules
 │   │   └── workers/          # Orchestrator + task workers
 │   ├── migrations/versions/  # 73 Alembic migrations
@@ -234,7 +237,7 @@ OmoiOS/
 │   └── tests/                # 112 test files (pytest)
 │
 ├── frontend/                 # Next.js 15 frontend
-│   ├── app/                  # ~94 App Router pages
+│   ├── app/                  # ~67 App Router pages
 │   ├── components/           # 140+ React components
 │   ├── hooks/                # Custom hooks (WebSocket, API)
 │   └── lib/                  # API client, utilities
@@ -318,7 +321,7 @@ All ports are offset by +10,000 to avoid conflicts with local services:
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | Complete system architecture (start here) |
 | [Product Vision](docs/product_vision.md) | Full product vision + target audience |
 | [App Overview](docs/app_overview.md) | Core features + user flows |
-| [Page Architecture](docs/page_architecture.md) | All ~94 frontend pages detailed |
+| [Page Architecture](docs/page_architecture.md) | All ~67 frontend pages detailed |
 | [Design System](docs/design_system.md) | Complete design system |
 | [Frontend Architecture](docs/design/frontend/frontend_architecture_shadcn_nextjs.md) | Frontend patterns + components |
 | [Monitoring Architecture](docs/requirements/monitoring/monitoring_architecture.md) | Guardian + Conductor system |
@@ -339,9 +342,12 @@ All ports are offset by +10,000 to avoid conflicts with local services:
 | [Billing & Subscriptions](docs/architecture/08-billing-and-subscriptions.md) | Stripe, tiers, cost tracking |
 | [MCP Integration](docs/architecture/09-mcp-integration.md) | Model Context Protocol, circuit breakers |
 | [GitHub Integration](docs/architecture/10-github-integration.md) | Branch management, PR workflows |
-| [Database Schema](docs/architecture/11-database-schema.md) | PostgreSQL + pgvector, ~60 entities |
+| [Database Schema](docs/architecture/11-database-schema.md) | PostgreSQL + pgvector, 77 model classes |
 | [Configuration System](docs/architecture/12-configuration-system.md) | YAML + env, Pydantic validation |
 | [API Route Catalog](docs/architecture/13-api-route-catalog.md) | All FastAPI route modules |
+| [Integration Gaps](docs/architecture/14-integration-gaps.md) | Known issues, resolved gaps |
+| [LLM Service Layer](docs/architecture/15-llm-service.md) | LLM architecture, structured outputs |
+| [Service Catalog](docs/architecture/16-service-catalog.md) | All ~94 backend services cataloged |
 
 </details>
 

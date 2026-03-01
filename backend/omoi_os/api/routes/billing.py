@@ -1176,7 +1176,7 @@ async def create_subscription_checkout(
 # ========== Lifetime Purchase ==========
 
 # Lifetime pricing configuration (should match pricing_strategy.md)
-LIFETIME_PRICE_USD = 299.0
+LIFETIME_PRICE_USD = 499.0
 LIFETIME_STRIPE_PRICE_ID = "price_lifetime_omoios"  # Configure in Stripe dashboard
 
 
