@@ -96,9 +96,9 @@ export function HeroSection({ className }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-4xl font-bold tracking-tight text-landing-text sm:text-5xl md:text-6xl lg:text-7xl"
           >
-            Open-source spec-to-PR.{" "}
+            Write a spec. Go to bed.{" "}
             <span className="text-landing-accent">
-              No IDE. No vendor lock.
+              Wake up to a PR.
             </span>
           </motion.h1>
 
@@ -109,9 +109,9 @@ export function HeroSection({ className }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-6 max-w-2xl text-lg text-landing-text-muted md:text-xl"
           >
-            Describe what you want built. OmoiOS turns it into requirements, a
-            design, and an implementation plan — then agents execute autonomously
-            in the cloud and deliver a pull request by morning. No IDE required.
+            OmoiOS turns your feature spec into requirements, a design, and a
+            plan — then agents execute autonomously in the cloud overnight.
+            Open-source. Self-hostable. No IDE required.
           </motion.p>
 
           {/* CTAs */}
@@ -196,11 +196,13 @@ export function HeroSection({ className }: HeroSectionProps) {
               transition={{ duration: 0.5, delay: 0.5 }}
               className="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm text-landing-text-muted"
             >
-              <span>Open Source &middot; Apache 2.0</span>
+              <span>Apache 2.0</span>
+              <span>&middot;</span>
+              <span>Self-hostable</span>
+              <span>&middot;</span>
+              <span>BYOK: Anthropic &amp; OpenAI</span>
               <span>&middot;</span>
               <span>Listed on OpenAlternative</span>
-              <span>&middot;</span>
-              <span>Built by a solo founder, open to everyone</span>
             </motion.p>
           </motion.div>
         </div>

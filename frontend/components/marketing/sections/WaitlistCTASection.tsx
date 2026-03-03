@@ -97,7 +97,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.1 }}
             className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl"
           >
-            Ready to Ship Faster?
+            Build Something Real Tonight
           </motion.h2>
 
           {/* Subheadline */}
@@ -108,8 +108,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.2 }}
             className="mt-4 text-lg text-gray-400"
           >
-            Create your free account and start building with AI agents today. No
-            credit card required.
+            Write your first spec. Agents start working. Wake up to a PR.
           </motion.p>
 
           {/* Benefits */}

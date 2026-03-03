@@ -13,7 +13,7 @@ const faqs = [
   {
     question: "How is OmoiOS different from Kiro?",
     answer:
-      "Kiro is a spec-driven IDE from AWS — it helps you plan and code interactively at your desk. OmoiOS is a spec-driven orchestration platform that runs autonomously in the cloud. You write the spec, approve the plan, and agents execute the full pipeline — delivering a PR while you focus on other work (or sleep). OmoiOS is also open-source and self-hostable, while Kiro is closed-source.",
+      "Kiro is a spec-driven IDE from AWS with a recently launched autonomous agent (in preview). OmoiOS was built from the ground up for autonomous cloud execution — full spec-to-PR pipelines, parallel agents, self-healing, and complete lineage. OmoiOS is also open-source (Apache 2.0) and self-hostable, while Kiro is closed-source and proprietary.",
   },
   {
     question: "How is OmoiOS different from OpenAI Codex?",
@@ -23,7 +23,7 @@ const faqs = [
   {
     question: "How is OmoiOS different from Cursor or Copilot?",
     answer:
-      "Cursor and Copilot are code assistants that help you write code faster inside your editor. OmoiOS is an autonomous execution platform — it doesn't help you code, it codes for you based on your spec. Different tool for a different workflow.",
+      "Cursor and Copilot help you write code faster inside your editor. OmoiOS doesn't help you code — it codes for you. You write a spec, approve the plan, and agents deliver a PR. Different tool, different workflow.",
   },
   {
     question: "How is OmoiOS different from Claude Code?",

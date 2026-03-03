@@ -23,28 +23,27 @@ export function FounderSection({ className }: FounderSectionProps) {
 
           <div className="space-y-5 text-base leading-relaxed text-landing-text-muted">
             <p>
-              I&apos;m Kevin, a full-stack developer building OmoiOS as a solo
-              founder. I&apos;ve shipped production code in Python, Rust,
-              TypeScript, and Dart — and I&apos;ve used every AI coding tool out
-              there.
+              I&apos;m Kevin. I&apos;ve shipped production code in Python,
+              Rust, TypeScript, and Dart — and I&apos;ve used every AI coding
+              tool out there.
             </p>
 
             <p>
-              Here&apos;s what I kept running into: tools like Kiro and Cursor
-              are great when you&apos;re at your desk. But I wanted something
-              that could take a spec, execute a plan, and deliver a PR while I
-              was asleep, at the gym, or working on something else entirely.
+              They&apos;re great when you&apos;re at your desk. But I wanted
+              something that could take a spec, execute a plan, and deliver a
+              PR while I was asleep, at the gym, or working on something else
+              entirely.
             </p>
 
             <p>
-              So I built OmoiOS — an autonomous agent orchestration platform
-              that treats specs as contracts and delivers tested code without
-              requiring you at the keyboard.
+              So I built OmoiOS — specs as contracts, tested code delivered
+              overnight, no keyboard required.
             </p>
 
             <p>
-              I open-sourced it because I think this should be infrastructure,
-              not a walled garden. Fork it, self-host it, build on top of it.
+              I open-sourced it because autonomous engineering should be
+              infrastructure, not a walled garden. Fork it. Self-host it. Build
+              on top of it.
             </p>
           </div>
         </motion.div>

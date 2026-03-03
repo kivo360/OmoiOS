@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const features = [
   {
-    title: "Spec-driven guardrails",
+    title: "Spec Contracts",
     description:
       "Your spec is the contract. Agents can't go off-script. Requirements, constraints, and acceptance criteria are enforced at every step.",
     icon: Shield,
@@ -15,25 +15,25 @@ const features = [
     visual: <SpecDrivenVisual />,
   },
   {
-    title: "Self-healing pipeline",
+    title: "Self-Heal",
     description:
-      "When tests fail or builds break, agents diagnose, fix, and retry automatically. You only hear about success.",
+      "Tests fail. Builds break. Agents diagnose, fix, and retry — automatically. You only hear about success.",
     icon: RefreshCw,
     className: "md:col-span-1",
     visual: <GuardianVisual />,
   },
   {
-    title: "Full traceability",
+    title: "Full Lineage",
     description:
-      "Every decision, test result, and code change is linked back to the original requirement. Review with confidence because you can see why every line exists.",
+      "Every code change links back to its requirement. Review with confidence — see exactly why every line exists.",
     icon: Eye,
     className: "md:col-span-1",
     visual: <VisibilityVisual />,
   },
   {
-    title: "Parallel orchestration",
+    title: "Night Shift",
     description:
-      "Multiple agents, multiple tasks, dependency-aware sequencing. Scale throughput by adding agents — not meetings.",
+      "Multiple agents, multiple tasks, dependency-aware sequencing. Work runs in parallel while you sleep.",
     icon: GitBranch,
     className: "md:col-span-2",
     visual: <OrchestrationVisual />,
@@ -63,8 +63,8 @@ export function FeaturesSection({ className, id }: FeaturesSectionProps) {
             Orchestrated execution, not prompt-and-pray
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            Spec-driven guardrails, self-healing pipelines, and full
-            traceability — so errors don&apos;t pile up.
+            Spec contracts. Self-healing pipelines. Full lineage from
+            requirement to code. Errors don&apos;t pile up — they get fixed.
           </p>
         </motion.div>
 

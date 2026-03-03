@@ -25,7 +25,7 @@ const rows: ComparisonRow[] = [
   {
     label: "Where it runs",
     omoios: "Cloud (autonomous)",
-    kiro: "Your IDE",
+    kiro: "Your IDE + cloud (preview)",
     codex: "Cloud + local",
     claudeCode: "Your terminal",
   },
@@ -35,6 +35,13 @@ const rows: ComparisonRow[] = [
     kiro: "Specs + hooks",
     codex: "Prompt-driven",
     claudeCode: "Prompt-driven",
+  },
+  {
+    label: "Autonomous overnight execution",
+    omoios: true,
+    kiro: "Preview only",
+    codex: false,
+    claudeCode: false,
   },
   {
     label: "Multi-agent orchestration",
@@ -53,7 +60,7 @@ const rows: ComparisonRow[] = [
   {
     label: "BYOK (model provider)",
     omoios: "Anthropic, OpenAI",
-    kiro: "Claude only",
+    kiro: "Multiple models",
     codex: "GPT only",
     claudeCode: "Claude only",
   },
@@ -159,8 +166,8 @@ export function ComparisonTableSection({
           transition={{ delay: 0.2 }}
           className="mx-auto mt-8 max-w-2xl text-center text-base italic text-landing-text-muted"
         >
-          Kiro plans your code. Codex runs tasks. OmoiOS ships features — from
-          spec to PR, overnight.
+          Kiro helps you plan. Codex runs tasks. OmoiOS ships features — spec
+          to PR, overnight, no IDE required.
         </motion.p>
       </div>
     </section>

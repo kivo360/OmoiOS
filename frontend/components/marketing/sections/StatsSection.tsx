@@ -5,24 +5,24 @@ import { cn } from "@/lib/utils";
 
 const stats = [
   {
-    display: "10x",
-    label: "faster shipping",
-    description: "idea to PR in hours, not weeks",
-  },
-  {
-    display: "80%",
-    label: "less coordination overhead",
-    description: "more building, less managing",
+    display: "Hours",
+    label: "not weeks",
+    description: "from spec to pull request",
   },
   {
     display: "24/7",
-    label: "agents work while you don't",
-    description: "even while you sleep",
+    label: "execution",
+    description: "agents work while you sleep",
   },
   {
-    display: "0",
-    label: "babysitting required",
-    description: "problems fix themselves",
+    display: "Full",
+    label: "lineage",
+    description: "every line traced to a requirement",
+  },
+  {
+    display: "Zero",
+    label: "babysitting",
+    description: "approve the plan, review the PR",
   },
 ];
 
@@ -42,10 +42,11 @@ export function StatsSection({ className }: StatsSectionProps) {
           className="mx-auto mb-12 max-w-2xl text-center"
         >
           <h2 className="text-3xl font-bold tracking-tight text-landing-text md:text-4xl">
-            What You Actually Get
+            Ship More. Manage Less.
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            More time for what matters. Less time on what doesn&apos;t.
+            The work you delegate to agents is work your team doesn&apos;t
+            manage.
           </p>
         </motion.div>
 

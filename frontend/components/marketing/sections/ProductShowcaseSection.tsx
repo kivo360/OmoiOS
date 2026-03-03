@@ -19,7 +19,7 @@ const showcaseItems = [
     id: "command",
     title: "Command Center",
     description:
-      "Describe what you want to build in plain English. Select your repo, branch, and model. Launch an agent with one click.",
+      "Pick your repo, branch, and model. Describe what you want in plain English. Launch an agent with one click.",
     icon: MessageSquare,
     image: "/screenshots/kanban-board.png",
     alt: "OmoiOS Command Center - describe what you want to build",
@@ -28,7 +28,7 @@ const showcaseItems = [
     id: "kanban",
     title: "Kanban Board",
     description:
-      "Watch work flow through the pipeline: Backlog → Analyzing → Building → Testing → Deploying → Done. Full visibility into agent progress.",
+      "Backlog, Analyzing, Building, Testing, Deploying, Done. See exactly where every task stands without asking.",
     icon: FolderKanban,
     image: "/screenshots/agent-task-view.png",
     alt: "OmoiOS Kanban Board showing task pipeline",
@@ -37,7 +37,7 @@ const showcaseItems = [
     id: "project",
     title: "Project Dashboard",
     description:
-      "One view for everything: active work, running agents, commit history, and GitHub integration. Know exactly where every project stands.",
+      "Active work, running agents, commit history, and GitHub integration. One view for everything.",
     icon: LayoutDashboard,
     image: "/screenshots/command-center.png",
     alt: "OmoiOS Project Dashboard with overview stats",
@@ -46,7 +46,7 @@ const showcaseItems = [
     id: "agent",
     title: "Live Agent View",
     description:
-      "Watch agents work in real-time: see the code they write, commands they run, and decisions they make. Full transparency, zero babysitting.",
+      "Watch agents write code, run commands, and make decisions in real-time. Full transparency, zero babysitting.",
     icon: Terminal,
     image: "/screenshots/project-overview.png",
     alt: "OmoiOS Live Agent View showing real-time code execution",
@@ -88,10 +88,10 @@ export function ProductShowcaseSection({
           className="mx-auto mb-12 max-w-2xl text-center"
         >
           <h2 className="text-3xl font-bold tracking-tight text-landing-text md:text-4xl">
-            See the Product in Action
+            Show, Don&apos;t Tell
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            Real screenshots from real projects. No mockups, no Figma dreams.
+            Real screenshots from real projects. No mockups.
           </p>
         </motion.div>
 

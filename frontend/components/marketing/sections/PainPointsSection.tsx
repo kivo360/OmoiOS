@@ -15,27 +15,27 @@ type PainCard = {
 const painCards: PainCard[] = [
   {
     icon: Users,
-    title: "Your roadmap moves faster than your hiring",
+    title: "Your backlog grows faster than your team",
     description:
-      "Recruiting takes months. Your backlog grows daily. OmoiOS lets you add agent capacity tonight and wake up to shipped work tomorrow — no headcount required.",
+      "Add agent capacity tonight. Wake up to shipped work tomorrow. No headcount, no onboarding, no ramp-up time.",
   },
   {
     icon: AlertTriangle,
-    title: "AI-generated code looks right until you run it",
+    title: "AI code that looks right until you run it",
     description:
-      "Plausible code that breaks at build time wastes senior time. OmoiOS agents run tests, catch failures, and self-correct before you ever see the PR.",
+      "Agents run tests, catch failures, and self-correct before you ever see the PR. You review working code, not plausible code.",
   },
   {
     icon: Clock,
-    title: "Plans drift. Context disappears. Reviews slow down.",
+    title: "Context scattered across Slack, docs, and tickets",
     description:
-      "Decisions get scattered across Slack, docs, and tickets. OmoiOS traces every line of code back to the original spec — requirements, design, and implementation stay connected.",
+      "Every line of code traces back to the original spec. Requirements, design, and implementation stay connected end-to-end.",
   },
   {
     icon: GitMerge,
-    title: "More contributors should mean more throughput, not more conflicts",
+    title: "More agents, not more merge conflicts",
     description:
-      "OmoiOS agents work in isolated sandboxes with dependency-aware sequencing. Parallel execution without merge chaos.",
+      "Isolated sandboxes. Dependency-aware sequencing. Scale throughput by adding agents, not meetings.",
   },
 ];
 
@@ -59,13 +59,12 @@ export function PainPointsSection({ className, id }: PainPointsSectionProps) {
           className="mx-auto mb-12 max-w-3xl text-center"
         >
           <h2 className="text-3xl font-bold tracking-tight text-landing-text md:text-4xl">
-            AI coding tools still need you at the keyboard. OmoiOS
-            doesn&apos;t.
+            AI coding tools still need you at the keyboard.
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
             Kiro, Cursor, and Copilot help you code faster — but you&apos;re
-            still the one coding. OmoiOS runs the full pipeline in the
-            background so your team reviews pull requests, not prompts.
+            still the one coding. OmoiOS runs the full pipeline overnight so
+            your team reviews pull requests, not prompts.
           </p>
         </motion.div>
 

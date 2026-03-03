@@ -59,8 +59,8 @@ export function FooterSection({ className }: FooterSectionProps) {
               <OmoiOSLogo size="md" />
             </Link>
             <p className="mt-4 max-w-xs text-sm text-gray-400">
-              Autonomous engineering execution. Turn feature requests into
-              shipped code while you focus on what matters.
+              Spec to PR, overnight. Open-source autonomous engineering for
+              teams that ship.
             </p>
 
             {/* Social Links */}

@@ -11,37 +11,37 @@ const phases = [
   {
     id: "spec",
     number: "01",
-    title: "You Write a Spec",
+    title: "You Write the Spec",
     description:
-      "Describe the feature in plain English. Add constraints like tech stack, architecture rules, or coding standards. The spec becomes the agent's guardrails.",
+      "Describe the feature in plain English. Add constraints — tech stack, architecture rules, coding standards. The spec becomes the contract.",
     icon: Pencil,
     color: "bg-purple-500",
-    highlight: "Spec-driven constraints",
+    highlight: "Your intent, explicit",
   },
   {
     id: "plan",
     number: "02",
-    title: "We Plan the Work",
+    title: "Agents Plan the Work",
     description:
-      "Your spec becomes an ordered plan with clear dependencies. You see what will be built, in what order, and why. Approve or adjust before any code is written.",
+      "Your spec becomes an ordered plan with clear dependencies. See what gets built, in what order, and why. Approve or adjust before any code is written.",
     icon: ListChecks,
     color: "bg-blue-500",
-    highlight: "Plan & dependencies",
+    highlight: "Transparent planning",
   },
   {
     id: "execution",
     number: "03",
-    title: "Agents Execute the Plan",
+    title: "Agents Execute Overnight",
     description:
-      "Agents work in isolated sandboxes—writing code, running tests, fixing issues. They keep going until the plan is complete.",
+      "Isolated sandboxes. Writing code, running tests, fixing failures. They keep going until the plan is complete — no babysitting.",
     icon: Moon,
     color: "bg-amber-500",
-    highlight: "Runs until done",
+    highlight: "Autonomous execution",
   },
   {
     id: "review",
     number: "04",
-    title: "Wake Up to a PR",
+    title: "You Review the PR",
     description:
       "Morning: a pull request with working, tested code. Every change traced back to your spec. Review it, merge it, ship it.",
     icon: CheckCircle2,
