@@ -1161,6 +1161,12 @@ async def health_check():
     return {"status": "healthy", "version": "0.1.0"}
 
 
+@app.get("/hello")
+async def greeting():
+    """Greeting endpoint that responds to user hello requests."""
+    return {"message": "Hello! Welcome to OmoiOS."}
+
+
 if __name__ == "__main__":
     import uvicorn
 
