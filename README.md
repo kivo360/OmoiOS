@@ -5,7 +5,6 @@
 <p align="center">
   <a href="https://github.com/kivo360/OmoiOS/stargazers"><img src="https://img.shields.io/github/stars/kivo360/OmoiOS?style=social" alt="GitHub Stars"/></a>
   <a href="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml"><img src="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"/></a>
   <img src="https://img.shields.io/badge/python-3.12+-3776ab.svg" alt="Python 3.12+"/>
   <img src="https://img.shields.io/badge/next.js-15-000000.svg" alt="Next.js 15"/>
@@ -14,7 +13,7 @@
 </p>
 
 <p align="center">
-  <b>Stop babysitting AI agents. Run structured swarms instead.</b>
+  <b>Open-source orchestration runtime that turns specs into PRs using parallel agent swarms in isolated sandboxes.</b>
 </p>
 
 <p align="center">
@@ -89,9 +88,9 @@ Beyond orchestrating agent swarms, OmoiOS includes a built-in code assistant tha
                     +-------------v-------------+
                     |    Backend (FastAPI)       |
                     |                           |
-                    |  39 Route Modules          |
-                    |  ~100 Service Modules      |
-                    |  77 SQLAlchemy model classes |
+                    |  40+ Route Modules         |
+                    |  100+ Service Modules      |
+                    |  75+ SQLAlchemy Models      |
                     |                           |
                     |  --- Core Services ---     |
                     |  SpecStateMachine          |
@@ -208,7 +207,7 @@ just check           # All quality checks
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Frontend** | Next.js 15 (App Router) | 67-page dashboard with SSR |
+| **Frontend** | Next.js 15 (App Router) | Full dashboard with SSR |
 | **UI** | ShadCN UI + Tailwind | Component library (Radix primitives) |
 | **State** | Zustand + React Query | Client + server state management |
 | **Visualization** | React Flow v12 | Dependency graphs + workflow DAGs |
@@ -228,17 +227,17 @@ just check           # All quality checks
 OmoiOS/
 ├── backend/                  # Python FastAPI backend
 │   ├── omoi_os/
-│   │   ├── api/routes/       # 39 route modules
-│   │   ├── models/           # 77 SQLAlchemy model classes across 61 model files
-│   │   ├── services/         # ~100 service modules
+│   │   ├── api/routes/       # 40+ route modules
+│   │   ├── models/           # 75+ SQLAlchemy model classes
+│   │   ├── services/         # 100+ service modules
 │   │   └── workers/          # Orchestrator + task workers
-│   ├── migrations/versions/  # 73 Alembic migrations
+│   ├── migrations/versions/  # 70+ Alembic migrations
 │   ├── config/               # YAML configs per environment
-│   └── tests/                # 112 test files (pytest)
+│   └── tests/                # 100+ test files (pytest)
 │
 ├── frontend/                 # Next.js 15 frontend
-│   ├── app/                  # ~67 App Router pages
-│   ├── components/           # 140+ React components
+│   ├── app/                  # 60+ App Router pages
+│   ├── components/           # 130+ React components
 │   ├── hooks/                # Custom hooks (WebSocket, API)
 │   └── lib/                  # API client, utilities
 │
@@ -321,7 +320,7 @@ All ports are offset by +10,000 to avoid conflicts with local services:
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | Complete system architecture (start here) |
 | [Product Vision](docs/product_vision.md) | Full product vision + target audience |
 | [App Overview](docs/app_overview.md) | Core features + user flows |
-| [Page Architecture](docs/page_architecture.md) | All ~67 frontend pages detailed |
+| [Page Architecture](docs/page_architecture.md) | All frontend pages detailed |
 | [Design System](docs/design_system.md) | Complete design system |
 | [Frontend Architecture](docs/design/frontend/frontend_architecture_shadcn_nextjs.md) | Frontend patterns + components |
 | [Monitoring Architecture](docs/requirements/monitoring/monitoring_architecture.md) | Guardian + Conductor system |
@@ -342,12 +341,12 @@ All ports are offset by +10,000 to avoid conflicts with local services:
 | [Billing & Subscriptions](docs/architecture/08-billing-and-subscriptions.md) | Stripe, tiers, cost tracking |
 | [MCP Integration](docs/architecture/09-mcp-integration.md) | Model Context Protocol, circuit breakers |
 | [GitHub Integration](docs/architecture/10-github-integration.md) | Branch management, PR workflows |
-| [Database Schema](docs/architecture/11-database-schema.md) | PostgreSQL + pgvector, 77 model classes |
+| [Database Schema](docs/architecture/11-database-schema.md) | PostgreSQL + pgvector, 75+ model classes |
 | [Configuration System](docs/architecture/12-configuration-system.md) | YAML + env, Pydantic validation |
 | [API Route Catalog](docs/architecture/13-api-route-catalog.md) | All FastAPI route modules |
 | [Integration Gaps](docs/architecture/14-integration-gaps.md) | Known issues, resolved gaps |
 | [LLM Service Layer](docs/architecture/15-llm-service.md) | LLM architecture, structured outputs |
-| [Service Catalog](docs/architecture/16-service-catalog.md) | All ~94 backend services cataloged |
+| [Service Catalog](docs/architecture/16-service-catalog.md) | All backend services cataloged |
 
 </details>
 
@@ -383,5 +382,5 @@ OmoiOS is licensed under the [Apache License 2.0](LICENSE).
 ---
 
 <p align="center">
-  <b>Go to sleep. Wake up to finished features.</b>
+  <b>Go to sleep. Wake up to pull requests.</b>
 </p>

@@ -4,10 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowRight, Play, Loader2, Code, FileText, Github } from "lucide-react";
+import { ArrowRight, Play, Loader2, Code, FileText, Github, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useGitHubStars } from "@/hooks/useGitHubStars";
 
 const heroVideos = [
   {
@@ -30,6 +31,7 @@ interface HeroSectionProps {
 
 export function HeroSection({ className }: HeroSectionProps) {
   const router = useRouter();
+  const stars = useGitHubStars("kivo360/OmoiOS");
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeVideo, setActiveVideo] = useState(0);
@@ -162,21 +164,29 @@ export function HeroSection({ className }: HeroSectionProps) {
                   Watch Demo
                 </Link>
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-landing-text-muted"
-                asChild
-              >
-                <a
-                  href="https://github.com/kivo360/OmoiOS"
-                  target="_blank"
-                  rel="noopener noreferrer"
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-landing-text-muted"
+                  asChild
                 >
-                  <Github className="mr-2 h-4 w-4" />
-                  Star on GitHub
-                </a>
-              </Button>
+                  <a
+                    href="https://github.com/kivo360/OmoiOS"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Github className="mr-2 h-4 w-4" />
+                    Star on GitHub
+                  </a>
+                </Button>
+                {stars !== null && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2 py-1 text-xs font-semibold text-yellow-700">
+                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                    {stars.toLocaleString()}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Social Proof Strip */}
@@ -186,12 +196,7 @@ export function HeroSection({ className }: HeroSectionProps) {
               transition={{ duration: 0.5, delay: 0.5 }}
               className="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm text-landing-text-muted"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://img.shields.io/github/stars/kivo360/OmoiOS?style=social"
-                alt="GitHub stars"
-                className="h-5"
-              />
+              <span>Open Source &middot; Apache 2.0</span>
               <span>&middot;</span>
               <span>Listed on OpenAlternative</span>
               <span>&middot;</span>

@@ -50,7 +50,7 @@ export const FloatingNav = ({
             key={`link-${idx}`}
             href={navItem.link}
             className={cn(
-              "relative flex items-center space-x-1 text-sm text-landing-text-muted transition-colors hover:text-landing-text",
+              "relative flex shrink-0 items-center space-x-1 whitespace-nowrap text-sm text-landing-text-muted transition-colors hover:text-landing-text",
             )}
           >
             <span className="block sm:hidden">{navItem.icon}</span>
@@ -72,7 +72,7 @@ export const FloatingNav = ({
         {/* CTA Button */}
         <Link
           href="/register"
-          className="relative flex items-center gap-1 rounded-full bg-landing-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-landing-accent-dark"
+          className="relative flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-landing-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-landing-accent-dark"
         >
           <span>Get Started Free</span>
           <ArrowRight className="h-3 w-3" />
