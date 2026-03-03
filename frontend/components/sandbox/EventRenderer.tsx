@@ -2762,6 +2762,37 @@ export function EventRenderer({ event, className }: EventRendererProps) {
     );
   }
 
+  // Stream error - amber for transient operational issues (timeouts, throttling)
+  if (event_type === "agent.stream_error") {
+    const error = getString(data, "error");
+    const errorType = getString(data, "error_type");
+    const turn = getNumber(data, "turn");
+
+    return (
+      <div className={cn(className)}>
+        <div className="flex items-center gap-2 px-3 py-2 text-xs bg-amber-500/10 border border-amber-500/20 rounded-md">
+          <AlertCircle className="h-4 w-4 text-amber-500" />
+          <span className="font-medium text-amber-600 dark:text-amber-400">
+            Stream error{turn > 0 ? ` (turn ${turn})` : ""}
+          </span>
+          {errorType && (
+            <Badge
+              variant="outline"
+              className="h-5 px-2 text-[10px] bg-amber-500/20 text-amber-600 border-amber-500/30 font-medium"
+            >
+              {errorType}
+            </Badge>
+          )}
+          {error && (
+            <span className="text-amber-600/70 dark:text-amber-400/70 truncate max-w-[300px]">
+              {error}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Skill invoked events
   if (event_type === "agent.skill_invoked") {
     const input = (data.input || {}) as Record<string, unknown>;
@@ -2908,6 +2939,37 @@ export function EventRenderer({ event, className }: EventRendererProps) {
             >
               COMPLETE
             </Badge>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Iteration failed - red indicator for hard failures
+  if (event_type === "iteration.failed") {
+    const iterNum = getNumber(data, "iteration_num");
+    const error = getString(data, "error");
+    const errorType = getString(data, "error_type");
+
+    return (
+      <div className={cn(className)}>
+        <div className="flex items-center gap-2 px-3 py-2 text-xs bg-red-500/10 border border-red-500/20 rounded-md">
+          <AlertCircle className="h-4 w-4 text-red-500" />
+          <span className="font-medium text-red-600 dark:text-red-400">
+            Iteration {iterNum} failed
+          </span>
+          {errorType && (
+            <Badge
+              variant="outline"
+              className="h-5 px-2 text-[10px] bg-red-500/20 text-red-600 border-red-500/30 font-medium"
+            >
+              {errorType}
+            </Badge>
+          )}
+          {error && (
+            <span className="text-red-600/70 dark:text-red-400/70 truncate max-w-[300px]">
+              {error}
+            </span>
           )}
         </div>
       </div>
