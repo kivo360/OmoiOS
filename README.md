@@ -142,65 +142,330 @@ Beyond orchestrating agent swarms, OmoiOS includes a built-in code assistant tha
 
 ## Quick Start
 
-### Docker (Recommended)
+### Prerequisites
+
+You need **Docker**, **Python 3.12+**, **Node.js 22+**, **uv**, **pnpm**, and **just**. Pick your platform below.
+
+<details open>
+<summary><b>macOS</b></summary>
+
+```bash
+# Docker Desktop
+brew install --cask docker
+
+# Python + Node.js
+brew install python@3.12 node
+
+# uv (Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# pnpm (Node.js package manager)
+corepack enable && corepack prepare pnpm@latest --activate
+
+# just (command runner)
+brew install just
+```
+
+</details>
+
+<details>
+<summary><b>Ubuntu / Debian</b></summary>
+
+```bash
+# Docker Engine
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# Add yourself to docker group (log out + in after this)
+sudo usermod -aG docker $USER
+
+# Python 3.12+
+sudo apt-get install -y python3.12 python3.12-venv python3.12-dev
+
+# Node.js 22+ (via NodeSource)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# uv (Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# pnpm (Node.js package manager)
+corepack enable && corepack prepare pnpm@latest --activate
+
+# just (command runner) — pick one:
+curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+# or: sudo snap install just --classic
+# or: sudo apt install just  (if available on your release)
+```
+
+</details>
+
+<details>
+<summary><b>Fedora / RHEL / CentOS</b></summary>
+
+```bash
+# Docker Engine
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo systemctl start docker && sudo systemctl enable docker
+sudo usermod -aG docker $USER
+
+# Python 3.12+
+sudo dnf install -y python3.12 python3.12-devel
+
+# Node.js 22+ (via NodeSource)
+curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
+sudo dnf install -y nodejs
+
+# uv (Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# pnpm (Node.js package manager)
+corepack enable && corepack prepare pnpm@latest --activate
+
+# just (command runner) — pick one:
+curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+# or: sudo dnf install just
+```
+
+</details>
+
+<details>
+<summary><b>Arch Linux</b></summary>
+
+```bash
+sudo pacman -S docker docker-compose python nodejs pnpm just
+sudo systemctl start docker && sudo systemctl enable docker
+sudo usermod -aG docker $USER
+
+# uv (Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+</details>
+
+<details>
+<summary><b>Windows (WSL2 recommended)</b></summary>
+
+```powershell
+# Install WSL2 + Ubuntu, then follow the Ubuntu instructions above
+wsl --install
+
+# Or native Windows:
+winget install Docker.DockerDesktop
+winget install Python.Python.3.12
+winget install OpenJS.NodeJS
+winget install --id Casey.Just --exact
+
+# Then in PowerShell:
+irm https://astral.sh/uv/install.ps1 | iex
+corepack enable && corepack prepare pnpm@latest --activate
+```
+
+</details>
+
+<details>
+<summary><b>Other ways to install <code>just</code></b></summary>
+
+`just` is available in most package managers. If your platform wasn't listed above:
+
+| Method | Command |
+|--------|---------|
+| Installer script | `curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \| bash -s -- --to /usr/local/bin` |
+| Cargo | `cargo install just` |
+| Conda | `conda install -c conda-forge just` |
+| npm | `npm install -g rust-just` |
+| pipx | `pipx install rust-just` |
+| Snap | `sudo snap install --edge --classic just` |
+| Nix | `nix-env -iA nixpkgs.just` |
+| Chocolatey | `choco install just` |
+| Scoop | `scoop install just` |
+| FreeBSD | `pkg install just` |
+
+Full list: [github.com/casey/just — Packages](https://github.com/casey/just#packages)
+
+</details>
+
+**Verify everything is installed:**
+
+```bash
+docker --version    # Docker 24+
+python3 --version   # Python 3.12+
+node --version      # Node.js 22+
+uv --version        # uv 0.4+
+pnpm --version      # pnpm 9+
+just --version      # just 1.0+
+```
+
+### Quickstart (Recommended)
+
+One command sets up everything — env files, database services, dependencies, and migrations:
 
 ```bash
 git clone https://github.com/kivo360/OmoiOS.git
 cd OmoiOS
 
-# Copy env template and add your API keys
+just quickstart
+```
+
+Then start developing:
+
+```bash
+just dev-all         # Start API + frontend (http://localhost:3000)
+```
+
+> **Note:** Edit `.env.local` to add your API keys (`LLM_API_KEY`, etc.) for full functionality. The app runs without them but with reduced features.
+
+### After Quickstart
+
+Once `just quickstart` completes, configure your environment:
+
+```bash
+# Edit .env.local with your API keys
+# At minimum, set LLM_API_KEY for AI features to work:
+$EDITOR .env.local
+```
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `LLM_API_KEY` | For AI features | Fireworks AI or OpenAI-compatible key |
+| `ANTHROPIC_API_KEY` | For agent execution | Claude Agent SDK key |
+| `GITHUB_TOKEN` | For Git integration | GitHub personal access token |
+| `DAYTONA_API_KEY` | For sandboxes | Daytona isolated workspace key |
+
+> All other features (dashboard, task management, API) work without any keys.
+
+### Running the Stack
+
+```bash
+# Start everything — API + frontend in one terminal
+just dev-all
+
+# Or start services individually in separate terminals:
+just backend-api         # Backend API on http://localhost:18000
+just frontend-dev        # Frontend on http://localhost:3000
+just watch               # Backend with Docker hot-reload (alternative)
+```
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:18000 |
+| API Docs (Swagger) | http://localhost:18000/docs |
+| PostgreSQL | localhost:15432 |
+| Redis | localhost:16379 |
+
+All backend ports are offset by +10,000 to avoid conflicts with local services.
+
+### Troubleshooting
+
+<details>
+<summary><b>Docker permission denied (Linux)</b></summary>
+
+```bash
+# Add yourself to the docker group and re-login
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+</details>
+
+<details>
+<summary><b>Port already in use</b></summary>
+
+```bash
+just status              # See what's running
+just kill-port 18000     # Kill process on a specific port
+just stop-all            # Stop all OmoiOS services
+```
+
+</details>
+
+<details>
+<summary><b>Database connection errors</b></summary>
+
+```bash
+just docker-up           # Restart Postgres + Redis
+just db-migrate          # Re-run migrations
+just bootstrap           # Full environment health check
+```
+
+</details>
+
+<details>
+<summary><b>Python/Node dependency issues</b></summary>
+
+```bash
+# Backend: clean reinstall
+cd backend && uv sync --group test
+
+# Frontend: clean reinstall
+just frontend-clean-install
+```
+
+</details>
+
+<details>
+<summary><b>Alternative setup: Docker-only (no local toolchain)</b></summary>
+
+If you don't want to install Python/Node locally, the root `docker-compose.yml` builds everything:
+
+```bash
 cp .env.example .env.local
-
-# Start all services
-docker compose up
-
-# Services available at:
-# - Frontend:  http://localhost:3000
-# - API:       http://localhost:18000
-# - API Docs:  http://localhost:18000/docs
-# - Postgres:  localhost:15432
-# - Redis:     localhost:16379
+docker compose up        # Builds + runs all services
 ```
 
-### Manual Setup
+</details>
 
-**Prerequisites:** Python 3.12+, Node.js 22+, [uv](https://docs.astral.sh/uv/), [pnpm](https://pnpm.io/), PostgreSQL 16, Redis 7
+## Development
 
-**Backend:**
+### Everyday Commands
+
 ```bash
-cd backend
-
-# Install all workspace dependencies
-uv sync
-
-# Run database migrations
-uv run alembic upgrade head
-
-# Start API server
-uv run uvicorn omoi_os.api.main:app --host 0.0.0.0 --port 18000 --reload
+just dev-all             # Start full stack
+just test                # Run affected tests only (fast, ~10-30s)
+just test-all            # Full test suite
+just check               # Lint + format (auto-fix)
+just status              # Check what's running
+just stop-all            # Stop everything
 ```
 
-**Frontend:**
-```bash
-cd frontend
+### Testing
 
-pnpm install
-pnpm dev
-# → http://localhost:3000
+```bash
+just test                # Smart: only tests affected by your changes (testmon)
+just test-all            # Full suite with coverage
+just test-unit           # Unit tests only
+just test-integration    # Integration tests only
+just test-match "keyword"  # Run tests matching a keyword
+just test-watch          # Watch mode — re-runs on file changes
 ```
 
-### Using the Justfile
-
-If you have [just](https://github.com/casey/just) installed:
+### Code Quality
 
 ```bash
-just --list          # Show all available commands
-just watch           # Backend with hot-reload
-just frontend-dev    # Frontend dev server
-just dev-all         # Everything at once
-just test            # Run affected tests (smart, fast)
-just test-all        # Full test suite
-just check           # All quality checks
+just check               # Auto-fix lint issues + format (ruff)
+just lint                # Lint only (no fixes)
+just format              # Format only
+just frontend-check      # Frontend format + type check
+```
+
+Pre-commit hooks enforce Ruff linting and formatting on every commit.
+
+### Database
+
+```bash
+just db-migrate                   # Apply all pending migrations
+just db-revision "add user table" # Create a new migration
+just db-history                   # View migration history
+just db-downgrade                 # Rollback one migration
 ```
 
 ## Tech Stack
@@ -255,68 +520,11 @@ OmoiOS/
 └── CHANGELOG.md              # Version history
 ```
 
-## Development
-
-### Running Tests
-
-```bash
-cd backend
-
-# Fast: only tests affected by your changes (testmon)
-just test
-
-# Full suite
-uv run pytest
-
-# With coverage
-uv run pytest --cov=omoi_os
-
-# Single test
-uv run pytest tests/path/test_file.py::TestClass::test_method -v
-```
-
-### Code Quality
-
-```bash
-cd backend
-
-# Lint
-ruff check .
-
-# Format
-ruff format .
-
-# Both at once
-just check
-```
-
-Pre-commit hooks enforce Ruff linting and formatting on every commit.
-
-### Database Migrations
-
-```bash
-cd backend
-
-uv run alembic upgrade head              # Apply migrations
-uv run alembic revision -m "description" # Create new migration
-uv run alembic downgrade -1              # Rollback one step
-```
-
-## Port Configuration
-
-All ports are offset by +10,000 to avoid conflicts with local services:
-
-| Service | Port | Standard |
-|---------|------|----------|
-| PostgreSQL | 15432 | 5432 |
-| Redis | 16379 | 6379 |
-| Backend API | 18000 | 8000 |
-| Frontend | 3000 | 3000 |
-
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| **[Installation Runbook](docs/installation.md)** | AI-executable setup guide (automated install) |
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | Complete system architecture (start here) |
 | [Product Vision](docs/product_vision.md) | Full product vision + target audience |
 | [App Overview](docs/app_overview.md) | Core features + user flows |

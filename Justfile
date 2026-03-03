@@ -25,10 +25,10 @@ frontend_dir := "frontend"
 frontend_port := env_var_or_default("FRONTEND_PORT", "3000")
 
 # Python command (runs in backend directory)
-python := "uv run --active python"
+python := "uv run python"
 
 # Pytest command (runs in backend directory)
-pytest := "uv run --active pytest"
+pytest := "uv run pytest"
 
 # Coverage threshold
 coverage_threshold := "80"
@@ -70,6 +70,122 @@ setup: install-all setup-test
     @echo "  just docker-up      # Start services"
     @echo "  just db-migrate     # Run migrations"
     @echo "  just test           # Run tests"
+
+# One-command quickstart: env files, Docker services, deps, migrations, everything
+[group('setup')]
+quickstart:
+    #!/usr/bin/env bash
+    set -e
+    echo ""
+    echo "🚀 OmoiOS Quickstart"
+    echo "═══════════════════════════════════════════════════════════"
+    echo ""
+
+    # --- Step 1: Environment files ---
+    echo "📋 Step 1/5: Environment files"
+    if [ ! -f .env.local ]; then
+        cp .env.example .env.local
+        echo "   Created .env.local from .env.example"
+        echo "   ⚠️  Edit .env.local later to add your API keys (LLM_API_KEY, etc.)"
+    else
+        echo "   ✅ .env.local already exists"
+    fi
+
+    if [ ! -f frontend/.env.local ]; then
+        cp frontend/.env.example frontend/.env.local
+        echo "   Created frontend/.env.local from frontend/.env.example"
+    else
+        echo "   ✅ frontend/.env.local already exists"
+    fi
+    echo ""
+
+    # --- Step 2: Start Docker services (Postgres + Redis) ---
+    echo "🐳 Step 2/5: Starting database services (PostgreSQL + Redis)"
+    echo "   Waiting for services to be healthy..."
+    cd {{backend_dir}} && docker compose up -d --wait postgres redis
+    echo "   ✅ PostgreSQL (port 15432) and Redis (port 16379) are healthy"
+    cd ..
+    echo ""
+
+    # --- Step 3: Install backend dependencies ---
+    echo "🐍 Step 3/5: Installing backend dependencies"
+    cd {{backend_dir}} && uv sync --group test
+    cd ..
+    echo "   ✅ Backend dependencies installed"
+    echo ""
+
+    # --- Step 4: Run database migrations ---
+    echo "🗄️  Step 4/5: Running database migrations"
+    cd {{backend_dir}} && uv run python -m alembic upgrade head
+    cd ..
+    echo "   ✅ Database migrations applied"
+    echo ""
+
+    # --- Step 5: Install frontend dependencies ---
+    echo "⚡ Step 5/5: Installing frontend dependencies"
+    cd {{frontend_dir}} && pnpm install
+    cd ..
+    echo "   ✅ Frontend dependencies installed"
+    echo ""
+
+    # --- Done ---
+    echo "═══════════════════════════════════════════════════════════"
+    echo "✅ OmoiOS is ready!"
+    echo ""
+    echo "Start developing:"
+    echo "  just dev-all         # Start everything (API + frontend)"
+    echo "  just watch           # Backend with hot-reload (Docker)"
+    echo "  just frontend-dev    # Frontend only"
+    echo "  just backend-api     # Backend API only"
+    echo ""
+    echo "Other useful commands:"
+    echo "  just test            # Run tests"
+    echo "  just bootstrap       # Check environment health"
+    echo "  just --list          # See all commands"
+    echo ""
+    echo "💡 Don't forget to edit .env.local with your API keys!"
+    echo ""
+
+# Check all development dependencies
+[group('setup')]
+bootstrap:
+    cd {{backend_dir}} && {{python}} -m omoi_os.cli.bootstrap check
+
+# Show live health dashboard
+[group('setup')]
+health:
+    cd {{backend_dir}} && {{python}} -m omoi_os.cli.bootstrap health
+
+# Start all services in local-only mode (no external APIs needed)
+[group('dev')]
+dev-local:
+    OMOIOS_ENV=local just dev-all
+
+# Inspect task context (what an agent would receive)
+[group('dev')]
+inspect-context task_id format="markdown":
+    cd {{backend_dir}} && {{python}} -m omoi_os.cli.inspect_context {{task_id}} --format {{format}}
+
+# Stream live orchestration events from Redis
+[group('dev')]
+event-stream *args='':
+    cd {{backend_dir}} && {{python}} -m omoi_os.cli.event_stream {{args}}
+
+# Replay monitoring sessions through Guardian/Conductor
+[group('dev')]
+monitoring-replay *ARGS:
+    cd {{backend_dir}} && {{python}} -m omoi_os.cli.monitoring_replay {{ARGS}}
+
+
+# Run spec pipeline in fixture mode
+[group('dev')]
+spec-fixture *args='':
+    cd {{backend_dir}} && {{python}} -m omoi_os.cli.spec_fixture {{args}}
+#NJ|
+# Preview branch strategy for a spec
+[group('dev')]
+branch-preview *ARGS:
+    cd {{backend_dir}} && {{python}} -m omoi_os.cli.branch_preview {{ARGS}}
 
 # ============================================================================
 # Testing (with pytest-testmon)
@@ -171,7 +287,7 @@ test-dry:
 # Watch mode (requires pytest-watch)
 [group('test')]
 test-watch:
-    cd {{backend_dir}} && uv run --active ptw -- --testmon -x
+    cd {{backend_dir}} && uv run ptw -- --testmon -x
 
 # ============================================================================
 # Code Quality
@@ -186,12 +302,12 @@ format:
 # Lint code with ruff (check only, no fixes)
 [group('quality')]
 lint:
-    cd {{backend_dir}} && uv run --active ruff check .
+    cd {{backend_dir}} && uv run ruff check .
 
 # Type check with mypy
 [group('quality')]
 type-check:
-    cd {{backend_dir}} && uv run --active mypy omoi_os
+    cd {{backend_dir}} && uv run mypy omoi_os
 
 # Run quality checks (fix + format with ruff)
 [group('quality')]
@@ -213,27 +329,27 @@ fix:
 # Run all migrations
 [group('database')]
 db-migrate:
-    cd {{backend_dir}} && uv run --active alembic upgrade head
+    cd {{backend_dir}} && uv run alembic upgrade head
 
 # Create new migration
 [group('database')]
 db-revision message:
-    cd {{backend_dir}} && uv run --active alembic revision -m "{{message}}"
+    cd {{backend_dir}} && uv run alembic revision -m "{{message}}"
 
 # Rollback one migration
 [group('database')]
 db-downgrade count="1":
-    cd {{backend_dir}} && uv run --active alembic downgrade -{{count}}
+    cd {{backend_dir}} && uv run alembic downgrade -{{count}}
 
 # Show migration history
 [group('database')]
 db-history:
-    cd {{backend_dir}} && uv run --active alembic history
+    cd {{backend_dir}} && uv run alembic history
 
 # Show current migration
 [group('database')]
 db-current:
-    cd {{backend_dir}} && uv run --active alembic current
+    cd {{backend_dir}} && uv run alembic current
 
 # ============================================================================
 # Docker Operations
@@ -458,17 +574,17 @@ restart-all:
 # Start API server (development mode with reload)
 [group('services')]
 api port=api_port:
-    cd {{backend_dir}} && uv run --active uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{port}} --reload
+    cd {{backend_dir}} && uv run uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{port}} --reload
 
 # Start worker process
 [group('services')]
 worker:
-    cd {{backend_dir}} && uv run --active python -m omoi_os.worker
+    cd {{backend_dir}} && uv run python -m omoi_os.worker
 
 # Run smoke test
 [group('services')]
 smoke:
-    cd {{backend_dir}} && uv run --active python scripts/smoke_test.py
+    cd {{backend_dir}} && uv run python scripts/smoke_test.py
 
 # Start API and worker in parallel (requires tmux or separate terminals)
 [group('services')]
@@ -487,23 +603,23 @@ backend-dev:
     @echo "🚀 Starting backend services..."
     @echo ""
     @echo "Starting API server..."
-    @cd {{backend_dir}} && uv run --active uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{api_port}} --reload &
+    @cd {{backend_dir}} && uv run uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{api_port}} --reload &
     @sleep 2
     @echo "Starting worker..."
-    @cd {{backend_dir}} && uv run --active python -m omoi_os.worker
+    @cd {{backend_dir}} && uv run python -m omoi_os.worker
 
 # Start only the API server (runs in backend directory)
 [group('services')]
 backend-api:
     @echo "🚀 Starting API server on port {{api_port}}..."
     @echo "API will be at http://localhost:{{api_port}}"
-    cd {{backend_dir}} && uv run --active uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{api_port}} --reload
+    cd {{backend_dir}} && uv run uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{api_port}} --reload
 
 # Start only the worker (runs in backend directory)
 [group('services')]
 backend-worker:
     @echo "🚀 Starting worker..."
-    cd {{backend_dir}} && uv run --active python -m omoi_os.worker
+    cd {{backend_dir}} && uv run python -m omoi_os.worker
 
 # ============================================================================
 # Separate Process Development (No Docker)
@@ -515,19 +631,19 @@ api-light port=api_port:
     @echo "🚀 Starting lightweight API (no background loops)..."
     cd {{backend_dir}} && MONITORING_ENABLED=false ORCHESTRATOR_ENABLED=false MCP_ENABLED=false \
     DAYTONA_SANDBOX_EXECUTION=true \
-    uv run --active uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{port}} --reload
+    uv run uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{port}} --reload
 
 # Start orchestrator as separate process (local, no Docker)
 [group('services')]
 orchestrator:
     @echo "🚀 Starting orchestrator worker..."
-    cd {{backend_dir}} && uv run --active python -m omoi_os.workers.orchestrator_worker
+    cd {{backend_dir}} && uv run python -m omoi_os.workers.orchestrator_worker
 
 # Start monitoring as separate process (local, no Docker)
 [group('services')]
 monitoring:
     @echo "🚀 Starting monitoring worker..."
-    cd {{backend_dir}} && uv run --active python -m omoi_os.workers.monitoring_worker
+    cd {{backend_dir}} && uv run python -m omoi_os.workers.monitoring_worker
 
 # ============================================================================
 # Full Stack Development
@@ -554,7 +670,7 @@ dev-watch:
 
     # Start frontend in foreground
     echo "Starting frontend..."
-    cd {{frontend_dir}} && pnpm dev -- -p {{frontend_port}}
+    cd {{frontend_dir}} && NODE_OPTIONS="--max-old-space-size=4096" pnpm exec next dev --port {{frontend_port}}
 
     # Cleanup on exit
     kill $BACKEND_PID 2>/dev/null || true
@@ -574,7 +690,7 @@ frontend-install:
 frontend-dev port=frontend_port:
     @echo "🚀 Starting frontend development server..."
     @echo "Frontend will be at http://localhost:{{port}}"
-    cd {{frontend_dir}} && pnpm dev -- -p {{port}}
+    cd {{frontend_dir}} && NODE_OPTIONS="--max-old-space-size=4096" pnpm exec next dev --port {{port}}
 
 # Build frontend for production
 [group('frontend')]
@@ -662,7 +778,7 @@ dev-all:
     fi
 
     echo "Starting backend API..."
-    cd {{backend_dir}} && uv run --active uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{api_port}} --reload &
+    cd {{backend_dir}} && uv run uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{api_port}} --reload &
     API_PID=$!
     sleep 3
 
@@ -677,7 +793,7 @@ dev-all:
     done
 
     echo "Starting backend worker..."
-    cd {{backend_dir}} && uv run --active python -m omoi_os.worker &
+    cd {{backend_dir}} && uv run python -m omoi_os.worker &
     WORKER_PID=$!
     sleep 2
 
@@ -702,7 +818,7 @@ dev-all:
     trap cleanup SIGINT SIGTERM
 
     # Start frontend in foreground (this blocks)
-    cd {{frontend_dir}} && pnpm dev -- -p {{frontend_port}}
+    cd {{frontend_dir}} && NODE_OPTIONS="--max-old-space-size=4096" pnpm exec next dev --port {{frontend_port}}
 
     # If frontend exits, cleanup
     cleanup
@@ -772,15 +888,15 @@ config-show section="":
     #!/usr/bin/env bash
     cd {{backend_dir}}
     if [ -z "{{section}}" ]; then
-        uv run --active python -c "from omoi_os.config import _load_yaml_config; import json; print(json.dumps(_load_yaml_config(), indent=2))"
+        uv run python -c "from omoi_os.config import _load_yaml_config; import json; print(json.dumps(_load_yaml_config(), indent=2))"
     else
-        uv run --active python -c "from omoi_os.config import load_yaml_section; import json; print(json.dumps(load_yaml_section('{{section}}'), indent=2))"
+        uv run python -c "from omoi_os.config import load_yaml_section; import json; print(json.dumps(load_yaml_section('{{section}}'), indent=2))"
     fi
 
 # List all configuration sections
 [group('config')]
 config-list:
-    cd {{backend_dir}} && uv run --active python -c "from omoi_os.config import _load_yaml_config; print('\n'.join(_load_yaml_config().keys()))"
+    cd {{backend_dir}} && uv run python -c "from omoi_os.config import _load_yaml_config; print('\n'.join(_load_yaml_config().keys()))"
 
 # Check for configuration drift (settings without YAML or vice versa)
 [group('config')]
@@ -1008,7 +1124,7 @@ create-doc doc_type category feature:
 # Interactive Python shell with OmoiOS context
 [group('advanced')]
 shell:
-    cd {{backend_dir}} && uv run --active python -i -c "from omoi_os.services.database import DatabaseService; from omoi_os.config import load_database_settings; print('OmoiOS shell ready')"
+    cd {{backend_dir}} && uv run python -i -c "from omoi_os.services.database import DatabaseService; from omoi_os.config import load_database_settings; print('OmoiOS shell ready')"
 
 # ============================================================================
 # CI/CD Simulation
