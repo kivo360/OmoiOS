@@ -11,7 +11,11 @@ import {
   Shield,
   Rocket,
 } from "lucide-react";
-import { SparklesCore } from "@/components/ui/sparkles";
+import dynamic from "next/dynamic";
+const SparklesCore = dynamic(
+  () => import("@/components/ui/sparkles").then((mod) => mod.SparklesCore),
+  { ssr: false }
+);
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
