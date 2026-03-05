@@ -58,8 +58,8 @@ class TestPasswordOperations:
 
     def test_password_strength_validation(self, auth_service):
         """Test password strength requirements."""
-        # Valid password
-        valid, error = auth_service.validate_password_strength("ValidPass123")
+        # Valid password (has special char)
+        valid, error = auth_service.validate_password_strength("ValidPass123!")
         assert valid
         assert error is None
 
@@ -69,19 +69,24 @@ class TestPasswordOperations:
         assert "at least 8 characters" in error
 
         # No uppercase
-        valid, error = auth_service.validate_password_strength("lowercase123")
+        valid, error = auth_service.validate_password_strength("lowercase123!")
         assert not valid
         assert "uppercase" in error
 
         # No lowercase
-        valid, error = auth_service.validate_password_strength("UPPERCASE123")
+        valid, error = auth_service.validate_password_strength("UPPERCASE123!")
         assert not valid
         assert "lowercase" in error
 
         # No digit
-        valid, error = auth_service.validate_password_strength("NoDigitsHere")
+        valid, error = auth_service.validate_password_strength("NoDigitsHere!")
         assert not valid
         assert "digit" in error
+
+        # No special character
+        valid, error = auth_service.validate_password_strength("NoSpecialChar123")
+        assert not valid
+        assert "special character" in error
 
 
 class TestJWTOperations:
@@ -90,29 +95,35 @@ class TestJWTOperations:
     def test_create_access_token(self, auth_service):
         """Test access token creation."""
         user_id = uuid4()
-        token = auth_service.create_access_token(user_id)
+        token, jti = auth_service.create_access_token(user_id)
 
         assert isinstance(token, str)
+        assert isinstance(jti, str)
         assert len(token) > 20
+        assert len(jti) > 0
 
         # Verify token
         token_data = auth_service.verify_token(token, token_type="access")
         assert token_data is not None
         assert token_data.user_id == user_id
         assert token_data.token_type == "access"
+        assert token_data.jti == jti
 
     def test_create_refresh_token(self, auth_service):
         """Test refresh token creation."""
         user_id = uuid4()
-        token = auth_service.create_refresh_token(user_id)
+        token, jti = auth_service.create_refresh_token(user_id)
 
         assert isinstance(token, str)
+        assert isinstance(jti, str)
+        assert len(token) > 20
 
         # Verify token
         token_data = auth_service.verify_token(token, token_type="refresh")
         assert token_data is not None
         assert token_data.user_id == user_id
         assert token_data.token_type == "refresh"
+        assert token_data.jti == jti
 
     def test_verify_invalid_token(self, auth_service):
         """Test verification of invalid token."""
@@ -124,7 +135,7 @@ class TestJWTOperations:
     def test_verify_wrong_token_type(self, auth_service):
         """Test verification fails for wrong token type."""
         user_id = uuid4()
-        access_token = auth_service.create_access_token(user_id)
+        access_token, _ = auth_service.create_access_token(user_id)
 
         # Try to verify as refresh token
         token_data = auth_service.verify_token(access_token, token_type="refresh")
@@ -135,7 +146,7 @@ class TestJWTOperations:
         user_id = uuid4()
 
         # Create token with very short expiration
-        token = auth_service.create_access_token(
+        token, _ = auth_service.create_access_token(
             user_id,
             expires_delta=timedelta(seconds=-1),  # Already expired
         )
@@ -172,7 +183,7 @@ class TestTokenGeneration:
     def test_create_verification_token(self, auth_service):
         """Test email verification token creation."""
         user_id = uuid4()
-        token = auth_service.create_verification_token(user_id)
+        token, _ = auth_service.create_verification_token(user_id)
 
         assert isinstance(token, str)
         assert len(token) > 20
@@ -185,7 +196,7 @@ class TestTokenGeneration:
     def test_create_reset_token(self, auth_service):
         """Test password reset token creation."""
         user_id = uuid4()
-        token = auth_service.create_reset_token(user_id)
+        token, _ = auth_service.create_reset_token(user_id)
 
         assert isinstance(token, str)
         assert len(token) > 20

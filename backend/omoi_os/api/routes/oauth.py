@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -418,21 +418,25 @@ async def oauth_callback(
             refresh_token_expire_days=auth_settings.refresh_token_expire_days,
         )
 
-        access_token = auth_service.create_access_token(user_id)
-        refresh_token = auth_service.create_refresh_token(user_id)
+        access_token, _access_jti = auth_service.create_access_token(user_id)
+        refresh_token, _refresh_jti = auth_service.create_refresh_token(user_id)
 
         # Expunge user from session to prevent detached instance errors
         session.expunge(user)
 
-    # Redirect to frontend with tokens
+    # Redirect to frontend with tokens + set httpOnly cookies
     redirect_url = (
         f"{frontend_url}"
-        f"?access_token={access_token}"
+        f"#access_token={access_token}"
         f"&refresh_token={refresh_token}"
         f"&provider={provider}"
     )
 
-    return RedirectResponse(url=redirect_url)
+    from omoi_os.api.cookie_auth import set_auth_cookies
+
+    response = RedirectResponse(url=redirect_url)
+    set_auth_cookies(response, access_token, refresh_token)
+    return response
 
 
 # ============================================================================
@@ -482,6 +486,12 @@ async def copy_oauth_credentials(
     current_user: User = Depends(get_approved_user),
     db: DatabaseService = Depends(get_db_service),
 ):
+    # Security: Only super admins can copy OAuth credentials between accounts
+    if not current_user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super admins can copy OAuth credentials between accounts",
+        )
     """
     Copy OAuth credentials from another user account to the current user.
 

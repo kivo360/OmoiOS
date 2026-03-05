@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from omoi_os.logging import get_logger
@@ -414,15 +414,17 @@ def get_monitoring_loop():
 
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: "DatabaseService" = Depends(get_db_service),
 ):
     """
     Get current authenticated user from JWT token.
 
-    Uses local JWT auth (not Supabase).
+    Checks Authorization header first, then falls back to httpOnly cookies.
 
     Args:
+        request: FastAPI Request object (for cookie access)
         credentials: HTTP Bearer token credentials (optional if auto_error=False)
         db: Database service
 
@@ -436,28 +438,27 @@ async def get_current_user(
     from omoi_os.config import settings
     from omoi_os.models.user import User
 
-    # Check if credentials are provided
-    if not credentials:
-        # Debug level - this is expected for unauthenticated requests to protected endpoints
-        logger.debug("Missing Authorization header in get_current_user")
+    # Try to extract token from Bearer header first, then cookies
+    token: str | None = None
+    if credentials:
+        try:
+            token = credentials.credentials
+        except AttributeError:
+            pass
+
+    # Fall back to httpOnly cookie
+    if not token:
+        from omoi_os.api.cookie_auth import get_token_from_request
+
+        token = get_token_from_request(request)
+
+    if not token:
+        logger.debug("No auth token found in header or cookies")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authorization credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    try:
-        token = credentials.credentials
-    except AttributeError as e:
-        logger.error(
-            f"Missing credentials.credentials in get_current_user: {e}", exc_info=True
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
     # Create auth service with a sync session
     with db.get_session() as session:
         auth_service = AuthService(
@@ -477,6 +478,29 @@ async def get_current_user(
                 detail="Invalid authentication token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+
+        # Check if token has been blacklisted (logout, rotation, etc.)
+        try:
+            from omoi_os.services.token_blacklist import get_token_blacklist
+
+            blacklist = get_token_blacklist()
+            if token_data.jti and await blacklist.is_blacklisted(token_data.jti):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token has been revoked",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            if token_data.iat and await blacklist.is_user_blacklisted_since(
+                str(token_data.user_id), token_data.iat
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token has been revoked",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        except RuntimeError:
+            # TokenBlacklistService not initialized — skip check (e.g., in tests)
+            pass
 
         # Load user from database
         user = session.get(User, token_data.user_id)
@@ -512,6 +536,7 @@ _optional_security = HTTPBearer(auto_error=False)
 
 
 async def get_approved_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: "DatabaseService" = Depends(get_db_service),
 ) -> "User":
@@ -522,6 +547,7 @@ async def get_approved_user(
     Waitlist users will get a 403 Forbidden with a message about their status.
 
     Args:
+        request: FastAPI Request object (for cookie access)
         credentials: HTTP Bearer token credentials
         db: Database service
 
@@ -532,7 +558,7 @@ async def get_approved_user(
         HTTPException: If user is on waitlist (403) or not authenticated (401)
     """
     # First, get the authenticated user
-    user = await get_current_user(credentials, db)
+    user = await get_current_user(request, credentials, db)
 
     # Check waitlist status
     if hasattr(user, "waitlist_status") and user.waitlist_status != "approved":
@@ -550,6 +576,7 @@ async def get_approved_user(
 
 
 async def get_current_user_optional(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_security),
     db: "DatabaseService" = Depends(get_db_service),
 ):
@@ -562,7 +589,7 @@ async def get_current_user_optional(
         return None
 
     try:
-        return await get_current_user(credentials, db)
+        return await get_current_user(request, credentials, db)
     except Exception:
         return None
 

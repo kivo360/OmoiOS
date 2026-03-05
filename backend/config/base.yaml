@@ -3,6 +3,9 @@ llm:
   api_key: null  # Set LLM_API_KEY in .env or .env.local
   base_url: https://api.z.ai/api/coding/paas/v4
   fireworks_api_key: null  # Set LLM_FIREWORKS_API_KEY in .env or .env.local
+  mode: "live"
+  recording_dir: ".llm-recordings"
+  replay_strict: false
 
 database:
   # Override with DATABASE_URL in .env or .env.local
@@ -49,7 +52,7 @@ auth:
   require_uppercase: true
   require_lowercase: true
   require_digit: true
-  require_special_char: false
+  require_special_char: true
   max_login_attempts: 5
   login_attempt_window_minutes: 15
   session_expire_days: 30
@@ -82,6 +85,8 @@ monitoring:
   health_check_interval_seconds: 30
   auto_steering_enabled: false
   max_concurrent_analyses: 5
+  replay_mode: false
+  replay_dir: ".monitoring-recordings"
 
 diagnostic:
   enabled: false  # DISABLED - runaway loop detected, see sandbox_lifecycle_state_machine.md
@@ -93,6 +98,9 @@ diagnostic:
 
 worker:
   concurrency: 2
+
+orchestrator:
+  dry_run: false
 
 daytona:
   api_key: null  # Set DAYTONA_API_KEY in .env or .env.local
@@ -174,3 +182,20 @@ billing:
   # STRIPE_PUBLISHABLE_KEY - Publishable key (pk_test_... or pk_live_...)
   # STRIPE_WEBHOOK_SECRET - Webhook signing secret (whsec_...)
 
+git:
+  provider: "github"
+  local_repos_dir: ".local-repos"
+
+
+spec:
+  fixture_mode: false
+  fixture_dir: "subsystems/spec-sandbox/.claude/skills/spec-driven-dev/references"
+
+sandbox:
+  provider: "daytona"
+
+  local_image: "nikolaik/python-nodejs:python3.12-nodejs22"
+
+  local_mount_workspace: null
+
+  local_api_base_url: "http://host.docker.internal:18000"

@@ -2,7 +2,8 @@
 
 from datetime import timedelta
 from typing import Optional, Tuple
-from uuid import UUID
+from uuid import UUID, uuid4
+import re
 import secrets
 import hashlib
 
@@ -30,10 +31,10 @@ def _verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 class TokenData(BaseModel):
-    """Token payload data."""
-
     user_id: UUID
-    token_type: str  # "access" or "refresh"
+    token_type: str
+    jti: Optional[str] = None
+    iat: Optional[float] = None
 
 
 class AuthService:
@@ -63,12 +64,6 @@ class AuthService:
         return _verify_password(plain_password, hashed_password)
 
     def validate_password_strength(self, password: str) -> Tuple[bool, Optional[str]]:
-        """
-        Validate password strength.
-
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
         if len(password) < 8:
             return False, "Password must be at least 8 characters"
 
@@ -81,54 +76,82 @@ class AuthService:
         if not any(c.isdigit() for c in password):
             return False, "Password must contain at least one digit"
 
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>\[\]\\~`_+\-=/;\']', password):
+            return False, "Password must contain at least one special character"
+
+        # Reject extremely common passwords (case-insensitive)
+        common = {
+            "password",
+            "12345678",
+            "123456789",
+            "1234567890",
+            "qwerty123",
+            "password1",
+            "password123",
+            "iloveyou1",
+            "admin123",
+            "welcome1",
+            "letmein1",
+            "monkey123",
+            "master123",
+            "dragon123",
+            "login123",
+            "abc12345",
+            "qwerty12",
+            "trustno1",
+            "baseball1",
+            "shadow123",
+        }
+        if password.lower() in common:
+            return False, "This password is too common. Please choose a stronger one."
+
         return True, None
 
-    # JWT operations
     def create_access_token(
         self, user_id: UUID, expires_delta: Optional[timedelta] = None
-    ) -> str:
-        """Create JWT access token."""
+    ) -> Tuple[str, str]:
+        """Create JWT access token. Returns (token, jti)."""
         if expires_delta:
             expire = utc_now() + expires_delta
         else:
             expire = utc_now() + timedelta(minutes=self.access_token_expire_minutes)
 
+        jti = str(uuid4())
         payload = {
             "sub": str(user_id),
             "exp": expire.timestamp(),
             "iat": utc_now().timestamp(),
             "type": "access",
+            "jti": jti,
         }
 
-        return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+        token = jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+        return token, jti
 
     def create_refresh_token(
         self, user_id: UUID, expires_delta: Optional[timedelta] = None
-    ) -> str:
-        """Create JWT refresh token."""
+    ) -> Tuple[str, str]:
+        """Create JWT refresh token. Returns (token, jti)."""
         if expires_delta:
             expire = utc_now() + expires_delta
         else:
             expire = utc_now() + timedelta(days=self.refresh_token_expire_days)
 
+        jti = str(uuid4())
         payload = {
             "sub": str(user_id),
             "exp": expire.timestamp(),
             "iat": utc_now().timestamp(),
             "type": "refresh",
+            "jti": jti,
         }
 
-        return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+        token = jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+        return token, jti
 
     def verify_token(
         self, token: str, token_type: str = "access"
     ) -> Optional[TokenData]:
-        """
-        Verify and decode JWT token.
-
-        Returns:
-            TokenData if valid, None if invalid
-        """
         try:
             payload = jwt.decode(
                 token, self.jwt_secret, algorithms=[self.jwt_algorithm]
@@ -140,7 +163,12 @@ class AuthService:
             if payload_type != token_type:
                 return None
 
-            return TokenData(user_id=user_id, token_type=payload_type)
+            return TokenData(
+                user_id=user_id,
+                token_type=payload_type,
+                jti=payload.get("jti"),
+                iat=payload.get("iat"),
+            )
 
         except (JWTError, ValueError, KeyError):
             return None
@@ -209,7 +237,7 @@ class AuthService:
         """
         result = await self.db.execute(
             select(User).where(
-                User.email == email, User.is_active is True, User.deleted_at.is_(None)
+                User.email == email, User.is_active.is_(True), User.deleted_at.is_(None)
             )
         )
         user = result.scalar_one_or_none()
@@ -236,7 +264,7 @@ class AuthService:
         """Get user by ID."""
         result = await self.db.execute(
             select(User).where(
-                User.id == user_id, User.is_active is True, User.deleted_at.is_(None)
+                User.id == user_id, User.is_active.is_(True), User.deleted_at.is_(None)
             )
         )
         return result.scalar_one_or_none()
@@ -285,7 +313,7 @@ class AuthService:
             select(Session)
             .where(Session.token_hash == token_hash, Session.expires_at > utc_now())
             .join(User)
-            .where(User.is_active is True, User.deleted_at.is_(None))
+            .where(User.is_active.is_(True), User.deleted_at.is_(None))
         )
         session = result.scalar_one_or_none()
 
@@ -309,8 +337,8 @@ class AuthService:
 
     async def cleanup_expired_sessions(self):
         """Remove expired sessions."""
-        await self.db.execute(select(Session).where(Session.expires_at <= utc_now()))
-        # SQLAlchemy will handle the delete
+        await self.db.execute(delete(Session).where(Session.expires_at <= utc_now()))
+        # Delete expired sessions from the database
         await self.db.commit()
 
     # API Key operations
@@ -378,7 +406,7 @@ class AuthService:
 
         result = await self.db.execute(
             select(APIKey)
-            .where(APIKey.hashed_key == hashed_key, APIKey.is_active is True)
+            .where(APIKey.hashed_key == hashed_key, APIKey.is_active.is_(True))
             .where((APIKey.expires_at.is_(None)) | (APIKey.expires_at > utc_now()))
         )
         api_key = result.scalar_one_or_none()
@@ -390,7 +418,7 @@ class AuthService:
         user_result = await self.db.execute(
             select(User).where(
                 User.id == api_key.user_id,
-                User.is_active is True,
+                User.is_active.is_(True),
                 User.deleted_at.is_(None),
             )
         )
@@ -415,17 +443,20 @@ class AuthService:
         await self.db.commit()
 
     # Email verification
-    def create_verification_token(self, user_id: UUID) -> str:
-        """Create email verification token."""
+    def create_verification_token(self, user_id: UUID) -> Tuple[str, str]:
+        """Create email verification token. Returns (token, jti)."""
         expire = utc_now() + timedelta(hours=24)
 
+        jti = str(uuid4())
         payload = {
             "sub": str(user_id),
             "exp": expire.timestamp(),
             "type": "email_verification",
+            "jti": jti,
         }
 
-        return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+        token = jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+        return token, jti
 
     async def verify_email(self, token: str) -> bool:
         """
@@ -447,17 +478,20 @@ class AuthService:
         return True
 
     # Password reset
-    def create_reset_token(self, user_id: UUID) -> str:
-        """Create password reset token."""
+    def create_reset_token(self, user_id: UUID) -> Tuple[str, str]:
+        """Create password reset token. Returns (token, jti)."""
         expire = utc_now() + timedelta(hours=1)
 
+        jti = str(uuid4())
         payload = {
             "sub": str(user_id),
             "exp": expire.timestamp(),
             "type": "password_reset",
+            "jti": jti,
         }
 
-        return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+        token = jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+        return token, jti
 
     async def reset_password(self, token: str, new_password: str) -> bool:
         """

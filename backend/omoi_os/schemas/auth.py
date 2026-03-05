@@ -4,7 +4,14 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+    ConfigDict,
+    field_validator,
+    model_validator,
+)
 
 
 class UserBase(BaseModel):
@@ -31,6 +38,10 @@ class UserCreate(UserBase):
             raise ValueError("Password must contain at least one lowercase letter")
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one digit")
+        import re
+
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>\[\]\\~`_+\-=/;\']', v):
+            raise ValueError("Password must contain at least one special character")
         return v
 
 
@@ -56,6 +67,18 @@ class UserResponse(UserBase):
     last_login_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def _strip_sensitive_attributes(self) -> "UserResponse":
+        """Strip OAuth tokens and other sensitive data from attributes before API response."""
+        if self.attributes:
+            sensitive_suffixes = ("_access_token", "_refresh_token", "_client_secret")
+            self.attributes = {
+                k: v
+                for k, v in self.attributes.items()
+                if not any(k.endswith(suffix) for suffix in sensitive_suffixes)
+            }
+        return self
 
 
 class LoginRequest(BaseModel):
@@ -108,6 +131,10 @@ class ResetPasswordRequest(BaseModel):
             raise ValueError("Password must contain at least one lowercase letter")
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one digit")
+        import re
+
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>\[\]\\~`_+\-=/;\']', v):
+            raise ValueError("Password must contain at least one special character")
         return v
 
 
@@ -157,4 +184,8 @@ class ChangePasswordRequest(BaseModel):
             raise ValueError("Password must contain at least one lowercase letter")
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one digit")
+        import re
+
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>\[\]\\~`_+\-=/;\']', v):
+            raise ValueError("Password must contain at least one special character")
         return v

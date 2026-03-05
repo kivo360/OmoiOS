@@ -726,6 +726,11 @@ async def lifespan(app: FastAPI):
         connect_timeout=app_settings.database.connect_timeout,
     )
     event_bus = EventBusService(redis_url=app_settings.redis.url)
+
+    # Initialize token blacklist service (Redis-based JWT invalidation)
+    from omoi_os.services.token_blacklist import init_token_blacklist
+
+    token_blacklist = init_token_blacklist(app_settings.redis.url)
     queue = TaskQueueService(
         db, event_bus=event_bus
     )  # Pass event_bus for real-time updates
@@ -932,6 +937,13 @@ async def lifespan(app: FastAPI):
             logger.info("Intelligent Monitoring Loop stopped")
         except Exception as e:
             logger.warning("Error stopping MonitoringLoop", error=str(e))
+
+    # Cleanup token blacklist Redis connection
+    try:
+        await token_blacklist.close()
+        logger.info("Token blacklist service closed")
+    except Exception as e:
+        logger.warning("Error closing token blacklist", error=str(e))
 
     # Await task cancellation (only if tasks were started)
     if orchestrator_task:

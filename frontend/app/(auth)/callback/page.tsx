@@ -24,19 +24,38 @@ function CallbackContent() {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [provider, setProvider] = useState<string>("");
 
+  // Parse hash fragment params (tokens are sent via # to avoid server-side leakage)
+  function getHashParams(): URLSearchParams {
+    if (typeof window === "undefined") return new URLSearchParams();
+    return new URLSearchParams(window.location.hash.substring(1));
+  }
+
   useEffect(() => {
     const handleCallback = async () => {
+      const hashParams = getHashParams();
+
+      // Clear hash from URL immediately to prevent token exposure in address bar
+      if (typeof window !== "undefined" && window.location.hash) {
+        window.history.replaceState(
+          null,
+          "",
+          window.location.pathname + window.location.search
+        );
+      }
+
       // Check if this is a "connect" callback (linking GitHub to existing user)
       const isConnect = searchParams.get("connect") === "true";
       const connected = searchParams.get("connected") === "true";
       const username = searchParams.get("username");
-      const providerName = searchParams.get("provider");
+      // Provider can come from query params (connect/error) or hash (login flow)
+      const providerName =
+        searchParams.get("provider") || hashParams.get("provider");
 
       if (providerName) {
         setProvider(providerName);
       }
 
-      // Check for error from OAuth provider
+      // Check for error from OAuth provider (always in query params)
       const error = searchParams.get("error");
       if (error) {
         setStatus("error");
@@ -65,10 +84,9 @@ function CallbackContent() {
         return;
       }
 
-      // Regular OAuth login flow
-      // Get tokens from URL
-      const accessToken = searchParams.get("access_token");
-      const refreshToken = searchParams.get("refresh_token");
+      // Regular OAuth login flow — tokens are in the URL hash fragment
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
 
       if (!accessToken || !refreshToken) {
         setStatus("error");

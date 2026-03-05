@@ -1,12 +1,12 @@
 """Authentication API routes."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
 
 from omoi_os.api.dependencies import get_db_session, get_current_user, get_auth_service
 from omoi_os.logging import get_logger
@@ -41,8 +41,8 @@ security = HTTPBearer()
 )
 @limiter.limit("3/hour")
 async def register(
-    http_request: Request,
-    request: UserCreate,
+    request: Request,
+    body: UserCreate,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
 ):
@@ -55,21 +55,23 @@ async def register(
     try:
         # Build waitlist metadata
         waitlist_metadata = None
-        if request.referral_source:
-            waitlist_metadata = {"referral_source": request.referral_source}
+        if body.referral_source:
+            waitlist_metadata = {"referral_source": body.referral_source}
 
         user = await auth_service.register_user(
-            email=request.email,
-            password=request.password,
-            full_name=request.full_name,
-            department=request.department,
+            email=body.email,
+            password=body.password,
+            full_name=body.full_name,
+            department=body.department,
             waitlist_metadata=waitlist_metadata,
         )
 
         # Send verification email
         email_service = get_email_service()
         if email_service.enabled:
-            verification_token = auth_service.create_verification_token(user.id)
+            verification_token, _vt_jti = auth_service.create_verification_token(
+                user.id
+            )
             await email_service.send_verification_email(
                 to_email=user.email,
                 token=verification_token,
@@ -85,15 +87,15 @@ async def register(
 @router.post("/resend-verification")
 @limiter.limit("3/hour")
 async def resend_verification(
-    http_request: Request,
-    request: ForgotPasswordRequest,  # Reuse - just needs email
+    request: Request,
+    body: ForgotPasswordRequest,  # Reuse - just needs email
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """Resend verification email."""
     # Find user by email
     result = await db.execute(
-        select(User).where(User.email == request.email, User.deleted_at.is_(None))
+        select(User).where(User.email == body.email, User.deleted_at.is_(None))
     )
     user = result.scalar_one_or_none()
 
@@ -107,7 +109,7 @@ async def resend_verification(
     # Send verification email
     email_service = get_email_service()
     if email_service.enabled:
-        verification_token = auth_service.create_verification_token(user.id)
+        verification_token, _vt_jti = auth_service.create_verification_token(user.id)
         await email_service.send_verification_email(
             to_email=user.email,
             token=verification_token,
@@ -120,8 +122,8 @@ async def resend_verification(
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 async def login(
-    http_request: Request,
-    request: LoginRequest,
+    request: Request,
+    body: LoginRequest,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
 ):
@@ -129,12 +131,52 @@ async def login(
     Authenticate user and return JWT tokens.
 
     Returns access token (15min) and refresh token (7d).
+    Includes account lockout after too many failed attempts.
     """
+    client_ip = request.client.host if request.client else None
+
+    # Check account lockout
+    try:
+        from omoi_os.services.token_blacklist import get_token_blacklist
+        from omoi_os.config import get_app_settings
+
+        blacklist = get_token_blacklist()
+        auth_settings = get_app_settings().auth
+        if await blacklist.is_locked_out(
+            body.email, max_attempts=auth_settings.max_login_attempts
+        ):
+            await blacklist.log_auth_event(
+                "login_blocked_lockout",
+                email=body.email,
+                ip_address=client_ip,
+                details=f"Account locked after {auth_settings.max_login_attempts} failed attempts",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Account temporarily locked due to too many failed login attempts. Please try again later.",
+            )
+    except RuntimeError:
+        blacklist = None  # Service not initialized (e.g., tests)
+
     user = await auth_service.authenticate_user(
-        email=request.email, password=request.password
+        email=body.email, password=body.password
     )
 
     if not user:
+        # Record failed attempt
+        if blacklist:
+            failed_count = await blacklist.record_failed_login(
+                body.email,
+                window_seconds=auth_settings.login_attempt_window_minutes * 60
+                if hasattr(auth_settings, "login_attempt_window_minutes")
+                else 900,
+            )
+            await blacklist.log_auth_event(
+                "login_failed",
+                email=body.email,
+                ip_address=client_ip,
+                details=f"Failed attempt #{failed_count}",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         )
@@ -142,35 +184,88 @@ async def login(
     # Extract user ID before session might close (prevent detached instance error)
     user_id = user.id
 
-    # Create tokens
-    access_token = auth_service.create_access_token(user_id)
-    refresh_token = auth_service.create_refresh_token(user_id)
+    # Clear failed login counter on success
+    if blacklist:
+        await blacklist.clear_failed_logins(body.email)
+        await blacklist.log_auth_event(
+            "login_success",
+            user_id=str(user_id),
+            email=body.email,
+            ip_address=client_ip,
+        )
 
-    return TokenResponse(
+    # Create tokens (tuple unpacking: token, jti)
+    access_token, _access_jti = auth_service.create_access_token(user_id)
+    refresh_token, _refresh_jti = auth_service.create_refresh_token(user_id)
+
+    # Set httpOnly cookies for browser clients
+    from fastapi.responses import JSONResponse
+    from omoi_os.api.cookie_auth import set_auth_cookies
+
+    response_data = TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=auth_service.access_token_expire_minutes * 60,
     )
+    response = JSONResponse(content=response_data.model_dump())
+    set_auth_cookies(response, access_token, refresh_token)
+    return response
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
-    request: RefreshTokenRequest,
+    request: Request,
+    body: Optional[RefreshTokenRequest] = None,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """
     Refresh access token using refresh token.
 
-    Returns new access token and refresh token.
+    Accepts refresh token from request body OR httpOnly cookie.
+    Implements token rotation: old refresh token is blacklisted,
+    new access + refresh token pair is issued.
     """
+    # Get refresh token from body or cookie
+    refresh_token_value = None
+    if body and body.refresh_token:
+        refresh_token_value = body.refresh_token
+    if not refresh_token_value:
+        from omoi_os.api.cookie_auth import get_refresh_token_from_request
+
+        refresh_token_value = get_refresh_token_from_request(request)
+    if not refresh_token_value:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token"
+        )
+
     # Verify refresh token
-    token_data = auth_service.verify_token(request.refresh_token, token_type="refresh")
+    token_data = auth_service.verify_token(refresh_token_value, token_type="refresh")
 
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
+
+    # Check if this refresh token has been blacklisted (already rotated)
+    try:
+        from omoi_os.services.token_blacklist import get_token_blacklist
+
+        blacklist = get_token_blacklist()
+        if token_data.jti and await blacklist.is_blacklisted(token_data.jti):
+            # Potential token reuse attack — blacklist ALL user tokens
+            await blacklist.blacklist_all_user_tokens(str(token_data.user_id))
+            await blacklist.log_auth_event(
+                "refresh_token_reuse",
+                user_id=str(token_data.user_id),
+                details="Possible token theft: reused refresh token detected",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked. Please log in again.",
+            )
+    except RuntimeError:
+        blacklist = None
 
     # Verify user still exists and is active
     user = await auth_service.get_user_by_id(token_data.user_id)
@@ -182,31 +277,82 @@ async def refresh_token(
     # Extract user ID before session might close (prevent detached instance error)
     user_id = user.id
 
-    # Create new tokens
-    access_token = auth_service.create_access_token(user_id)
-    new_refresh_token = auth_service.create_refresh_token(user_id)
+    # Blacklist the old refresh token (rotation)
+    if blacklist and token_data.jti:
+        refresh_ttl = auth_service.refresh_token_expire_days * 86400
+        await blacklist.blacklist_token(token_data.jti, ttl_seconds=refresh_ttl)
+        await blacklist.log_auth_event(
+            "token_refresh", user_id=str(user_id), details="Refresh token rotated"
+        )
 
-    return TokenResponse(
+    # Create new tokens (tuple unpacking)
+    access_token, _access_jti = auth_service.create_access_token(user_id)
+    new_refresh_token, _refresh_jti = auth_service.create_refresh_token(user_id)
+
+    # Return tokens in body and set httpOnly cookies
+    from fastapi.responses import JSONResponse
+    from omoi_os.api.cookie_auth import set_auth_cookies
+
+    response_data = TokenResponse(
         access_token=access_token,
         refresh_token=new_refresh_token,
         expires_in=auth_service.access_token_expire_minutes * 60,
     )
+    response = JSONResponse(content=response_data.model_dump())
+    set_auth_cookies(response, access_token, new_refresh_token)
+    return response
 
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+        HTTPBearer(auto_error=False)
+    ),
 ):
     """
     Logout current user.
 
-    Invalidates current session (if using session-based auth).
-    For JWT, client should discard tokens.
+    Blacklists the current access token so it cannot be reused.
     """
-    # TODO: Track logout in audit log
-    return {"message": "Logged out successfully"}
+    client_ip = request.client.host if request.client else None
+
+    try:
+        from omoi_os.services.token_blacklist import get_token_blacklist
+
+        blacklist = get_token_blacklist()
+
+        # Extract JTI from the current token
+        from omoi_os.services.auth_service import AuthService
+        from omoi_os.config import settings
+
+        auth_svc = AuthService(
+            db=None,  # type: ignore  # Not needed for verify_token
+            jwt_secret=settings.jwt_secret_key,
+            jwt_algorithm=settings.jwt_algorithm,
+        )
+        if credentials:
+            token_data = auth_svc.verify_token(
+                credentials.credentials, token_type="access"
+            )
+            if token_data and token_data.jti:
+                # Blacklist for remaining token lifetime (access token = 15min max)
+                access_ttl = settings.access_token_expire_minutes * 60
+                await blacklist.blacklist_token(token_data.jti, ttl_seconds=access_ttl)
+
+        await blacklist.log_auth_event(
+            "logout", user_id=str(current_user.id), ip_address=client_ip
+        )
+    except RuntimeError:
+        pass  # Blacklist service not initialized
+
+    from fastapi.responses import JSONResponse
+    from omoi_os.api.cookie_auth import clear_auth_cookies
+
+    response = JSONResponse(content={"message": "Logged out successfully"})
+    clear_auth_cookies(response)
+    return response
 
 
 @router.get("/me", response_model=UserResponse)
@@ -255,13 +401,28 @@ async def update_current_user(
 @router.post("/verify-email")
 @limiter.limit("10/hour")
 async def verify_email(
-    http_request: Request,
-    request: VerifyEmailRequest,
+    request: Request,
+    body: VerifyEmailRequest,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """Verify user email using verification token."""
-    success = await auth_service.verify_email(request.token)
+    # Check if verification token has already been used (single-use)
+    token_data = auth_service.verify_token(body.token, token_type="verification")
+    if token_data and token_data.jti:
+        try:
+            from omoi_os.services.token_blacklist import get_token_blacklist
+
+            blacklist = get_token_blacklist()
+            if await blacklist.is_blacklisted(token_data.jti):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This verification link has already been used",
+                )
+        except RuntimeError:
+            pass
+
+    success = await auth_service.verify_email(body.token)
 
     if not success:
         raise HTTPException(
@@ -269,14 +430,29 @@ async def verify_email(
             detail="Invalid or expired verification token",
         )
 
+    # Blacklist the verification token so it can't be reused
+    if token_data and token_data.jti:
+        try:
+            from omoi_os.services.token_blacklist import get_token_blacklist
+
+            blacklist = get_token_blacklist()
+            await blacklist.blacklist_token(token_data.jti, ttl_seconds=86400)  # 24h
+            await blacklist.log_auth_event(
+                "email_verified",
+                user_id=str(token_data.user_id),
+                ip_address=request.client.host if request.client else None,
+            )
+        except RuntimeError:
+            pass
+
     return {"message": "Email verified successfully"}
 
 
 @router.post("/forgot-password")
 @limiter.limit("3/hour")
 async def forgot_password(
-    http_request: Request,
-    request: ForgotPasswordRequest,
+    request: Request,
+    body: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
 ):
@@ -290,28 +466,25 @@ async def forgot_password(
     from email_validator import validate_email, EmailNotValidError
 
     try:
-        validate_email(request.email, check_deliverability=False)
+        validate_email(body.email, check_deliverability=False)
     except EmailNotValidError:
         return {
             "message": "If an account with that email exists, a password reset link has been sent."
         }
 
-    user = await auth_service.get_user_by_email(request.email)
+    user = await auth_service.get_user_by_email(body.email)
 
     if user:
         # Extract user ID before session might close (prevent detached instance error)
         user_id = user.id
 
         # Generate reset token
-        reset_token = auth_service.create_reset_token(user_id)
+        reset_token, _reset_jti = auth_service.create_reset_token(user_id)
 
         # TODO: Send email with reset link
         # In production, this token should be sent via email, not returned
         # For development/testing, log the token (check server logs)
-        logger.info(
-            f"Password reset requested for {request.email}. "
-            f"Token (DEV ONLY - remove in production): {reset_token}"
-        )
+        logger.info(f"Password reset requested for {body.email}")
 
     # Always return success to prevent email enumeration
     return {
@@ -321,18 +494,47 @@ async def forgot_password(
 
 @router.post("/reset-password")
 async def reset_password(
-    request: ResetPasswordRequest,
+    request: Request,
+    body: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    """Reset password using reset token."""
+    """Reset password using reset token. Token is single-use."""
+    # Check if reset token has already been used
+    token_data = auth_service.verify_token(body.token, token_type="reset")
+    if token_data and token_data.jti:
+        try:
+            from omoi_os.services.token_blacklist import get_token_blacklist
+
+            blacklist = get_token_blacklist()
+            if await blacklist.is_blacklisted(token_data.jti):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This password reset link has already been used",
+                )
+        except RuntimeError:
+            blacklist = None
+    else:
+        blacklist = None
+
     try:
-        success = await auth_service.reset_password(request.token, request.new_password)
+        success = await auth_service.reset_password(body.token, body.new_password)
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid or expired reset token",
+            )
+
+        # Blacklist the reset token (single-use) and all user tokens (password changed)
+        if blacklist and token_data:
+            if token_data.jti:
+                await blacklist.blacklist_token(token_data.jti, ttl_seconds=86400)
+            await blacklist.blacklist_all_user_tokens(str(token_data.user_id))
+            await blacklist.log_auth_event(
+                "password_reset",
+                user_id=str(token_data.user_id),
+                ip_address=request.client.host if request.client else None,
             )
 
         return {"message": "Password reset successfully"}
@@ -343,15 +545,16 @@ async def reset_password(
 
 @router.post("/change-password")
 async def change_password(
-    request: ChangePasswordRequest,
+    request: Request,
+    body: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    """Change password for authenticated user."""
+    """Change password for authenticated user. Invalidates all existing tokens."""
     # Verify current password
     if not auth_service.verify_password(
-        request.current_password, current_user.hashed_password
+        body.current_password, current_user.hashed_password
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -359,7 +562,7 @@ async def change_password(
         )
 
     # Validate new password
-    is_valid, error_msg = auth_service.validate_password_strength(request.new_password)
+    is_valid, error_msg = auth_service.validate_password_strength(body.new_password)
     if not is_valid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
@@ -370,9 +573,23 @@ async def change_password(
     await db.execute(
         update(UserModel)
         .where(UserModel.id == current_user.id)
-        .values(hashed_password=auth_service.hash_password(request.new_password))
+        .values(hashed_password=auth_service.hash_password(body.new_password))
     )
     await db.commit()
+
+    # Blacklist all existing tokens for this user (force re-login)
+    try:
+        from omoi_os.services.token_blacklist import get_token_blacklist
+
+        blacklist = get_token_blacklist()
+        await blacklist.blacklist_all_user_tokens(str(current_user.id))
+        await blacklist.log_auth_event(
+            "password_change",
+            user_id=str(current_user.id),
+            ip_address=request.client.host if request.client else None,
+        )
+    except RuntimeError:
+        pass  # Blacklist service not initialized
 
     return {"message": "Password changed successfully"}
 

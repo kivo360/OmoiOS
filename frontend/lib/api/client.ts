@@ -234,14 +234,17 @@ let isRefreshing = false;
 let refreshPromise: Promise<boolean> | null = null;
 
 async function refreshAccessToken(): Promise<boolean> {
+  // Try refresh via httpOnly cookie first (no localStorage needed),
+  // fall back to localStorage refresh token for backwards compat
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      credentials: "include",
+      // Send refresh token in body as fallback (cookie is primary)
+      body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
     });
 
     if (!response.ok) {
@@ -250,7 +253,10 @@ async function refreshAccessToken(): Promise<boolean> {
     }
 
     const data = await response.json();
-    setTokens(data.access_token, data.refresh_token);
+    // Dual-write: server sets httpOnly cookies AND returns tokens in body
+    if (data.access_token && data.refresh_token) {
+      setTokens(data.access_token, data.refresh_token);
+    }
     return true;
   } catch {
     clearTokens();
@@ -310,6 +316,7 @@ export async function apiRequest<T>(
   const requestInit: RequestInit = {
     method,
     headers: requestHeaders,
+    credentials: "include",
   };
 
   if (body && method !== "GET") {

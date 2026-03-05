@@ -71,6 +71,7 @@ def test_user(db_service: DatabaseService) -> User:
             is_active=True,
             is_verified=True,
             is_super_admin=False,
+            waitlist_status="approved",
         )
         session.add(user)
         session.commit()
@@ -101,6 +102,7 @@ def admin_user(db_service: DatabaseService) -> User:
             is_active=True,
             is_verified=True,
             is_super_admin=True,
+            waitlist_status="approved",
         )
         session.add(user)
         session.commit()
@@ -127,7 +129,8 @@ def auth_token(db_service: DatabaseService, test_user: User) -> str:
         access_token_expire_minutes=auth_settings.access_token_expire_minutes,
         refresh_token_expire_days=auth_settings.refresh_token_expire_days,
     )
-    return auth_service.create_access_token(test_user.id)
+    token, _jti = auth_service.create_access_token(test_user.id)
+    return token
 
 
 @pytest.fixture
@@ -178,6 +181,7 @@ def mock_user() -> User:
         is_active=True,
         is_verified=True,
         is_super_admin=False,
+        waitlist_status="approved",
         created_at=datetime.now(timezone.utc),
     )
 
@@ -200,7 +204,14 @@ def mock_authenticated_client(
     from omoi_os.api.main import app
     from omoi_os.api.dependencies import get_current_user
 
-    async def override_get_current_user():
+    from fastapi import Request
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    async def override_get_current_user(
+        request: Request = None,
+        credentials: HTTPAuthorizationCredentials = None,
+        db=None,
+    ):
         return mock_user
 
     app.dependency_overrides[get_current_user] = override_get_current_user
@@ -491,3 +502,48 @@ def sample_task_with_sandbox(
         session.refresh(task)
         session.expunge(task)
         return task
+
+
+# =============================================================================
+# MOCK SERVICE FIXTURES (Part K - Unified Mock Service Layer)
+# =============================================================================
+
+
+@pytest.fixture
+def mock_llm():
+    """Provides a MockLLMService with call tracking."""
+    from tests.mocks.llm import MockLLMService
+
+    return MockLLMService()
+
+
+@pytest.fixture
+def mock_github():
+    """Provides a MockGitHubService with in-memory state."""
+    from tests.mocks.github import MockGitHubService
+
+    return MockGitHubService()
+
+
+@pytest.fixture
+def mock_event_bus():
+    """Provides a MockEventBus that captures events without Redis."""
+    from tests.mocks.event_bus import MockEventBus
+
+    return MockEventBus()
+
+
+@pytest.fixture
+def mock_daytona():
+    """Provides a MockDaytonaService with in-memory sandbox tracking."""
+    from tests.mocks.daytona import MockDaytonaService
+
+    return MockDaytonaService()
+
+
+@pytest.fixture
+def mock_stripe():
+    """Provides a MockStripeService with in-memory state."""
+    from tests.mocks.stripe import MockStripeService
+
+    return MockStripeService()
