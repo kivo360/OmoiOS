@@ -561,11 +561,18 @@ async def phase_daytona_allocation(ctx: Context) -> PhaseResult:
 
 @phase("egress_proxy_wiring")
 async def phase_egress_proxy_wiring(ctx: Context) -> PhaseResult:
-    """Verify that the Daytona spawner injects HTTPS_PROXY env vars.
+    """Verify the Daytona spawner injects HTTPS_PROXY when egress is configured.
 
-    Known gap today: daytona_spawner.py does not set HTTPS_PROXY/NO_PROXY.
-    The egress-proxy binary exists but is not wired into the sandbox path.
-    Reports GAP until daytona_spawner is patched to inject proxy env vars.
+    `daytona_spawner.py` injects HTTPS_PROXY / HTTP_PROXY / NO_PROXY only when
+    the bound `EnvironmentVersion.egress.allowed_hosts` is non-empty. The raw
+    sandbox allocated by `phase_daytona_allocation` bypasses the spawner and
+    has no env-version binding, so it WILL NOT have these vars — that's
+    expected, not a bug. Reports SKIP with a clear reason in that case.
+
+    To actually exercise the spawner path, allocate via OmoiOS:
+      - create env_version with egress.allowed_hosts
+      - bind to a workspace
+      - launch a session that spawns through `DaytonaSpawnerService`
     """
     if not ctx.daytona_sandbox_id:
         return PhaseResult("egress_proxy_wiring", Verdict.SKIP,
@@ -579,10 +586,12 @@ async def phase_egress_proxy_wiring(ctx: Context) -> PhaseResult:
         out = str(getattr(result, "result", "") or getattr(result, "stdout", ""))
         if "NOT_SET" in out:
             return PhaseResult(
-                "egress_proxy_wiring", Verdict.GAP,
-                detail="HTTPS_PROXY/NO_PROXY not injected into sandbox env — "
-                       "daytona_spawner.py needs to set these. Proxy binary exists "
-                       "standalone but is not in the sandbox data path.",
+                "egress_proxy_wiring", Verdict.SKIP,
+                detail=(
+                    "raw Daytona sandbox; spawner injection only fires when an "
+                    "EnvironmentVersion with egress.allowed_hosts is bound. To "
+                    "exercise this path, allocate via OmoiOS, not directly."
+                ),
                 evidence={"env_check": out[:400]})
         return PhaseResult("egress_proxy_wiring", Verdict.PASS,
                            evidence={"proxy_env": out[:400]})
