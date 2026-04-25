@@ -358,6 +358,19 @@ async def phase_artifacts_roundtrip(ctx: Context) -> PhaseResult:
 @phase("webhooks_hmac")
 async def phase_webhooks_hmac(ctx: Context) -> PhaseResult:
     """Register subscription → trigger event → catcher receives + HMAC verifies."""
+    # Webhook delivery requires the API server to be able to reach back to the
+    # local HTTP catcher. When the API is remote (Railway/staging/prod) it
+    # cannot dial 127.0.0.1, so this phase is meaningless without a tunnel.
+    # SKIP rather than FAIL so the run reflects real product health.
+    if "localhost" not in API_BASE_URL and "127.0.0.1" not in API_BASE_URL:
+        return PhaseResult(
+            "webhooks_hmac",
+            Verdict.SKIP,
+            detail=(
+                "remote API cannot reach 127.0.0.1 catcher; "
+                "run against a local API or expose the catcher via tunnel"
+            ),
+        )
     catcher = WebhookCatcher()
     url = catcher.start()
     ctx.webhook_secret = f"whsec_{secrets.token_hex(16)}"
