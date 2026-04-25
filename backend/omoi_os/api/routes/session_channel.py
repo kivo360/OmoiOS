@@ -57,25 +57,34 @@ class SessionChannelManager:
         self._subscribed_sessions: set[str] = set()
 
     async def join(self, session_id: str, ws: WebSocket, user_id: UUID) -> None:
-        """Register a new socket on a session and broadcast presence."""
+        """Register a new socket on a session and broadcast presence.
+
+        Presence frames go through Redis (`ch.{session_id}`) so peers on
+        other replicas hear about the join. The bridge fans them out to
+        every local socket, including this one — clients filter by
+        `user_id` to suppress their own echoes (same pattern as
+        cursor.moved). A pure local broadcast would have missed peers
+        whenever the LB pinned them to a different worker.
+        """
         async with self._lock:
             first_on_replica = session_id not in self._rooms
             self._rooms.setdefault(session_id, []).append((ws, user_id))
 
         # First local participant for this session on this replica → subscribe
-        # to its per-session Redis channel so envelopes + cursor.moved from
-        # other replicas fan out here.
+        # to its per-session Redis channel so envelopes + cursor.moved +
+        # participant.* from other replicas fan out here.
         if first_on_replica:
             await self._subscribe_session(session_id)
 
-        await self._broadcast_to(
-            session_id,
-            {"type": "participant.joined", "data": {"user_id": str(user_id)}},
-            exclude=ws,
-        )
+        frame = {"type": "participant.joined", "data": {"user_id": str(user_id)}}
+        if self._bus is not None:
+            self._bus.publish_to_session(session_id, frame)
+        else:
+            # No bus configured (dev/test without Redis) — fall back to local.
+            await self._broadcast_to(session_id, frame, exclude=ws)
 
     async def leave(self, session_id: str, ws: WebSocket, user_id: UUID) -> None:
-        """Unregister a socket and broadcast the departure."""
+        """Unregister a socket and broadcast the departure (cross-replica)."""
         async with self._lock:
             members = self._rooms.get(session_id, [])
             self._rooms[session_id] = [(s, uid) for (s, uid) in members if s is not ws]
@@ -83,11 +92,11 @@ class SessionChannelManager:
             if empty:
                 self._rooms.pop(session_id, None)
 
-        await self._broadcast_to(
-            session_id,
-            {"type": "participant.left", "data": {"user_id": str(user_id)}},
-            exclude=None,
-        )
+        frame = {"type": "participant.left", "data": {"user_id": str(user_id)}}
+        if self._bus is not None:
+            self._bus.publish_to_session(session_id, frame)
+        else:
+            await self._broadcast_to(session_id, frame, exclude=None)
 
         # Last local participant dropped → release the per-session subscription.
         if empty:
@@ -281,13 +290,19 @@ async def session_ws_endpoint(
         return
 
     # Session access check: reuse the dependency as a plain callable.
-    from omoi_os.api.dependencies import get_db_service
+    from omoi_os.api.dependencies import get_db_service, verify_task_access
+
+    # Re-bind onto this module so tests can monkeypatch
+    # `omoi_os.api.routes.session_channel.verify_task_access`. The previous
+    # implementation referenced `_self_mod.verify_task_access` without any
+    # import, raising AttributeError at WS connect time.
+    import omoi_os.api.routes.session_channel as _self_mod
+
+    if not hasattr(_self_mod, "verify_task_access"):
+        _self_mod.verify_task_access = verify_task_access  # type: ignore[attr-defined]
 
     db = get_db_service()
     try:
-        # Use the module-level reference so tests can monkeypatch it.
-        import omoi_os.api.routes.session_channel as _self_mod
-
         await _self_mod.verify_task_access(session_id, user, db)
     except Exception as _exc:  # noqa: BLE001 — HTTPException or missing-row
         # Log the actual error so 4403s aren't a black box. Distinguish a
