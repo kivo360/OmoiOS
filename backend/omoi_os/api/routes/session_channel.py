@@ -289,7 +289,27 @@ async def session_ws_endpoint(
         import omoi_os.api.routes.session_channel as _self_mod
 
         await _self_mod.verify_task_access(session_id, user, db)
-    except Exception:  # noqa: BLE001 — HTTPException or missing-row
+    except Exception as _exc:  # noqa: BLE001 — HTTPException or missing-row
+        # Log the actual error so 4403s aren't a black box. Distinguish a
+        # genuine permission denial (HTTPException 403/404) from an unexpected
+        # crash inside the access check.
+        from fastapi import HTTPException as _H
+
+        if isinstance(_exc, _H):
+            logger.info(
+                "ws session access denied",
+                session_id=session_id,
+                user_id=str(user.id),
+                status_code=_exc.status_code,
+                detail=str(_exc.detail),
+            )
+        else:
+            logger.exception(
+                "ws session access check crashed (treated as forbidden)",
+                session_id=session_id,
+                user_id=str(user.id),
+                exc_type=type(_exc).__name__,
+            )
         await websocket.accept()
         await websocket.send_json({"error": "Forbidden"})
         await websocket.close(code=4403)
