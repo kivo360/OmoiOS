@@ -1,0 +1,9 @@
+
+ ✓ tests/mockClient.test.ts  (26 tests) 16ms
+ ↓ tests/spec-patterns.e2e.test.ts  (7 tests | 7 skipped)
+ ✓ tests/integration.test.ts  (37 tests) 588ms
+
+ Test Files  2 passed | 1 skipped (3)
+      Tests  63 passed | 7 skipped (70)
+   Start at  06:41:02
+   Duration  1.69s (transform 464ms, setup 1ms, collect 1.01s, tests 604ms, environment 1ms, prepare 918ms)

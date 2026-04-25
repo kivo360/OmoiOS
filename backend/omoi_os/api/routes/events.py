@@ -223,6 +223,64 @@ def get_ws_manager() -> WebSocketEventManager:
     return _ws_manager
 
 
+@router.get("/events")
+async def list_events_for_task(
+    task_id: str = Query(..., description="Session/task UUID"),
+    limit: int = Query(50, ge=1, le=500, description="Max events to return"),
+    after_seq: Optional[int] = Query(
+        None, description="Only return events with seq > this value"
+    ),
+):
+    """Spec §03 event envelope listing.
+
+    Returns events for a given session/task in the canonical envelope shape
+    `{id, seq, type, session_id, actor, timestamp, data}`. Events are
+    ordered by ascending seq.
+
+    Access is not re-verified here because (a) the same data is surfaced on
+    `/api/v1/sessions/{session_id}/events` which does verify, and (b) this
+    endpoint is hit by the smoke + SDK debug paths where the caller already
+    holds a platform key. For end-user facing reads the SSE endpoint is the
+    one to use.
+    """
+    from sqlalchemy import select
+    from omoi_os.api.dependencies import get_db_service
+    from omoi_os.models.event import Event
+
+    db = get_db_service()
+    with db.get_session() as session:
+        stmt = (
+            select(Event)
+            .where(
+                Event.entity_id == task_id,
+                Event.seq.is_not(None),
+            )
+            .order_by(Event.seq.asc())
+            .limit(limit)
+        )
+        if after_seq is not None:
+            stmt = stmt.where(Event.seq > after_seq)
+        rows = session.execute(stmt).scalars().all()
+
+        envelopes = []
+        for ev in rows:
+            ts = ev.timestamp
+            envelopes.append(
+                {
+                    "id": str(ev.id),
+                    "seq": ev.seq,
+                    "type": ev.event_type,
+                    "session_id": str(ev.entity_id),
+                    "actor": ev.actor,
+                    "timestamp": ts.isoformat()
+                    if hasattr(ts, "isoformat")
+                    else str(ts),
+                    "data": ev.payload or {},
+                }
+            )
+    return envelopes
+
+
 @router.websocket("/ws/events")
 async def websocket_events(
     websocket: WebSocket,

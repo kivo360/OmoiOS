@@ -1,0 +1,309 @@
+{
+  "api_base_url": "http://localhost:18000",
+  "run_at": "2026-04-24T12:09:42Z",
+  "summary": {
+    "PASS": 19,
+    "FAIL": 0,
+    "GAP": 6,
+    "SKIP": 5
+  },
+  "phases": [
+    {
+      "name": "prereqs",
+      "verdict": "PASS",
+      "duration_sec": 0.01,
+      "detail": "env + API reachable",
+      "evidence": {}
+    },
+    {
+      "name": "org_setup",
+      "verdict": "PASS",
+      "duration_sec": 0.01,
+      "detail": "",
+      "evidence": {
+        "ws_a": "f7ab3bd3-0e82-4789-b5ce-07cf72f0ada1",
+        "ws_b": "5195c7d2-9e3b-4b07-916f-91d21d9aaaf4"
+      }
+    },
+    {
+      "name": "credentials_crud",
+      "verdict": "PASS",
+      "duration_sec": 0.04,
+      "detail": "",
+      "evidence": {
+        "binding_id": "6041d7fb-2173-4253-92dd-dd1d90be2e90"
+      }
+    },
+    {
+      "name": "environments_crud",
+      "verdict": "PASS",
+      "duration_sec": 0.03,
+      "detail": "",
+      "evidence": {
+        "env_id": "4493f7c4-1ab3-4220-be15-d0d3c7fc2757",
+        "v1": 1,
+        "v2": 2
+      }
+    },
+    {
+      "name": "artifacts_roundtrip",
+      "verdict": "PASS",
+      "duration_sec": 0.38,
+      "detail": "",
+      "evidence": {
+        "artifact_id": "02c09476-da8f-45b5-b4b2-a0796fef7ed2",
+        "sha256": "176ab18be1eaa0650e3695a6f276c5cd84c48d9a328b42c75a2973bc3232c316"
+      }
+    },
+    {
+      "name": "webhooks_hmac",
+      "verdict": "PASS",
+      "duration_sec": 0.65,
+      "detail": "",
+      "evidence": {
+        "sub_id": "81eafeab-c023-45e4-b305-67e35d006def",
+        "signature_header": "t=1777032541,v1=96eb971a11e959a20099aa8f8a8af81af196925e9714b76daa1631cd172a3eb1"
+      }
+    },
+    {
+      "name": "workspace_isolation",
+      "verdict": "PASS",
+      "duration_sec": 0.01,
+      "detail": "",
+      "evidence": {
+        "binding_a_in_a": true,
+        "binding_b_leaked_to_a": false
+      }
+    },
+    {
+      "name": "sessions_alias",
+      "verdict": "PASS",
+      "duration_sec": 0.03,
+      "detail": "",
+      "evidence": {
+        "sessions_count": 14,
+        "tasks_status": 200,
+        "bodies_match": false
+      }
+    },
+    {
+      "name": "daytona_allocation",
+      "verdict": "PASS",
+      "duration_sec": 5.52,
+      "detail": "",
+      "evidence": {
+        "sandbox_id": "5e7286c9-691a-42d3-8978-920c5a797409",
+        "exec_output": "hello-from-daytona\n200"
+      }
+    },
+    {
+      "name": "egress_proxy_wiring",
+      "verdict": "GAP",
+      "duration_sec": 1.67,
+      "detail": "HTTPS_PROXY/NO_PROXY not injected into sandbox env \u2014 daytona_spawner.py needs to set these. Proxy binary exists standalone but is not in the sandbox data path.",
+      "evidence": {
+        "env_check": "NOT_SET"
+      }
+    },
+    {
+      "name": "egress_allow_deny",
+      "verdict": "SKIP",
+      "duration_sec": 2.06,
+      "detail": "HTTPS_PROXY unset in sandbox; cannot verify allow/deny behavior",
+      "evidence": {}
+    },
+    {
+      "name": "opencode_auth_json",
+      "verdict": "GAP",
+      "duration_sec": 1.63,
+      "detail": "auth.json not written at sandbox boot. Need: bootstrap script that calls /broker/creds/<alias> for each declared alias and writes the result as auth.json (mode 0600). Required for GitHub Copilot OAuth; recommended for all providers.",
+      "evidence": {}
+    },
+    {
+      "name": "opencode_config",
+      "verdict": "PASS",
+      "duration_sec": 1.54,
+      "detail": "",
+      "evidence": {
+        "files": [
+          "/home/daytona/.config/opencode/opencode.json"
+        ]
+      }
+    },
+    {
+      "name": "spec_broker_flow",
+      "verdict": "GAP",
+      "duration_sec": 0.01,
+      "detail": "broker endpoint exists (status 401) but session-token issuance needs to be wired into session create",
+      "evidence": {
+        "http_code": 401,
+        "body": "{\"detail\":\"Invalid or expired session token\"}"
+      }
+    },
+    {
+      "name": "spec_event_envelope",
+      "verdict": "GAP",
+      "duration_sec": 0.01,
+      "detail": "events endpoint returned 404; spec \u00a703 event envelope not standardized",
+      "evidence": {}
+    },
+    {
+      "name": "sdk_prereqs",
+      "verdict": "PASS",
+      "duration_sec": 0.03,
+      "detail": "",
+      "evidence": {
+        "workspace_id": "f7ab3bd3-0e82-4789-b5ce-07cf72f0ada1",
+        "ticket_id": "0567357f-844f-4bc2-9bef-da9ccab6d22c"
+      }
+    },
+    {
+      "name": "session_create",
+      "verdict": "PASS",
+      "duration_sec": 0.02,
+      "detail": "",
+      "evidence": {
+        "session_id": "b9afaea6-9061-4a0f-b985-dc5950faafc1",
+        "idem_key": "smoke-b1819686-9925-4f6c-abec-08f8adb4ddc5",
+        "ticket_id": null
+      }
+    },
+    {
+      "name": "session_create_ticketless",
+      "verdict": "PASS",
+      "duration_sec": 0.02,
+      "detail": "",
+      "evidence": {
+        "session_id": "9bc69a3b-3833-41cd-a243-1b1fe3db27bc",
+        "workspace_id": "ffe8321a-948d-4815-9470-9085ce8ad33f",
+        "github_repo": "octocat/hello-world"
+      }
+    },
+    {
+      "name": "session_get",
+      "verdict": "PASS",
+      "duration_sec": 0.01,
+      "detail": "",
+      "evidence": {
+        "id": "b9afaea6-9061-4a0f-b985-dc5950faafc1",
+        "status": "pending",
+        "has_session_id_alias": true
+      }
+    },
+    {
+      "name": "session_events_sse",
+      "verdict": "PASS",
+      "duration_sec": 15.0,
+      "detail": "",
+      "evidence": {
+        "count": 1,
+        "last_seq": 1,
+        "types": [
+          "session.created"
+        ]
+      }
+    },
+    {
+      "name": "session_events_resume",
+      "verdict": "PASS",
+      "duration_sec": 0.04,
+      "detail": "",
+      "evidence": {
+        "resume_from": 1,
+        "first_seq_after": 2
+      }
+    },
+    {
+      "name": "session_reply",
+      "verdict": "PASS",
+      "duration_sec": 10.01,
+      "detail": "",
+      "evidence": {
+        "text": "hello-from-smoke-76f3b0bd",
+        "seq": 3
+      }
+    },
+    {
+      "name": "session_fork",
+      "verdict": "PASS",
+      "duration_sec": 0.03,
+      "detail": "",
+      "evidence": {
+        "parent_id": "b9afaea6-9061-4a0f-b985-dc5950faafc1",
+        "child_id": "734abffc-4f44-4e07-9d98-53120579f57b",
+        "from_seq": 2,
+        "child_seqs": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "name": "session_share",
+      "verdict": "GAP",
+      "duration_sec": 0.25,
+      "detail": "share rejected synthetic user (expected without a real peer): ServerError('Internal server error')",
+      "evidence": {}
+    },
+    {
+      "name": "session_ws_presence",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "OMOIOS_USER_JWT unset \u2014 WS auth requires a user JWT",
+      "evidence": {}
+    },
+    {
+      "name": "session_ws_message",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no user JWT",
+      "evidence": {}
+    },
+    {
+      "name": "session_ws_cursor",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no user JWT",
+      "evidence": {}
+    },
+    {
+      "name": "error_envelope_shape",
+      "verdict": "GAP",
+      "duration_sec": 0.01,
+      "detail": "error responses don't match spec \u00a711 envelope yet: missing `error` object at top level",
+      "evidence": {
+        "status": 404,
+        "body_keys": [
+          "detail"
+        ]
+      }
+    },
+    {
+      "name": "idempotency_conflict",
+      "verdict": "PASS",
+      "duration_sec": 0.02,
+      "detail": "",
+      "evidence": {
+        "first_id": "2abef87d-16d9-4029-8bcd-d469067e0cc9",
+        "conflict_status": 409
+      }
+    },
+    {
+      "name": "egress_denied_envelope",
+      "verdict": "SKIP",
+      "duration_sec": 1.48,
+      "detail": "HTTPS_PROXY unset in sandbox; can't test egress envelope",
+      "evidence": {}
+    }
+  ],
+  "cleanup": [
+    "del binding_a: 204",
+    "del binding_b: 204",
+    "del webhook_sub: 404",
+    "del artifact: 204",
+    "del sdk_session: 404",
+    "del sdk_fork: 404",
+    "sdk_client: closed",
+    "sandbox 5e7286c9-691a-42d3-8978-920c5a797409: deleted"
+  ]
+}

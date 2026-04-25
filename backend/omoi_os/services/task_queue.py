@@ -503,6 +503,54 @@ class TaskQueueService:
                     },
                 )
 
+                # Spec §03 session envelope — emit a canonical session.*
+                # event alongside the legacy TASK_* event so SDK clients on
+                # `/sessions/{id}/events` see the lifecycle in real time.
+                # Best-effort: the status update itself never fails if the
+                # envelope write can't land.
+                envelope_type = {
+                    "running": "session.started",
+                    "completed": "session.succeeded",
+                    "failed": "session.failed",
+                    "cancelled": "session.cancelled",
+                }.get(status)
+                if envelope_type is not None:
+                    try:
+                        from omoi_os.services.event_bus import get_event_bus
+                        from omoi_os.services.session_event_envelope import (
+                            SessionEventEnvelope,
+                            ACTOR_AGENT,
+                            ACTOR_SYSTEM,
+                        )
+
+                        actor = (
+                            ACTOR_AGENT
+                            if envelope_type == "session.started"
+                            else ACTOR_SYSTEM
+                        )
+                        data: dict = {}
+                        if result is not None:
+                            data["result"] = result
+                        if error_message:
+                            data["error"] = error_message
+                        # Independent DB session so the envelope write is
+                        # isolated from the just-committed status update.
+                        with self.db.get_session() as esess:
+                            SessionEventEnvelope(esess, get_event_bus()).emit(
+                                session_id=str(task.id),
+                                event_type=envelope_type,
+                                actor=actor,
+                                data=data,
+                            )
+                            esess.commit()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "session envelope emit failed",
+                            session_id=str(task.id),
+                            envelope_type=envelope_type,
+                            error=str(exc),
+                        )
+
     def get_assigned_tasks(
         self, agent_id: str, sandbox_id: Optional[str] = None
     ) -> list[Task]:
@@ -1763,11 +1811,46 @@ class TaskQueueService:
             if not task:
                 return None
 
+            if not task.ticket_id:
+                # Ticket-less (SDK-direct) sessions have no project binding.
+                return None
+
             ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
             if not ticket:
                 return None
 
             return ticket.project_id
+
+    def _resolve_organization_id(self, session, task: Task) -> Optional[str]:
+        """Resolve the organization that owns a task for concurrency-limit purposes.
+
+        Precedence:
+          1. workspace.organization_id — the spec §02 path; SDK-direct sessions
+             always have a non-null org here.
+          2. ticket.project.organization_id — the legacy workflow path.
+          3. None — task is truly orphan; no org limit applies.
+        """
+        from omoi_os.models.workspace import Workspace
+        from omoi_os.models.ticket import Ticket
+        from omoi_os.models.project import Project
+
+        if task.workspace_id:
+            ws = session.get(Workspace, task.workspace_id)
+            if ws and ws.organization_id:
+                return str(ws.organization_id)
+
+        if task.ticket_id:
+            ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+            if ticket and ticket.project_id:
+                project = (
+                    session.query(Project)
+                    .filter(Project.id == ticket.project_id)
+                    .first()
+                )
+                if project and project.organization_id:
+                    return str(project.organization_id)
+
+        return None
 
     def get_running_count_by_organization(
         self, organization_id: str, session=None
@@ -1787,20 +1870,39 @@ class TaskQueueService:
         """
         from omoi_os.models.ticket import Ticket
         from omoi_os.models.project import Project
+        from omoi_os.models.workspace import Workspace
+
+        # Count a task against the org if EITHER chain resolves to it:
+        #   (a) task -> workspace -> organization_id (SDK-direct sessions)
+        #   (b) task -> ticket -> project -> organization_id (legacy)
+        # Running statuses: claiming, assigned, running, validating.
+        running_statuses = ["claiming", "assigned", "running", "validating"]
 
         def _count(sess):
-            # Join tasks -> tickets -> projects to filter by organization
-            count = (
-                sess.query(Task)
+            # IDs via workspace chain
+            ws_ids = {
+                row[0]
+                for row in sess.query(Task.id)
+                .join(Workspace, Task.workspace_id == Workspace.id)
+                .filter(
+                    Workspace.organization_id == organization_id,
+                    Task.status.in_(running_statuses),
+                )
+                .all()
+            }
+            # IDs via ticket chain
+            ticket_ids = {
+                row[0]
+                for row in sess.query(Task.id)
                 .join(Ticket, Task.ticket_id == Ticket.id)
                 .join(Project, Ticket.project_id == Project.id)
                 .filter(
                     Project.organization_id == organization_id,
-                    Task.status.in_(["claiming", "assigned", "running", "validating"]),
+                    Task.status.in_(running_statuses),
                 )
-                .count()
-            )
-            return count
+                .all()
+            }
+            return len(ws_ids | ticket_ids)
 
         if session:
             return _count(session)
@@ -1950,18 +2052,27 @@ class TaskQueueService:
                 ):
                     continue
 
-                # Get project and organization for this task
-                ticket = (
-                    session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
-                )
-                if not ticket or not ticket.project_id:
-                    # Tasks without a project are allowed (no limit)
-                    task.score = self.scorer.compute_score(task)
-                    available_tasks.append(task)
-                    continue
+                # Resolve owning project (legacy ticket chain) and org (ticket
+                # chain OR workspace chain — whichever is populated first).
+                ticket = None
+                project_id: Optional[str] = None
+                project = None
+                if task.ticket_id:
+                    ticket = (
+                        session.query(Ticket)
+                        .filter(Ticket.id == task.ticket_id)
+                        .first()
+                    )
+                    if ticket and ticket.project_id:
+                        project_id = ticket.project_id
+                        project = (
+                            session.query(Project)
+                            .filter(Project.id == project_id)
+                            .first()
+                        )
 
-                # Skip tasks from archived specs
-                if ticket.spec_id:
+                # Skip tasks from archived specs (only applies to ticket-ful tasks)
+                if ticket and ticket.spec_id:
                     from omoi_os.models.spec import Spec
 
                     spec = session.query(Spec).filter(Spec.id == ticket.spec_id).first()
@@ -1972,17 +2083,15 @@ class TaskQueueService:
                         )
                         continue
 
-                project_id = ticket.project_id
+                organization_id = self._resolve_organization_id(session, task)
 
-                # Get project to find organization
-                project = (
-                    session.query(Project).filter(Project.id == project_id).first()
-                )
-                organization_id = (
-                    str(project.organization_id)
-                    if project and project.organization_id
-                    else None
-                )
+                # Tasks with no owning project AND no owning org slip through
+                # without any concurrency gating (same as the pre-decoupling
+                # behaviour for ticket-ful tasks that happened to lack a project).
+                if not project_id and not organization_id:
+                    task.score = self.scorer.compute_score(task)
+                    available_tasks.append(task)
+                    continue
 
                 # Check if autonomous execution is enabled for this project
                 # Tasks from projects without autonomous_execution_enabled are skipped
@@ -2034,26 +2143,29 @@ class TaskQueueService:
                         )
                         continue
 
-                # Check/cache running count for this project
-                if project_id not in project_running_counts:
-                    count = (
-                        session.query(Task)
-                        .join(Ticket, Task.ticket_id == Ticket.id)
-                        .filter(
-                            Ticket.project_id == project_id,
-                            Task.status.in_(["claiming", "assigned", "running"]),
+                # Check/cache running count for this project (only if project exists).
+                # Ticket-less sessions have no project; org-level gating already
+                # ran above, so we skip the project-level limit for them.
+                if project_id:
+                    if project_id not in project_running_counts:
+                        count = (
+                            session.query(Task)
+                            .join(Ticket, Task.ticket_id == Ticket.id)
+                            .filter(
+                                Ticket.project_id == project_id,
+                                Task.status.in_(["claiming", "assigned", "running"]),
+                            )
+                            .count()
                         )
-                        .count()
-                    )
-                    project_running_counts[project_id] = count
+                        project_running_counts[project_id] = count
 
-                # Skip if project is at capacity
-                if project_running_counts[project_id] >= max_concurrent_per_project:
-                    logger.debug(
-                        f"Project {project_id} at capacity ({project_running_counts[project_id]}/{max_concurrent_per_project}), "
-                        f"skipping task {task.id}"
-                    )
-                    continue
+                    # Skip if project is at capacity
+                    if project_running_counts[project_id] >= max_concurrent_per_project:
+                        logger.debug(
+                            f"Project {project_id} at capacity ({project_running_counts[project_id]}/{max_concurrent_per_project}), "
+                            f"skipping task {task.id}"
+                        )
+                        continue
 
                 # Compute score and add to available tasks
                 task.score = self.scorer.compute_score(task)
@@ -2126,26 +2238,31 @@ class TaskQueueService:
             org_agent_limits: dict[str, int] = {}
 
             for task in tasks:
-                # Get project ID for this task
-                ticket = (
-                    session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
-                )
-                if not ticket or not ticket.project_id:
-                    # Tasks without a project are allowed (no limit)
+                # Resolve owning project (legacy ticket chain) and org
+                # (workspace-first, ticket-chain fallback).
+                ticket = None
+                project_id: Optional[str] = None
+                project = None
+                if task.ticket_id:
+                    ticket = (
+                        session.query(Ticket)
+                        .filter(Ticket.id == task.ticket_id)
+                        .first()
+                    )
+                    if ticket and ticket.project_id:
+                        project_id = ticket.project_id
+                        project = (
+                            session.query(Project)
+                            .filter(Project.id == project_id)
+                            .first()
+                        )
+
+                organization_id = self._resolve_organization_id(session, task)
+
+                if not project_id and not organization_id:
+                    # Truly orphan validation task — no gating applies.
                     available_tasks.append(task)
                     continue
-
-                project_id = ticket.project_id
-
-                # Get project to find organization
-                project = (
-                    session.query(Project).filter(Project.id == project_id).first()
-                )
-                organization_id = (
-                    str(project.organization_id)
-                    if project and project.organization_id
-                    else None
-                )
 
                 # Check if autonomous execution is enabled for this project
                 # Tasks from projects without autonomous_execution_enabled are skipped
@@ -2187,28 +2304,28 @@ class TaskQueueService:
                         )
                         continue
 
-                # Check/cache running count for this project
-                if project_id not in project_running_counts:
-                    count = (
-                        session.query(Task)
-                        .join(Ticket, Task.ticket_id == Ticket.id)
-                        .filter(
-                            Ticket.project_id == project_id,
-                            Task.status.in_(
-                                ["claiming", "assigned", "running", "validating"]
-                            ),
+                # Check/cache running count for this project (only if project exists).
+                if project_id:
+                    if project_id not in project_running_counts:
+                        count = (
+                            session.query(Task)
+                            .join(Ticket, Task.ticket_id == Ticket.id)
+                            .filter(
+                                Ticket.project_id == project_id,
+                                Task.status.in_(
+                                    ["claiming", "assigned", "running", "validating"]
+                                ),
+                            )
+                            .count()
                         )
-                        .count()
-                    )
-                    project_running_counts[project_id] = count
+                        project_running_counts[project_id] = count
 
-                # Skip if project is at capacity
-                if project_running_counts[project_id] >= max_concurrent_per_project:
-                    logger.debug(
-                        f"Project {project_id} at capacity ({project_running_counts[project_id]}/{max_concurrent_per_project}), "
-                        f"skipping validation task {task.id}"
-                    )
-                    continue
+                    if project_running_counts[project_id] >= max_concurrent_per_project:
+                        logger.debug(
+                            f"Project {project_id} at capacity ({project_running_counts[project_id]}/{max_concurrent_per_project}), "
+                            f"skipping validation task {task.id}"
+                        )
+                        continue
 
                 available_tasks.append(task)
 

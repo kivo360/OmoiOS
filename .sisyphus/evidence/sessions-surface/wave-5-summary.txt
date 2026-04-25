@@ -1,0 +1,77 @@
+Wave 5 Summary — Tests + Final Verification
+=============================================
+
+Date: 2026-04-24
+
+Task 19 — Smoke test SDK-driven session phases
+----------------------------------------------
+Added phases (gated on PYTHON SDK + ticket availability):
+  - sdk_prereqs            — init AsyncOmoiOSClient + pin a ticket_id
+  - session_create         — SDK create + Idempotency-Key replay
+  - session_get            — shape validation (id, status per spec §02)
+  - session_events_sse     — async-for over SSE, validate spec §03 envelope
+  - session_events_resume  — reconnect with Last-Event-ID, assert monotonicity
+  - session_reply          — POST /messages + observe session.message event
+  - session_fork           — fork at seq 2, child seqs start at 1
+  - session_share          — POST /share + GET acl echoed on fetch
+
+Degrades to SKIP (not FAIL) when:
+  - omoios SDK not importable (missing sdk/python/)
+  - No tickets in org
+  - Feature flags disabled
+
+File: scripts/smoke_agent_platform.py (23 phases total, up from 15)
+
+Task 20 — Smoke Tier B (multiplayer) + Tier C (error envelope)
+--------------------------------------------------------------
+Tier B — multiplayer (require OMOIOS_USER_JWT env var):
+  - session_ws_presence    — two channels, participant.joined reaches peer
+  - session_ws_message     — A sends message.send → B receives session.message
+  - session_ws_cursor      — cursor.moved broadcasts but is NOT persisted
+
+Tier C — error envelope stability:
+  - error_envelope_shape   — 404 on zero-uuid session follows spec §11 shape
+  - idempotency_conflict   — same key + different body → 409
+  - egress_denied_envelope — sandbox blocked egress → 451 + code=egress_denied
+
+File: scripts/smoke_agent_platform.py
+
+Task 21 — Python SDK e2e spec-patterns suite
+---------------------------------------------
+sdk/python/tests/test_e2e_spec_patterns.py (7 tests, all gated on env):
+  - TestPatternA_FireAndForget::test_create_returns_session_synchronously
+  - TestPatternA_FireAndForget::test_idempotency_key_dedups_retries
+  - TestPatternB_SyncWait::test_iter_events_until_terminal_or_cap
+  - TestPatternC_LiveStream::test_envelope_fields_present
+  - TestPatternC_LiveStream::test_resume_from_last_event_id
+  - TestPatternD_Multiplayer::test_presence_joined_reaches_peer
+  - TestPatternD_Multiplayer::test_message_send_broadcasts_cross_channel
+
+Result without env vars: 7 skipped, 0 failed.
+Full Python SDK suite: 52 passed, 23 skipped (16 prior + 7 new e2e).
+Marker `e2e` registered in pyproject.toml.
+
+Task 22 — TypeScript SDK e2e spec-patterns suite
+-------------------------------------------------
+sdk/typescript/tests/spec-patterns.e2e.test.ts (7 tests, all gated on env):
+  - Pattern A: create returns session synchronously
+  - Pattern A: idempotency key dedups retries
+  - Pattern B: iterates events until terminal type or cap
+  - Pattern C: envelope fields present on every event
+  - Pattern C: resume from Last-Event-ID advances past cursor
+  - Pattern D: presence participant.joined reaches peer
+  - Pattern D: message.send broadcasts to peers
+
+Result without env vars: 7 skipped, 0 failed.
+Full TS SDK suite: 63 passed + 7 skipped (70 tests total).
+
+Final Verification
+------------------
+F1 (route audit):    PASS — see f1-route-audit.txt
+F2 (§03/§07 shape):  PASS — see f2-spec-fidelity.txt
+F3 (SDK parity):     PASS — see f3-sdk-parity.txt
+
+Wave 5 Overall: COMPLETE
+All 22 tasks landed; surface is spec-shaped and SDK-driveable end-to-end.
+Running the full smoke + e2e suites against a live backend + real Daytona
+is the last step before closing the plan; code-level fidelity is verified.

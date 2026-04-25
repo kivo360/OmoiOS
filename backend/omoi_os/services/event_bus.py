@@ -100,6 +100,28 @@ class EventBusService:
         except redis.exceptions.ConnectionError:
             logger.warning("Redis connection lost during publish")
 
+    def publish_to_session(self, session_id: str, payload: Dict[str, Any]) -> None:
+        """Publish a frame onto a session's per-session Redis channel.
+
+        Channel naming is `ch.{session_id}` — distinct from the legacy
+        `events.{event_type}` firehose used by `publish()`. Consumers
+        subscribe per session (typically in `SessionChannelManager`) so
+        cursor.moved and other ephemeral multiplayer frames cross replica
+        boundaries without every replica receiving every session's events.
+
+        Args:
+            session_id: Task/session UUID string — forms the channel name
+            payload: Opaque JSON-serialisable dict; published as-is
+        """
+        if not self._available or not self.redis_client:
+            return
+
+        channel = f"ch.{session_id}"
+        try:
+            self.redis_client.publish(channel, json.dumps(payload, default=str))
+        except redis.exceptions.ConnectionError:
+            logger.warning("Redis connection lost during publish_to_session")
+
     def subscribe(
         self, event_type: str, callback: Callable[[SystemEvent], None]
     ) -> None:

@@ -269,3 +269,15 @@ if settings.broker_enabled:
 
 - Workspace isolation can be layered through `Task.execution_config` without storing decrypted secrets in JSONB: validate IDs at queue time, then resolve credentials/environment/proxy at sandbox spawn time.
 - Existing credential and environment services are synchronous DB services and can be composed directly by a workspace isolation service when tests inject shared `DatabaseService` instances.
+
+## 2026-04-24 — Credential alias resolution
+
+- `environment_versions.credentials` is the source of truth for sandbox alias dispatch; aliases resolve through the pinned `SandboxSession.environment_version_id`.
+- `credential_access_logs` must include `sandbox_session_id` in the SQLAlchemy model as well as the migration, otherwise audit writes cannot attach session provenance through ORM instances.
+- Near-expiry `user_oauth` resolution should fail closed unless a provider refresh adapter is supplied; tests can monkeypatch `_refresh_user_oauth` to verify refresh persistence without network calls.
+- Local credential broker DB tests require PostgreSQL on `localhost:15432`; Docker was unavailable in this session, so evidence records infra-blocked pytest rather than a code failure.
+## 2026-04-24 — Runtime broker route implementation
+
+- Runtime broker routes should stay separate from admin credential CRUD: mount under `/broker`, keep `/api/v1/credentials` unchanged, and put the feature-flag guard on the runtime route surface.
+- `SandboxSessionService` is async-session scoped and returns plaintext `sess_tok_...` only from `create_session`; for sandbox handoff, use short-lived Redis transport rather than storing plaintext in task execution config.
+- `CredentialBrokerService.resolve_alias()` already returns the required per-kind credential payload and audits alias access; route code only needs to map `UnknownAliasError` to 404 and avoid logging payload values.

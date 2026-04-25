@@ -42,3 +42,7 @@
 
 - Store only non-secret workspace isolation settings (`storage_path`, `environment_id`, `egress_proxy_config`) in `workspace_settings`; decrypted environment values and credentials are resolved only at sandbox spawn time.
 - Require explicit `credential_binding_ids` for session credential injection to avoid implicitly injecting every workspace credential.
+## 2026-04-24 — Broker session token handoff
+
+- Chose Redis-backed ephemeral handoff (`broker:session-token:{task_id}` with short TTL) for passing newly minted broker session tokens from `POST /api/v1/sessions` to the Daytona spawner. This avoids PostgreSQL plaintext storage and avoids putting secrets into `execution_config`, which is logged in existing orchestrator paths.
+- Revoke route uses existing user JWT auth (`get_current_user`) plus `is_super_admin`; session bearer tokens are therefore rejected before authorization and cannot revoke themselves.

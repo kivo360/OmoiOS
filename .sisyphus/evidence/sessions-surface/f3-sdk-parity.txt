@@ -1,0 +1,62 @@
+F3 — SDK surface parity audit (Python ↔ TypeScript)
+====================================================
+
+Date: 2026-04-24
+Method:
+  - Python: `dir(SessionsResource)` filtered to public names.
+  - TS:     grep on async/method signatures in resources/sessions.ts.
+
+Python SessionsResource (sdk/python/omoios/resources/sessions.py)
+------------------------------------------------------------------
+  - artifacts
+  - cancel
+  - connect
+  - create
+  - events
+  - fork
+  - get
+  - list
+  - list_all
+  - reply
+  - share
+
+TypeScript SessionsResource (sdk/typescript/src/resources/sessions.ts)
+----------------------------------------------------------------------
+  - artifacts
+  - cancel
+  - connect
+  - create
+  - events
+  - fork
+  - get
+  - list
+  - listAll           ← snake/camel variant of list_all
+  - reply
+  - share
+
+Parity Matrix
+-------------
+| Method    | Python | TypeScript | Notes                                 |
+|-----------|--------|------------|---------------------------------------|
+| create    | ✅     | ✅         | both take idempotency key             |
+| get       | ✅     | ✅         |                                       |
+| list      | ✅     | ✅         | AsyncIterator ↔ AsyncIterable         |
+| list_all  | ✅     | ✅ (listAll) | eager variant for common case       |
+| cancel    | ✅     | ✅         |                                       |
+| reply     | ✅     | ✅         |                                       |
+| fork      | ✅     | ✅         |                                       |
+| share     | ✅     | ✅         |                                       |
+| artifacts | ✅     | ✅         |                                       |
+| events    | ✅     | ✅         | async iterator, honors Last-Event-ID  |
+| connect   | ✅     | ✅         | returns SessionChannel                |
+
+SessionChannel parity
+---------------------
+Both implementations expose `.on(type, fn)`, `.send(msg)`, `.close()`, plus
+`.open()` for explicit lifecycle (Python only adds `__aenter__`/`__aexit__`
+for context-manager sugar; TS doesn't need it since `close()` is sync).
+
+Conclusion
+----------
+PASS — method-for-method parity, modulo the snake_case ↔ camelCase convention
+for `list_all` ↔ `listAll`. No gaps either direction.

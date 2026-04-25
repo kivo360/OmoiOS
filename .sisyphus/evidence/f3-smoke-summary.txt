@@ -1,0 +1,31 @@
+Smoke-Test Summary: "PASS 2   FAIL 11   GAP 3   SKIP 13" | VERDICT: REJECT
+
+CONTRADICTIONS:
+- Expected: PASS 15 FAIL 0 GAP 0 SKIP 0
+- Actual:   PASS 2  FAIL 11 GAP 3 SKIP 13
+
+ROOT CAUSE:
+Missing required environment variables:
+  - OMOIOS_PLATFORM_API_KEY
+  - DAYTONA_API_KEY
+  - CREDENTIAL_ENCRYPTION_KEY
+
+This caused a cascade of failures:
+  1. prereqs: FAIL (missing env vars)
+  2. org_setup through sessions_alias: FAIL (empty Bearer token → LocalProtocolError)
+  3. sdk_prereqs: FAIL (no API key provided to AsyncOmoiOSClient)
+  4. session_* tests: SKIP (dependency on sdk_prereqs/session_create)
+  5. idempotency_conflict: SKIP (no ticket_id from failed tests)
+  6. egress tests: SKIP (HTTPS_PROXY unset in sandbox)
+
+PASSING TESTS:
+  - daytona_allocation (7.51s): Sandbox created and executed successfully
+  - opencode_config (1.19s): opencode.json written correctly
+
+GAPS (KNOWN ISSUES):
+  - egress_proxy_wiring: HTTPS_PROXY/NO_PROXY not injected into sandbox env
+  - opencode_auth_json: auth.json not written at sandbox boot
+  - spec_broker_flow: broker endpoint exists (401) but session-token issuance not wired
+
+RECOMMENDATION:
+Set the three required API keys in backend/.env and re-run.

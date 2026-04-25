@@ -1,0 +1,33 @@
+Auth.json schema verification:
+
+OpenCode auth.json uses:
+  - "access" (not "access_token")
+  - "refresh" (not "refresh_token")
+  - "expires" (not "expires_at")
+
+Per-kind rendering from broker response:
+
+1. bearer_secret:
+   { "type": "api", "key": "<value>" }
+
+2. user_oauth:
+   { "type": "oauth", "access": "<access_token>", "refresh": "<refresh_token>", "expires": <unix_ts> }
+
+3. github_app:
+   { "type": "oauth", "access": "<token>", "expires": <unix_ts> }
+   (mapped to oauth type, not github_app)
+
+Validation:
+  jq -e 'to_entries | all(.value.type == "api" or .value.type == "oauth")'
+  - Verifies every entry has valid type field
+  - Runs before write to disk
+  - Exits 1 on validation failure
+
+Permissions:
+  - chmod 0700 "$OPENCODE_DATA_DIR" before write
+  - chmod 0600 "$AUTH_JSON_PATH" after write
+
+Security:
+  - No credential values echoed in logs
+  - curl stderr redirected to /dev/null
+  - Sensitive fields only used in jq --arg/--argjson (not logged)

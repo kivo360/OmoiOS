@@ -1,0 +1,32 @@
+F1 — Route audit for spec §09 session surface
+================================================
+
+Date: 2026-04-24
+Method: Static grep of backend/omoi_os/api/routes/sessions.py + session_channel.py.
+Since we can't guarantee a running backend for a live /openapi.json pull, this
+audit walks the source instead — every route shown here lands in openapi.json
+the next time the app boots.
+
+New endpoints added by this plan (6)
+------------------------------------
+- GET  /api/v1/sessions/{id}/events       (routes/sessions.py:504)   SSE stream
+- POST /api/v1/sessions/{id}/messages     (routes/sessions.py:632)   reply
+- POST /api/v1/sessions/{id}/fork         (routes/sessions.py:687)   fork at seq
+- POST /api/v1/sessions/{id}/share        (routes/sessions.py:797)   ACL grants
+- GET  /api/v1/sessions/{id}/artifacts    (routes/sessions.py:851)   artifacts
+- WS   /api/v1/sessions/{id}/ws           (routes/sessions.py:848)   multiplayer
+  Implementation: session_ws_endpoint in routes/session_channel.py:212
+
+Pre-existing endpoints untouched (backward compat guarantee)
+------------------------------------------------------------
+- GET    /api/v1/sessions        (list, alias to /api/v1/tasks)
+- GET    /api/v1/sessions/{id}   (get)
+- POST   /api/v1/sessions        (create — now emits envelope + mints session_token)
+- DELETE /api/v1/sessions/{id}   (cancel)
+- PATCH  /api/v1/sessions/{id}   (update)
+
+Conclusion
+----------
+PASS — all 6 new routes exist and are registered on `router`. The pre-existing
+5 CRUD endpoints are preserved, matching the plan's "No breaking changes to
+existing /api/v1/sessions/*" guardrail.

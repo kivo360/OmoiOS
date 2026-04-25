@@ -215,3 +215,89 @@ export interface GetEnvironmentResult {
   /** Latest version (null if none exists) */
   latestVersion: EnvironmentVersion | null;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Spec §03 session surface
+// ────────────────────────────────────────────────────────────────────────────
+
+/** ACL role on a session (spec §07). */
+export type SessionRole = 'owner' | 'editor' | 'viewer';
+
+/** A session — unit of agent execution (spec §02).
+ *
+ * `ticket_id` is nullable since the ticket decoupling (migration 071):
+ * SDK-direct sessions have no ticket. Legacy ticket-driven rows created by
+ * the dashboard still populate it.
+ */
+export interface Session {
+  id: string;
+  /** Legacy alias for `id`. */
+  session_id?: string;
+  ticket_id?: string | null;
+  workspace_id?: string;
+  environment_id?: string;
+  environment_version?: number;
+  environment_version_id?: string | null;
+  github_repo?: string | null;
+  status?: string;
+  initial_prompt?: string;
+  created_by?: string;
+  created_at?: string;
+  ended_at?: string;
+  /**
+   * One-time sandbox bearer returned on `create`. Null on reads. Never log
+   * or persist this on the client side.
+   */
+  session_token?: string | null;
+  [k: string]: unknown;
+}
+
+/** Spec §03 event envelope — every frame in the SSE/WS stream. */
+export interface Event {
+  id: string;
+  seq: number;
+  type: string;
+  session_id: string;
+  actor: string;
+  timestamp?: string;
+  data: Record<string, unknown>;
+  [k: string]: unknown;
+}
+
+/** One ACL grant in a share request. */
+export interface Grant {
+  user_id: string;
+  role: SessionRole;
+}
+
+/** Body for POST /api/v1/sessions (spec §03).
+ *
+ * Either `workspace_id` or `github_repo` must be supplied; `prompt` is
+ * required. The backend auto-binds a workspace when only `github_repo` is
+ * given (mirrors the ticket auto-project pattern).
+ */
+export interface CreateSessionRequest {
+  prompt: string;
+  workspace_id?: string;
+  environment_id?: string;
+  github_repo?: string;
+  share_with?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+/** Body for POST /api/v1/sessions/{id}/fork. */
+export interface ForkRequest {
+  from_seq: number;
+  prompt: string;
+}
+
+/** Body for POST /api/v1/sessions/{id}/share. */
+export interface ShareRequest {
+  grants: Grant[];
+}
+
+/** One inbound channel message shape (spec §07). */
+export type ChannelMessage =
+  | { type: 'message.send'; data: { text: string } }
+  | { type: 'cursor.moved'; data: { file: string; line: number } }
+  | { type: string; data: Record<string, unknown> };

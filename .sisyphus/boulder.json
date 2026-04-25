@@ -1,97 +1,91 @@
 {
-  "active_plan": "/Users/kevinhill/Coding/Experiments/senior-sandbox/omoi_os/.sisyphus/plans/agent-workspace-platform.md",
-  "started_at": "2026-04-23T22:23:28.309Z",
+  "active_plan": "/Users/kevinhill/Coding/Experiments/senior-sandbox/omoi_os/.sisyphus/plans/agent-platform-gaps.md",
+  "started_at": "2026-04-24T06:01:04.235Z",
   "session_ids": [
-    "ses_2438f1c2cffeZQe48Vh7rhFnfQ",
-    "ses_2438b8530ffen4pEM1pSVedtn4",
-    "ses_2438b940dffeqZOdMAUAY71muM",
-    "ses_24374cea4ffe3YQ9yzbVKlskuD",
-    "ses_24368cd02ffe7UDj922zXPKVTd",
-    "ses_2436846d1ffeRhU1XIR2usysnY",
-    "ses_243479243ffeuNUbsME7Ki5tX7",
-    "ses_2431d48e4ffeNJdD7Ex1HLNZi5",
-    "ses_242f43a77ffebmmuIvBPXcAO7O",
-    "ses_242f29286ffe5BI84zb6gg5li0",
-    "ses_242f29d88ffezqASzMRsPKb1oA",
-    "ses_242f3a325ffeOVWlFdM08HbYDC",
-    "ses_242f3905effeBMAk2vPysAmYvT",
-    "ses_242f37a4effeiJLnPJIBkQ5DJr",
-    "ses_242dbfb61ffeSqa0TqzXh0MPXx",
-    "ses_242dbf0f5ffecgqJDJ7BRQE1e3",
-    "ses_242d25ba8ffe0CiVw1ekB85fsC",
-    "ses_242b537a9ffeHEww4NnZTkPtCp",
-    "ses_242b354cbfferGkkAOolOvJXXq",
-    "ses_242b32f9bffe8eySadUJstsoJb",
-    "ses_242b33fddffedUEFWyLVbEiLIs",
-    "ses_242b34934ffeS0TGpln2MrvN8n",
-    "ses_24290e39effe6W4jUzsKzQN8Hy",
-    "ses_24290f16affe92bMzE85z5jxSc"
+    "ses_241ec2a5bffe1KN90zhSTN7BgX",
+    "ses_241eb4b03ffejhXsteUdi1ksiC",
+    "ses_241eb5787ffeenXTF2BzjnYwlm",
+    "ses_241e5906affeneQhQ79QHmkG99",
+    "ses_241e57b6dffeiiNvcQYBiYhPE7",
+    "ses_241e563e5ffeoH81aCmby6PR5e",
+    "ses_241d1f3e2ffeIARGl3yLIr9Y13",
+    "ses_241c6d547ffe7sP5r8rMBfVkN2",
+    "ses_241c6eaf3ffepXyf495jMvv9fQ",
+    "ses_241c6fe08ffeY2sJ8x4R6KzWxP",
+    "ses_241b7432fffeJDNNYtAwGjkLME",
+    "ses_241b826c1ffe7XxnDD2X7Tg6p3",
+    "ses_241b8492fffeQbwcxGL8Mn2C0h",
+    "ses_241b83aecffeluflKMZOHAljOE",
+    "ses_2419e373cffepFQme7zJ56LxAs",
+    "ses_241960433ffe2pPB70cYYG9FCP",
+    "ses_241961f72ffeCQXAmc0yjIIIbo",
+    "ses_241961268ffehihbLk4x1wFHdy"
   ],
-  "plan_name": "agent-workspace-platform",
+  "plan_name": "agent-platform-gaps",
   "agent": "atlas",
   "task_sessions": {
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "**Encrypt Provider API Keys (PR-0c)**",
-      "session_id": "ses_24374cea4ffe3YQ9yzbVKlskuD",
+      "task_title": "**Add `environment_versions.credentials` alias-map column (migration 068)**",
+      "session_id": "ses_241eb5787ffeenXTF2BzjnYwlm",
       "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-04-23T23:02:42.190Z"
+      "category": "quick",
+      "updated_at": "2026-04-24T06:07:26.096Z"
     },
     "todo:3": {
       "task_key": "todo:3",
       "task_label": "3",
-      "task_title": "**Credential Broker Service (PR-4 · lines 444–566)**",
-      "session_id": "ses_2431d48e4ffeNJdD7Ex1HLNZi5",
+      "task_title": "**Create `sandbox_sessions` table (migration 069) + `SandboxSessionService`**",
+      "session_id": "ses_241e563e5ffeoH81aCmby6PR5e",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-04-24T06:29:21.569Z"
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "**Extend `CredentialBrokerService` with `resolve_alias()` per-kind dispatch**",
+      "session_id": "ses_241d1f3e2ffeIARGl3yLIr9Y13",
       "agent": "Sisyphus-Junior",
       "category": "deep",
-      "updated_at": "2026-04-24T00:36:38.019Z"
+      "updated_at": "2026-04-24T06:41:08.506Z"
     },
-    "todo:7": {
-      "task_key": "todo:7",
-      "task_label": "7",
-      "task_title": "**Go Egress Proxy (PR-2)**",
-      "session_id": "ses_242f3a325ffeOVWlFdM08HbYDC",
+    "todo:5": {
+      "task_key": "todo:5",
+      "task_label": "5",
+      "task_title": "**Add `GET /broker/creds/{alias}` route + session-token mint on `POST /api/v1/sessions`**",
+      "session_id": "ses_241c6d547ffe7sP5r8rMBfVkN2",
       "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-04-24T01:23:30.879Z"
+      "category": "unspecified-high",
+      "updated_at": "2026-04-24T06:57:10.212Z"
     },
-    "todo:8": {
-      "task_key": "todo:8",
-      "task_label": "8",
-      "task_title": "**Webhook Delivery Service (PR-5)**",
-      "session_id": "ses_242dbfb61ffeSqa0TqzXh0MPXx",
+    "todo:9": {
+      "task_key": "todo:9",
+      "task_label": "9",
+      "task_title": "**Integration tests for broker dispatch (all 3 binding kinds)**",
+      "session_id": "ses_241b826c1ffe7XxnDD2X7Tg6p3",
       "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-04-24T01:43:42.668Z"
-    },
-    "todo:10": {
-      "task_key": "todo:10",
-      "task_label": "10",
-      "task_title": "**Workspace Isolation Layer (PR-6)**",
-      "session_id": "ses_242d26f2bffeF1UQd0Mj8OVEDQ",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-04-24T02:19:33.960Z"
+      "category": "unspecified-high",
+      "updated_at": "2026-04-24T07:25:30.508Z"
     },
     "todo:11": {
       "task_key": "todo:11",
       "task_label": "11",
-      "task_title": "**TypeScript SDK Implementation**",
-      "session_id": "ses_242b537a9ffeHEww4NnZTkPtCp",
+      "task_title": "**Integration test for egress allow/deny with real sandbox + env policy**",
+      "session_id": "ses_2419e373cffepFQme7zJ56LxAs",
       "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-04-24T02:23:12.035Z"
+      "category": "unspecified-high",
+      "updated_at": "2026-04-24T07:34:42.271Z"
     },
     "final-wave:f1": {
       "task_key": "final-wave:f1",
       "task_label": "F1",
       "task_title": "**Plan Compliance Audit** — `oracle`",
-      "session_id": "ses_24290f16affe92bMzE85z5jxSc",
+      "session_id": "ses_241961268ffehihbLk4x1wFHdy",
       "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-04-24T03:06:56.622Z"
+      "category": "unspecified-high",
+      "updated_at": "2026-04-24T07:44:46.811Z"
     }
   }
 }

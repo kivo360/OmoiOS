@@ -1,0 +1,8 @@
+shellcheck /Users/kevinhill/Coding/Experiments/senior-sandbox/omoi_os/sandbox/bootstrap.sh
+
+Result: Clean (no warnings or errors)
+
+Pre-fix issue (pre-existing code):
+  SC2034 (warning): i appears unused. Verify use (or export if used externally).
+  Location: line 161, for i in 1 2 3 4 5; do
+  Fix: changed to "for _ in 1 2 3 4 5; do"

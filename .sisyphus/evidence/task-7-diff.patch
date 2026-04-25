@@ -1,0 +1,172 @@
+diff --git a/sandbox/bootstrap.sh b/sandbox/bootstrap.sh
+index 97f488aa..c87bd439 100755
+--- a/sandbox/bootstrap.sh
++++ b/sandbox/bootstrap.sh
+@@ -23,10 +23,82 @@ log() { printf '[bootstrap %s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
+ OPENCODE_CONFIG_DIR="$HOME/.config/opencode"
+ OPENCODE_DATA_DIR="$HOME/.local/share/opencode"
+ mkdir -p "$OPENCODE_CONFIG_DIR" "$OPENCODE_DATA_DIR"
+-chmod 700 "$OPENCODE_DATA_DIR"
++chmod 0700 "$OPENCODE_DATA_DIR"
+
+ # ─── 1. auth.json from the credential broker ──────────────────────────────────
+ AUTH_JSON_PATH="$OPENCODE_DATA_DIR/auth.json"
++
++# Fetch a URL with 3 retries and exponential backoff (1s, 2s, 4s).
++# Returns the response body on stdout, or exits 1 on failure.
++fetch_with_retry() {
++  local url="$1"
++  local attempt=1
++  local max_attempts=3
++  local delay=1
++
++  while [[ $attempt -le $max_attempts ]]; do
++    if resp="$(curl -fsS \
++        --max-time 10 \
++        -H "Authorization: Bearer $SESSION_TOKEN" \
++        "$url" 2>/dev/null)"; then
++      printf '%s\n' "$resp"
++      return 0
++    fi
++
++    if [[ $attempt -eq $max_attempts ]]; then
++      return 1
++    fi
++
++    log "  retry $attempt/$max_attempts for $url (backing off ${delay}s)"
++    sleep "$delay"
++    delay=$((delay * 2))
++    attempt=$((attempt + 1))
++  done
++
++  return 1
++}
++
++# Render a broker credential response into an OpenCode auth.json entry.
++# Branches on the broker response "kind" field.
++render_auth_entry() {
++  local alias="$1"
++  local resp="$2"
++  local kind
++  kind="$(jq -r '.kind // empty' <<< "$resp")"
++
++  case "$kind" in
++    bearer_secret)
++      local value
++      value="$(jq -r '.value // empty' <<< "$resp")"
++      jq -n --arg v "$value" '{type: "api", key: $v}'
++      ;;
++    user_oauth)
++      local access_token refresh_token expires_at
++      access_token="$(jq -r '.access_token // empty' <<< "$resp")"
++      refresh_token="$(jq -r '.refresh_token // empty' <<< "$resp")"
++      expires_at="$(jq -r '.expires_at // empty' <<< "$resp")"
++      jq -n \
++        --arg a "$access_token" \
++        --arg r "$refresh_token" \
++        --argjson e "${expires_at:-0}" \
++        '{type: "oauth", access: $a, refresh: $r, expires: $e}'
++      ;;
++    github_app)
++      local token expires_at
++      token="$(jq -r '.token // empty' <<< "$resp")"
++      expires_at="$(jq -r '.expires_at // empty' <<< "$resp")"
++      jq -n \
++        --arg a "$token" \
++        --argjson e "${expires_at:-0}" \
++        '{type: "oauth", access: $a, expires: $e}'
++      ;;
++    *)
++      log "  ✗ $alias (unknown broker kind: $kind)"
++      return 1
++      ;;
++  esac
++}
++
+ if [[ -n "${SESSION_TOKEN:-}" && -n "${BROKER_URL:-}" && -n "${OMOIOS_CREDENTIAL_ALIASES:-}" ]]; then
+   log "minting auth.json via broker (aliases=$OMOIOS_CREDENTIAL_ALIASES)"
+   auth_json="{}"
+@@ -34,18 +106,31 @@ if [[ -n "${SESSION_TOKEN:-}" && -n "${BROKER_URL:-}" && -n "${OMOIOS_CREDENTIAL
+   for alias in "${aliases[@]}"; do
+     alias="$(echo "$alias" | tr -d '[:space:]')"
+     [[ -z "$alias" ]] && continue
+-    if resp="$(curl -fsS \
+-        --max-time 10 \
+-        -H "Authorization: Bearer $SESSION_TOKEN" \
+-        "$BROKER_URL/creds/$alias" 2>/dev/null)"; then
+-      auth_json="$(jq --arg a "$alias" --argjson r "$resp" '. + {($a): $r}' <<< "$auth_json")"
+-      log "  ✓ $alias"
+-    else
+-      log "  ✗ $alias (broker returned error; skipping)"
++
++    resp=""
++    if ! resp="$(fetch_with_retry "$BROKER_URL/creds/$alias")"; then
++      log "  ✗ $alias (broker failed after retries)"
++      exit 1
++    fi
++
++    entry=""
++    if ! entry="$(render_auth_entry "$alias" "$resp")"; then
++      log "  ✗ $alias (failed to render auth entry)"
++      exit 1
+     fi
++
++    auth_json="$(jq --arg a "$alias" --argjson e "$entry" '. + {($a): $e}' <<< "$auth_json")"
++    log "  ✓ $alias"
+   done
++
++  # Validate: every entry must have type "api" or "oauth"
++  if ! jq -e 'to_entries | all(.value.type == "api" or .value.type == "oauth")' <<< "$auth_json" >/dev/null 2>&1; then
++    log "auth.json validation failed: every entry must have type \"api\" or \"oauth\""
++    exit 1
++  fi
++
+   printf '%s\n' "$auth_json" > "$AUTH_JSON_PATH"
+-  chmod 600 "$AUTH_JSON_PATH"
++  chmod 0600 "$AUTH_JSON_PATH"
+   log "wrote $AUTH_JSON_PATH (mode 0600)"
+ else
+   log "skipping auth.json: broker env not set"
+@@ -61,7 +146,32 @@ if [[ -n "${OMOIOS_OMO_CONFIG:-}" ]]; then
+   log "wrote $OPENCODE_CONFIG_DIR/oh-my-openagent.jsonc"
+ fi
+
+-# ─── 3. VNC stack ─────────────────────────────────────────────────────────────
++# ─── 3. Egress proxy ──────────────────────────────────────────────────────────
++# Starts the allowlist-based egress proxy before any outbound traffic occurs.
++if [[ -n "${OMOIOS_EGRESS_ALLOWED_HOSTS:-}" ]]; then
++  if ! command -v omoios-egress-proxy >/dev/null 2>&1; then
++    log "egress proxy binary missing; exiting"
++    exit 1
++  fi
++  log "starting egress proxy (allowlist=$OMOIOS_EGRESS_ALLOWED_HOSTS)"
++  PORT=8888 ALLOWED_HOSTS="$OMOIOS_EGRESS_ALLOWED_HOSTS" \
++    /usr/local/bin/omoios-egress-proxy >/tmp/omoios-egress-proxy.log 2>&1 &
++  EGRESS_PID=$!
++  # Liveness gate: wait up to 5s
++  for _ in 1 2 3 4 5; do
++    if curl -fsS -m 1 -x http://127.0.0.1:8888 https://api.github.com/zen >/dev/null 2>&1; then
++      log "egress proxy ready (pid=$EGRESS_PID)"
++      break
++    fi
++    sleep 1
++  done
++  if ! kill -0 "$EGRESS_PID" 2>/dev/null; then
++    log "egress proxy crashed; exiting"
++    exit 1
++  fi
++fi
++
++# ─── 4. VNC stack ─────────────────────────────────────────────────────────────
+ # Uses the xvfb + x11vnc + novnc + xfce4 stack shipped in daytonaio/sandbox.
+ if [[ "${DISABLE_VNC:-0}" != "1" ]]; then
+   export DISPLAY="${DISPLAY:-:0}"
+@@ -84,7 +194,7 @@ if [[ "${DISABLE_VNC:-0}" != "1" ]]; then
+   log "VNC stack launched in background (xfce4 + x11vnc + noVNC)"
+ fi
+
+-# ─── 4. hand off ──────────────────────────────────────────────────────────────
++# ─── 5. hand off ──────────────────────────────────────────────────────────────
+ if [[ $# -gt 0 ]]; then
+   log "exec: $*"
+   exec "$@"

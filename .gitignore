@@ -1,6 +1,9 @@
 # External dependencies
 external/
 
+# Compiled Go binaries (build artifacts, not source)
+egress-proxy/egress-proxy
+
 # Python
 **/__pycache__/
 *.pyc

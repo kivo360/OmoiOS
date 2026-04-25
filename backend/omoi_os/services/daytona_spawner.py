@@ -15,13 +15,24 @@ import shlex
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from uuid import uuid4
+
+
+async def _run_sync(fn: Callable[[], Any]) -> Any:
+    """Run a sync callable on the default executor — used for Daytona SDK
+    calls that block (get_preview_link, volume.get, etc.) so we stay on
+    the asyncio loop. Inline helper rather than pulling in a bigger
+    async-wrapper dependency."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, fn)
+
 
 from omoi_os.config import load_daytona_settings, get_app_settings
 from omoi_os.logging import get_logger
 from omoi_os.sandbox_skills import get_skills_for_upload
 from omoi_os.sandbox_modules import get_spec_sandbox_files
+from omoi_os.models.environment import EnvironmentVersion
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.ownership_validation import (
@@ -155,6 +166,12 @@ class DaytonaSpawnerService:
         require_spec_skill: bool = False,  # Force spec-driven-dev skill usage
         project_id: Optional[str] = None,  # Project ID for spec CLI
         omoios_api_key: Optional[str] = None,  # API key for spec CLI authentication
+        env_version: Optional[
+            EnvironmentVersion
+        ] = None,  # Environment version with egress allowlist
+        sandbox_session_token: Optional[
+            str
+        ] = None,  # Plaintext sess_tok_ from SandboxSessionService
     ) -> str:
         """Spawn a Daytona sandbox for executing a task.
 
@@ -187,6 +204,8 @@ class DaytonaSpawnerService:
                 spec-driven-dev skill to function properly.
             omoios_api_key: API key for authenticating with OmoiOS API. If not provided,
                 falls back to LLM_API_KEY from settings.
+            sandbox_session_token: One-time plaintext session token (sess_tok_...) for
+                the sandbox to authenticate with the credential broker. Must NOT be logged.
 
         Returns:
             Sandbox ID
@@ -298,6 +317,42 @@ class DaytonaSpawnerService:
             "OMOIOS_API_URL": base_url,
         }
 
+        # Inject egress proxy env vars when an allowlist is configured
+        if (
+            env_version
+            and env_version.egress
+            and env_version.egress.get("allowed_hosts")
+        ):
+            env_vars["HTTPS_PROXY"] = "http://127.0.0.1:8888"
+            env_vars["HTTP_PROXY"] = "http://127.0.0.1:8888"
+            env_vars["NO_PROXY"] = "localhost,127.0.0.1,169.254.169.254,.daytona.local"
+            env_vars["OMOIOS_EGRESS_ALLOWED_HOSTS"] = ",".join(
+                env_version.egress["allowed_hosts"]
+            )
+            logger.info(
+                "[SPAWNER] Egress proxy env vars injected",
+                extra={
+                    "task_id": task_id,
+                    "allowed_hosts": env_version.egress["allowed_hosts"],
+                },
+            )
+
+        # Inject broker env vars when credential aliases are configured
+        if env_version and env_version.credentials:
+            env_vars["SESSION_TOKEN"] = sandbox_session_token
+            env_vars["BROKER_URL"] = f"{base_url}/broker"
+            env_vars["OMOIOS_CREDENTIAL_ALIASES"] = ",".join(
+                env_version.credentials.keys()
+            )
+            logger.info(
+                "[SPAWNER] Broker env vars injected",
+                extra={
+                    "task_id": task_id,
+                    "broker_url": f"{base_url}/broker",
+                    "credential_aliases": list(env_version.credentials.keys()),
+                },
+            )
+
         # Add spec skill enforcement if requested (from frontend dropdown)
         # This is the critical path for spec-driven development mode
         if require_spec_skill:
@@ -348,18 +403,22 @@ class DaytonaSpawnerService:
             try:
                 from datetime import timedelta
                 from omoi_os.models.task import Task
-                from omoi_os.models.ticket import Ticket
                 from omoi_os.services.auth_service import AuthService
                 from omoi_os.config import settings
 
                 user_id = None
                 with self.db.get_session() as session:
-                    # Get user_id from task -> ticket chain
+                    # Resolve the session subject — single source of truth for
+                    # user_id across ticket-driven and SDK-direct sessions.
                     task = session.get(Task, task_id)
-                    if task and task.ticket_id:
-                        ticket = session.get(Ticket, task.ticket_id)
-                        if ticket and ticket.user_id:
-                            user_id = ticket.user_id
+                    if task is not None:
+                        from omoi_os.services.session_subject import (
+                            resolve as _resolve_subject,
+                        )
+
+                        subject = _resolve_subject(session, task)
+                        if subject.user_id_for_token:
+                            user_id = subject.user_id_for_token
 
                     if user_id:
                         # Create a short-lived token (1 hour) for sandbox operations
@@ -606,7 +665,15 @@ class DaytonaSpawnerService:
         logger.debug(f"Using {creds.source} credentials for sandbox")
 
         # Create GitHub branch BEFORE sandbox creation (if we have ticket/repo info)
-        # This ensures the branch exists before we clone the repo in the sandbox
+        # This ensures the branch exists before we clone the repo in the sandbox.
+        #
+        # Two paths:
+        #   1. Ticket-driven (legacy): BranchWorkflowService.start_work_on_ticket
+        #      creates the branch through the ticket workflow and returns a
+        #      `feature/TKT-...` / `hotfix/...` / `bug/...` branch.
+        #   2. SDK-direct (ticket-less): we synthesise `agent/<repo>-<shortid>`
+        #      locally and leave branch creation to the agent inside the sandbox.
+        #      This preserves the legacy codepath byte-identically.
         branch_name = None
         if extra_env and self.db:
             github_repo = extra_env.get("GITHUB_REPO")
@@ -614,8 +681,8 @@ class DaytonaSpawnerService:
             user_id = extra_env.get("USER_ID")
             ticket_title = extra_env.get("TICKET_TITLE", "")
             ticket_type = extra_env.get("TICKET_TYPE", "feature")
+            session_id = extra_env.get("SESSION_ID")
 
-            # If we have all required info, create branch via BranchWorkflowService
             if github_repo and ticket_id and user_id:
                 try:
                     from omoi_os.services.branch_workflow import BranchWorkflowService
@@ -658,6 +725,20 @@ class DaytonaSpawnerService:
                     logger.warning(
                         f"Exception creating branch before sandbox spawn: {e}",
                         exc_info=True,
+                    )
+            elif github_repo and session_id and not ticket_id:
+                # SDK-direct session — no ticket, no BranchWorkflowService call.
+                # Just compute a stable branch name; the agent creates the branch
+                # inside the sandbox if/when it needs to push.
+                parts = github_repo.split("/")
+                if len(parts) == 2:
+                    _, repo_name = parts
+                    short = str(session_id).replace("-", "")[:8]
+                    branch_name = f"agent/{repo_name}-{short}"
+                    extra_env["BRANCH_NAME"] = branch_name
+                    logger.info(
+                        f"ℹ️  Ticket-less session {session_id}: using branch "
+                        f"'{branch_name}' (created lazily by agent)"
                     )
 
         # Handle session resumption for Claude runtime
@@ -812,6 +893,25 @@ class DaytonaSpawnerService:
                     extra={"task_id": task_id, "error": str(e)},
                 )
 
+        try:
+            from omoi_os.services.sandbox_session_token_transport import (
+                pop_session_token_for_task,
+            )
+
+            session_token = pop_session_token_for_task(task_id)
+            if session_token:
+                env_vars["OMOIOS_SESSION_TOKEN"] = session_token
+                env_vars["OMOIOS_BROKER_URL"] = f"{base_url}/broker"
+                logger.info(
+                    "[SPAWNER] Broker session token injected",
+                    extra={"task_id": task_id},
+                )
+        except Exception as e:
+            logger.warning(
+                "[SPAWNER] Broker session token injection skipped",
+                extra={"task_id": task_id, "error_type": type(e).__name__},
+            )
+
         # Build labels
         sandbox_labels = {
             "project": "omoios",
@@ -853,6 +953,22 @@ class DaytonaSpawnerService:
             # Store runtime type before creation
             info.extra_data["runtime"] = runtime
 
+            # Pull workspace_id off the Task row so the spawner can name the
+            # persistent volume and the tunnel-url writeback knows where to
+            # land. Ticket-less SDK-direct sessions always have one; legacy
+            # ticket-driven tasks without workspace_id simply skip both.
+            resolved_workspace_id: Optional[str] = None
+            if self.db is not None:
+                try:
+                    from omoi_os.models.task import Task as _Task
+
+                    with self.db.get_session() as db_session:
+                        t = db_session.get(_Task, task_id)
+                        if t is not None and t.workspace_id:
+                            resolved_workspace_id = str(t.workspace_id)
+                except Exception:  # noqa: BLE001
+                    resolved_workspace_id = None
+
             await self._create_daytona_sandbox(
                 sandbox_id=sandbox_id,
                 env_vars=env_vars,
@@ -860,6 +976,9 @@ class DaytonaSpawnerService:
                 runtime=runtime,
                 execution_mode=execution_mode,
                 continuous_mode=effective_continuous_mode,
+                env_version=env_version,
+                workspace_id=resolved_workspace_id,
+                task_id=task_id,
             )
 
             # Update status
@@ -1395,6 +1514,9 @@ class DaytonaSpawnerService:
         runtime: str = "openhands",
         execution_mode: str = "implementation",
         continuous_mode: bool = False,
+        env_version: Optional["EnvironmentVersion"] = None,
+        workspace_id: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> None:
         """Create a Daytona sandbox via their API.
 
@@ -1434,6 +1556,42 @@ class DaytonaSpawnerService:
 
             sandbox = None
 
+            # Resolve workspace-scoped volume mount when the pinned environment
+            # version opts in (spec §15 §4 #3). We synthesise the volume name
+            # from workspace_id rather than storing it per-version — different
+            # sessions in the same workspace share the volume for fast warm
+            # restarts; different workspaces get isolated volumes.
+            volume_mounts = None
+            if (
+                env_version is not None
+                and getattr(env_version, "persistent_volume", False)
+                and workspace_id
+            ):
+                try:
+                    from daytona import VolumeMount  # type: ignore
+                    from omoi_os.services.daytona_provider import DaytonaProvider  # noqa: F401
+                except ImportError:
+                    VolumeMount = None  # type: ignore
+                if VolumeMount is not None:
+                    vol_name = f"ws-{workspace_id}"
+                    try:
+                        # Get-or-create via the same SDK surface DaytonaProvider
+                        # exposes; keep the spawner's direct Daytona handle so
+                        # we don't thread a provider reference through here.
+                        volume = await _run_sync(
+                            lambda: daytona.volume.get(vol_name, create=True)
+                        )
+                        volume_mounts = [
+                            VolumeMount(
+                                volume_id=getattr(volume, "id", None),
+                                mount_path="/workspace",
+                            )
+                        ]
+                    except Exception as vol_err:  # noqa: BLE001
+                        logger.warning(
+                            f"Volume mount setup failed for {vol_name}: {vol_err}"
+                        )
+
             # Create sandbox from snapshot if provided, otherwise use image
             if self.sandbox_snapshot:
                 logger.info(
@@ -1442,7 +1600,7 @@ class DaytonaSpawnerService:
                     f"{self.sandbox_memory_gb} GiB RAM, {self.sandbox_disk_gb} GiB disk"
                 )
                 try:
-                    params = CreateSandboxFromSnapshotParams(
+                    snapshot_kwargs = dict(
                         snapshot=self.sandbox_snapshot,
                         labels=labels or None,
                         ephemeral=True,  # Auto-delete when stopped
@@ -1450,6 +1608,9 @@ class DaytonaSpawnerService:
                         resources=resources,
                         auto_stop_interval=30,  # Safety net: auto-stop after 30min idle (our own idle detection should fire first)
                     )
+                    if volume_mounts is not None:
+                        snapshot_kwargs["volumes"] = volume_mounts
+                    params = CreateSandboxFromSnapshotParams(**snapshot_kwargs)
                     sandbox = daytona.create(params=params, timeout=120)
                 except Exception as snapshot_error:
                     # Snapshot may be inactive/expired/unavailable -- fall back to image
@@ -1468,7 +1629,7 @@ class DaytonaSpawnerService:
                     f"with resources: {self.sandbox_cpu} CPU, "
                     f"{self.sandbox_memory_gb} GiB RAM, {self.sandbox_disk_gb} GiB disk"
                 )
-                params = CreateSandboxFromImageParams(
+                image_kwargs = dict(
                     image=image,
                     labels=labels or None,
                     ephemeral=True,  # Auto-delete when stopped
@@ -1476,6 +1637,9 @@ class DaytonaSpawnerService:
                     resources=resources,
                     auto_stop_interval=30,  # Safety net: auto-stop after 30min idle (our own idle detection should fire first)
                 )
+                if volume_mounts is not None:
+                    image_kwargs["volumes"] = volume_mounts
+                params = CreateSandboxFromImageParams(**image_kwargs)
                 sandbox = daytona.create(params=params, timeout=120)
 
             logger.info(f"Daytona sandbox {sandbox.id} created for {sandbox_id}")
@@ -1485,6 +1649,47 @@ class DaytonaSpawnerService:
             if info:
                 info.extra_data["daytona_sandbox"] = sandbox
                 info.extra_data["daytona_sandbox_id"] = sandbox.id
+
+            # Open tunnels for exposed_ports (spec §15 §11). We call
+            # get_preview_link per port — v0.119.0's SDK exposes this on
+            # sandbox objects directly. The URL dict is stashed into
+            # task.result['tunnel_urls'] so the sessions.py response
+            # synthesiser (Wave 2 T5) can surface it on session.urls.editor.
+            if (
+                env_version is not None
+                and getattr(env_version, "exposed_ports", None)
+                and task_id is not None
+            ):
+                tunnel_urls: Dict[str, str] = {}
+                for port in env_version.exposed_ports or []:
+                    try:
+                        preview = await _run_sync(
+                            lambda p=port: sandbox.get_preview_link(p)
+                        )
+                        url = getattr(preview, "url", None)
+                        if url:
+                            tunnel_urls[str(port)] = url
+                    except Exception as tunnel_err:  # noqa: BLE001
+                        logger.warning(
+                            f"Failed to expose port {port} on sandbox "
+                            f"{sandbox.id}: {tunnel_err}"
+                        )
+                if tunnel_urls and self.db is not None:
+                    try:
+                        from omoi_os.models.task import Task as _Task
+
+                        with self.db.get_session() as db_session:
+                            task_row = db_session.get(_Task, task_id)
+                            if task_row is not None:
+                                result = dict(task_row.result or {})
+                                result["tunnel_urls"] = tunnel_urls
+                                task_row.result = result
+                                db_session.commit()
+                    except Exception as db_err:  # noqa: BLE001
+                        logger.warning(
+                            f"Failed to persist tunnel_urls for task "
+                            f"{task_id}: {db_err}"
+                        )
 
         except ImportError as e:
             # Daytona SDK not available - only use mock in development

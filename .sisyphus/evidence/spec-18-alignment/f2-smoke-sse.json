@@ -1,0 +1,67 @@
+{
+  "api_base_url": "http://localhost:18000",
+  "run_at": "2026-04-24T12:08:54Z",
+  "summary": {
+    "PASS": 5,
+    "FAIL": 0,
+    "GAP": 0,
+    "SKIP": 0
+  },
+  "phases": [
+    {
+      "name": "prereqs",
+      "verdict": "PASS",
+      "duration_sec": 0.01,
+      "detail": "env + API reachable",
+      "evidence": {}
+    },
+    {
+      "name": "org_setup",
+      "verdict": "PASS",
+      "duration_sec": 0.09,
+      "detail": "",
+      "evidence": {
+        "ws_a": "f7ab3bd3-0e82-4789-b5ce-07cf72f0ada1",
+        "ws_b": "5195c7d2-9e3b-4b07-916f-91d21d9aaaf4"
+      }
+    },
+    {
+      "name": "sdk_prereqs",
+      "verdict": "PASS",
+      "duration_sec": 0.26,
+      "detail": "",
+      "evidence": {
+        "workspace_id": "f7ab3bd3-0e82-4789-b5ce-07cf72f0ada1",
+        "ticket_id": "0567357f-844f-4bc2-9bef-da9ccab6d22c"
+      }
+    },
+    {
+      "name": "session_create",
+      "verdict": "PASS",
+      "duration_sec": 0.03,
+      "detail": "",
+      "evidence": {
+        "session_id": "beb57cd9-bb80-47f5-a358-b3da70fdfee0",
+        "idem_key": "smoke-90c67a37-a7d3-43f1-8640-68e5b85957f1",
+        "ticket_id": null
+      }
+    },
+    {
+      "name": "session_events_sse",
+      "verdict": "PASS",
+      "duration_sec": 15.0,
+      "detail": "",
+      "evidence": {
+        "count": 1,
+        "last_seq": 1,
+        "types": [
+          "session.created"
+        ]
+      }
+    }
+  ],
+  "cleanup": [
+    "del sdk_session: 404",
+    "sdk_client: closed"
+  ]
+}

@@ -44,6 +44,11 @@ class Workspace(Base):
         ForeignKey("environments.id", ondelete="SET NULL"),
         nullable=True,
     )
+    github_owner: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    github_repo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    github_connected: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     settings: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict, server_default="{}"
     )

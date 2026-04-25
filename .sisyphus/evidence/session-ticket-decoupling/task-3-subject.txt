@@ -1,0 +1,15 @@
+cachedir: .pytest_cache
+rootdir: /Users/kevinhill/Coding/Experiments/senior-sandbox/omoi_os/backend
+configfile: pytest.ini
+plugins: anyio-4.12.1, logfire-4.18.0, libtmux-0.53.0, xdist-3.8.0, cov-4.1.0, sugar-1.1.1, asyncio-0.26.0, testmon-2.2.0
+asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/unit/services/test_session_subject.py::test_resolve_sdk_direct_uses_workspace_and_direct_columns PASSED [ 16%]
+tests/unit/services/test_session_subject.py::test_resolve_sdk_direct_falls_back_to_workspace_github PASSED [ 33%]
+tests/unit/services/test_session_subject.py::test_resolve_workflow_full_uses_project_chain PASSED [ 50%]
+tests/unit/services/test_session_subject.py::test_resolve_ticket_only_uses_ticket_user_id PASSED [ 66%]
+tests/unit/services/test_session_subject.py::test_resolve_orphan_uses_task_defaults PASSED [ 83%]
+tests/unit/services/test_session_subject.py::test_resolve_orphan_synthesises_title_from_task_id PASSED [100%]
+
+============================== 6 passed in 0.06s ===============================

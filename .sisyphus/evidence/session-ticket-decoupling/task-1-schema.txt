@@ -1,0 +1,119 @@
+=== alembic current ===
+postgresql+psycopg://kevinhill@localhost:5432/omoi_os_dev
+{'here': '/Users/kevinhill/Coding/Experiments/senior-sandbox/omoi_os/backend', 'script_location': 'migrations', 'sqlalchemy.url': 'postgresql+psycopg://kevinhill@localhost:5432/omoi_os_dev'}
+071_decouple_session_from_ticket (head)
+
+=== tasks schema ===
+                                 Table "public.tasks"
+          Column          |           Type           | Collation | Nullable | Default
+--------------------------+--------------------------+-----------+----------+---------
+ id                       | character varying        |           | not null |
+ ticket_id                | character varying        |           |          |
+ phase_id                 | character varying(50)    |           | not null |
+ task_type                | character varying(100)   |           | not null |
+ description              | text                     |           |          |
+ priority                 | character varying(20)    |           | not null |
+ status                   | character varying(50)    |           | not null |
+ assigned_agent_id        | character varying        |           |          |
+ conversation_id          | character varying(255)   |           |          |
+ result                   | jsonb                    |           |          |
+ error_message            | text                     |           |          |
+ created_at               | timestamp with time zone |           | not null |
+ started_at               | timestamp with time zone |           |          |
+ completed_at             | timestamp with time zone |           |          |
+ dependencies             | jsonb                    |           |          |
+ retry_count              | integer                  |           | not null | 0
+ max_retries              | integer                  |           | not null | 3
+ timeout_seconds          | integer                  |           |          |
+ validation_enabled       | boolean                  |           | not null | false
+ validation_iteration     | integer                  |           | not null | 0
+ last_validation_feedback | text                     |           |          |
+ review_done              | boolean                  |           | not null | false
+ score                    | double precision         |           | not null | 0.0
+ deadline_at              | timestamp with time zone |           |          |
+ parent_task_id           | character varying        |           |          |
+ required_capabilities    | jsonb                    |           |          |
+ persistence_dir          | character varying(500)   |           |          |
+ monitoring_notes         | text                     |           |          |
+ discovery_impact         | character varying(32)    |           |          |
+ sandbox_id               | character varying(255)   |           |          |
+ title                    | character varying(500)   |           |          |
+ updated_at               | timestamp with time zone |           | not null |
+ embedding_vector         | vector(1536)             |           |          |
+ execution_config         | jsonb                    |           |          |
+ synthesis_context        | jsonb                    |           |          |
+ owned_files              | jsonb                    |           |          |
+ workspace_id             | uuid                     |           |          |
+ environment_version_id   | uuid                     |           |          |
+ created_by               | uuid                     |           |          |
+ github_repo              | character varying(511)   |           |          |
+Indexes:
+    "tasks_pkey" PRIMARY KEY, btree (id)
+    "idx_tasks_dependencies" gin (dependencies)
+    "idx_tasks_embedding_vector" ivfflat (embedding_vector vector_cosine_ops) WITH (lists='100')
+    "ix_tasks_assigned_agent_id" btree (assigned_agent_id)
+    "ix_tasks_created_by" btree (created_by) WHERE created_by IS NOT NULL
+    "ix_tasks_deadline_at" btree (deadline_at)
+    "ix_tasks_parent_task_id" btree (parent_task_id)
+    "ix_tasks_phase_id" btree (phase_id)
+    "ix_tasks_priority" btree (priority)
+    "ix_tasks_required_capabilities" gin (required_capabilities)
+    "ix_tasks_sandbox_id" btree (sandbox_id)
+    "ix_tasks_score" btree (score)
+    "ix_tasks_status" btree (status)
+    "ix_tasks_ticket_id" btree (ticket_id)
+    "ix_tasks_workspace_active" btree (workspace_id, status) WHERE workspace_id IS NOT NULL
+Foreign-key constraints:
+    "fk_tasks_created_by" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    "fk_tasks_environment_version_id" FOREIGN KEY (environment_version_id) REFERENCES environment_versions(id) ON DELETE SET NULL
+    "fk_tasks_parent_task_id_tasks" FOREIGN KEY (parent_task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    "fk_tasks_workspace_id" FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
+    "tasks_ticket_id_fkey" FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "claude_session_transcripts" CONSTRAINT "claude_session_transcripts_task_id_fkey" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
+    TABLE "cost_records" CONSTRAINT "cost_records_task_id_fkey" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    TABLE "agent_results" CONSTRAINT "fk_agent_results_task" FOREIGN KEY (task_id) REFERENCES tasks(id)
+    TABLE "agent_status_transitions" CONSTRAINT "fk_agent_status_transitions_task_id_tasks" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
+    TABLE "diagnostic_runs" CONSTRAINT "fk_diagnostic_runs_task" FOREIGN KEY (diagnostic_task_id) REFERENCES tasks(id)
+    TABLE "resource_locks" CONSTRAINT "fk_locks_task" FOREIGN KEY (locked_by_task_id) REFERENCES tasks(id)
+    TABLE "quality_metrics" CONSTRAINT "fk_quality_metrics_task_id" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    TABLE "task_discoveries" CONSTRAINT "fk_task_discoveries_source_task_id" FOREIGN KEY (source_task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    TABLE "task_memories" CONSTRAINT "fk_task_memories_task_id" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    TABLE "tasks" CONSTRAINT "fk_tasks_parent_task_id_tasks" FOREIGN KEY (parent_task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    TABLE "collaboration_threads" CONSTRAINT "fk_threads_task" FOREIGN KEY (task_id) REFERENCES tasks(id)
+    TABLE "merge_attempts" CONSTRAINT "merge_attempts_task_id_fkey" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    TABLE "preview_sessions" CONSTRAINT "preview_sessions_task_id_fkey" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
+    TABLE "session_acls" CONSTRAINT "session_acls_task_id_fkey" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    TABLE "session_forks" CONSTRAINT "session_forks_child_task_id_fkey" FOREIGN KEY (child_task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    TABLE "session_forks" CONSTRAINT "session_forks_parent_task_id_fkey" FOREIGN KEY (parent_task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    TABLE "validation_reviews" CONSTRAINT "validation_reviews_task_id_fkey" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+
+
+=== workspaces schema ===
+                                  Table "public.workspaces"
+         Column         |           Type           | Collation | Nullable |      Default
+------------------------+--------------------------+-----------+----------+-------------------
+ id                     | uuid                     |           | not null | gen_random_uuid()
+ organization_id        | uuid                     |           | not null |
+ name                   | character varying(255)   |           | not null |
+ slug                   | character varying(255)   |           | not null |
+ default_environment_id | uuid                     |           |          |
+ settings               | jsonb                    |           | not null | '{}'::jsonb
+ is_active              | boolean                  |           | not null | true
+ created_at             | timestamp with time zone |           | not null | now()
+ updated_at             | timestamp with time zone |           | not null | now()
+ github_owner           | character varying(255)   |           |          |
+ github_repo            | character varying(255)   |           |          |
+ github_connected       | boolean                  |           | not null | false
+Indexes:
+    "workspaces_pkey" PRIMARY KEY, btree (id)
+    "idx_workspaces_org" btree (organization_id)
+    "idx_workspaces_org_active" btree (organization_id, is_active)
+    "uq_workspaces_org_slug" UNIQUE CONSTRAINT, btree (organization_id, slug)
+    "ux_workspaces_org_repo" UNIQUE, btree (organization_id, github_owner, github_repo) WHERE github_owner IS NOT NULL AND github_repo IS NOT NULL
+Foreign-key constraints:
+    "workspaces_default_environment_id_fkey" FOREIGN KEY (default_environment_id) REFERENCES environments(id) ON DELETE SET NULL
+    "workspaces_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "tasks" CONSTRAINT "fk_tasks_workspace_id" FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
+    TABLE "sandbox_sessions" CONSTRAINT "sandbox_sessions_workspace_id_fkey" FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE

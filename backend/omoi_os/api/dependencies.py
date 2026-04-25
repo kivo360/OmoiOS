@@ -758,6 +758,144 @@ async def get_auth_context(
     )
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# Spec §01 three-token AuthContext
+# ────────────────────────────────────────────────────────────────────────────
+
+from dataclasses import dataclass
+from typing import Literal
+
+TokenKind = Literal["platform", "user", "session"]
+
+
+@dataclass(frozen=True)
+class AuthContext:
+    """Resolved caller identity + scope derived from the bearer token.
+
+    Spec §01 names three token types — platform API key (`rpk_live_…`), user
+    JWT (`eyJ…`), sandbox session bearer (`sess_tok_…`). Every authenticated
+    route should receive this context so it can uniformly check scope without
+    sniffing headers.
+
+    Attributes:
+        user:       The resolved User (always present).
+        org_id:     The tenant the caller is scoped to, or None if the token
+                    does not pin an org (some JWTs).
+        token_kind: Which of the three spec token kinds was presented.
+        token_prefix: First 10 chars of the raw token, for audit logs.
+    """
+
+    user: "User"
+    org_id: Optional[UUID]
+    token_kind: TokenKind
+    token_prefix: str
+
+
+def _classify_token(token: str) -> TokenKind:
+    """Map a raw bearer value to its spec token kind.
+
+    The prefix convention comes from spec §01: platform keys start with
+    ``rpk_live_`` (though legacy ``sk_live_`` variants exist in this codebase),
+    session bearers start with ``sess_tok_``, and everything else is treated
+    as a user JWT. Callers must still verify the token; this only picks which
+    verifier to route to.
+    """
+    if token.startswith("sess_tok_"):
+        return "session"
+    if token.startswith(("rpk_live_", "sk_live_", "rpk_test_", "sk_test_")):
+        return "platform"
+    return "user"
+
+
+async def get_auth_context_full(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    auth_service: "AuthService" = Depends(get_auth_service),
+) -> AuthContext:
+    """Return a fully-typed AuthContext including the token kind.
+
+    Prefer this over `get_auth_context` for new routes. The legacy tuple
+    form remains for existing handlers that haven't been migrated.
+
+    Dispatch:
+        - `sess_tok_…`  → sandbox session verifier (from the companion
+          agent-platform-gaps.md Task 5). Until that lands, session-token
+          bearers return 401 here so the surface is explicit rather than
+          silently accepting an unknown token shape.
+        - `rpk_live_…` / `sk_live_…` → API-key verification, org from key.
+        - Anything else → JWT verification, org_id=None.
+    """
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = credentials.credentials
+    kind = _classify_token(token)
+    prefix = token[:10]
+
+    if kind == "session":
+        # Sandbox session-token verifier is the responsibility of
+        # `SandboxSessionService` from agent-platform-gaps.md. Until that
+        # service exposes a verify function, reject with a clear signal
+        # rather than silently falling through to JWT verification
+        # (which would waste cycles and muddle the log trail).
+        try:
+            from omoi_os.services.sandbox_session_service import (
+                SandboxSessionService,  # type: ignore[attr-defined]  # noqa: F401
+            )
+        except ImportError:
+            logger.warning(
+                "sess_tok_ presented but SandboxSessionService not available; "
+                "reject until agent-platform-gaps.md Task 5 lands"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="session tokens not yet supported",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        # Delegate to the service once it exists. Shape of the return is
+        # service-defined; this branch will be fleshed out in a follow-up
+        # task once that service API is frozen.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="session token dispatch pending service wiring",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # JWT path — try this first even for platform-looking prefixes to tolerate
+    # older keys minted without a known prefix.
+    if kind == "user":
+        token_data = auth_service.verify_token(token, token_type="access")
+        if token_data:
+            user = await auth_service.get_user_by_id(token_data.user_id)
+            if user:
+                return AuthContext(
+                    user=user,
+                    org_id=None,
+                    token_kind="user",
+                    token_prefix=prefix,
+                )
+
+    # Platform path.
+    api_key_result = await auth_service.verify_api_key(token)
+    if api_key_result:
+        user, api_key = api_key_result
+        return AuthContext(
+            user=user,
+            org_id=api_key.organization_id,
+            token_kind="platform",
+            token_prefix=prefix,
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 def require_permission(permission: str, organization_id: UUID):
     """
     Dependency factory for permission-based authorization.
@@ -1097,11 +1235,16 @@ async def verify_task_access(
     current_user: "User" = Depends(get_current_user),
     db: "DatabaseService" = Depends(get_db_service),
 ) -> str:
-    """
-    Verify the current user has access to the specified task.
+    """Verify the current user can access a task (= session).
 
-    A task is accessible if it belongs to a ticket in a project in an organization
-    the user is a member of.
+    Precedence (first match wins):
+      1. SessionACL grant (owner / editor / viewer) — spec §07 multiplayer path.
+      2. `task.workspace_id → workspace.organization_id` in user's orgs — the
+         spec §02 SDK-direct path.
+      3. `task.created_by == current_user.id` — direct ownership for
+         ticket-less sessions that weren't explicitly shared.
+      4. `task.ticket_id` → `verify_ticket_access` — the legacy workflow path.
+      5. Deny with 403.
 
     Args:
         task_id: The task ID to check access for
@@ -1115,11 +1258,13 @@ async def verify_task_access(
     """
     from sqlalchemy import select
     from omoi_os.models.task import Task
+    from omoi_os.models.session_acl import SessionACL
+    from omoi_os.models.workspace import Workspace
 
     async with db.get_async_session() as session:
-        # Get the task
-        result = await session.execute(select(Task).where(Task.id == task_id))
-        task = result.scalar_one_or_none()
+        task = (
+            await session.execute(select(Task).where(Task.id == task_id))
+        ).scalar_one_or_none()
 
         if not task:
             raise HTTPException(
@@ -1127,10 +1272,44 @@ async def verify_task_access(
                 detail="Task not found",
             )
 
-        # Verify access to the task's ticket
-        await verify_ticket_access(task.ticket_id, current_user, db)
+        # 1. SessionACL grant
+        acl = (
+            await session.execute(
+                select(SessionACL).where(
+                    SessionACL.task_id == task_id,
+                    SessionACL.user_id == current_user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if acl is not None:
+            return task_id
 
-        return task_id
+        # 2. Workspace org membership
+        if task.workspace_id:
+            ws = (
+                await session.execute(
+                    select(Workspace).where(Workspace.id == task.workspace_id)
+                )
+            ).scalar_one_or_none()
+            if ws is not None:
+                user_org_ids = await get_user_organization_ids(current_user, db)
+                if ws.organization_id in user_org_ids:
+                    return task_id
+
+        # 3. Direct ownership on the task itself
+        if task.created_by and task.created_by == current_user.id:
+            return task_id
+
+        # 4. Legacy ticket chain
+        if task.ticket_id:
+            await verify_ticket_access(task.ticket_id, current_user, db)
+            return task_id
+
+        # 5. Deny
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this task",
+        )
 
 
 async def verify_spec_access(

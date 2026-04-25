@@ -1,0 +1,70 @@
+F2 — Spec §03 / §07 fidelity audit
+===================================
+
+Date: 2026-04-24
+Method: Static walk of the envelope emitter + ACL model + WS channel.
+
+Spec §03 — Event envelope
+-------------------------
+Source of truth: backend/omoi_os/services/session_event_envelope.py
+
+Documented shape (lines 7–13):
+    {
+      "id":         "<event uuid>",
+      "seq":        <monotonic int per session>,
+      "type":       "<event_type>",
+      "session_id": "<task.id>",
+      "actor":      "agent" | "user:<uuid>" | "system",
+      "timestamp":  "<ISO8601 UTC>",
+      "data":       <domain payload>,
+    }
+
+Emission code (lines 132–138):
+    envelope = {
+        "id": event_id,
+        "seq": next_seq,
+        "type": event_type,
+        "session_id": session_id,
+        "actor": actor,
+        "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+        "data": payload,
+    }
+
+PASS — all 7 required fields are stamped on every envelope. `seq` comes from
+SELECT MAX(seq)+1 under pg_advisory_xact_lock, guaranteeing per-session
+monotonicity even under concurrent emitters.
+
+Spec §07 — Session ACL
+----------------------
+Source of truth: backend/omoi_os/models/session_acl.py
+
+Table: session_acls
+  - task_id (FK → tasks)                    — session this grant belongs to
+  - user_id (FK → users)                    — grantee
+  - role    (VARCHAR(10), CHECK in owner/editor/viewer) — line 44
+  - UNIQUE(task_id, user_id)                — line 29
+
+PASS — ACL shape matches spec §07. Role enum is enforced at the DB layer via
+CHECK constraint in migration 070, not just application code.
+
+Spec §07 — WebSocket user_id attribution
+----------------------------------------
+Source of truth: backend/omoi_os/api/routes/session_channel.py
+
+- Per-room registration (line 47): `session_id → [(websocket, user_id), …]`
+- Presence emit on join (line 61):
+    {"type": "participant.joined", "data": {"user_id": str(user_id)}}
+- Presence emit on leave (line 77):
+    {"type": "participant.left", "data": {"user_id": str(user_id)}}
+- Message broadcast injects user_id (line 297):
+    "data": {**data, "user_id": str(user.id)}
+
+PASS — every WS frame carries user_id so peers can render presence/attribution
+per spec §07 without trusting the sender.
+
+Conclusion
+----------
+All three §03/§07 fidelity checks pass via static audit. A live run against the
+smoke test's `session_events_sse` / `session_ws_presence` phases would exercise
+the same invariants on the wire; that's covered by Wave 5 Tasks 19–20 when
+DAYTONA_API_KEY is available.

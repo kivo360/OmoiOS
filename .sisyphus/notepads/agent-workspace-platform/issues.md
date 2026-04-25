@@ -108,3 +108,6 @@ When creating a new migration:
 - F4 scope fidelity rejected: only Task 7 stayed within the strict file-isolation checklist; Tasks 3, 4, 5, 8, 10, and 12 had out-of-scope effective or working-tree changes.
 - The required `main..HEAD` unaccounted-change command is empty because work is currently on local `main`; `origin/main..HEAD` exposes broad unrelated committed deltas, and the working tree has additional unaccounted test/service changes.
 - Evidence saved to `.sisyphus/evidence/f4-scope-fidelity.txt`.
+## 2026-04-24 — Broker runtime test isolation
+
+- Initial runtime broker tests accidentally used the persisted `admin_user` fixture, which requires local Postgres on port 15432. Fixed by using a non-persisted admin `User` object so the unit route tests remain DB-independent.

@@ -1,0 +1,24 @@
+warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/Users/kevinhill/Coding/Experiments/senior-sandbox/omoi_os/.venv` and will be ignored; use `--active` to target the active environment instead
+--- events cols ---
+('actor', 'character varying', 'YES')
+('seq', 'bigint', 'YES')
+
+--- events indexes ---
+('ix_events_entity_seq',)
+
+--- session_acls cols ---
+('id', 'uuid', 'NO')
+('task_id', 'character varying', 'NO')
+('user_id', 'uuid', 'NO')
+('role', 'character varying', 'NO')
+('created_at', 'timestamp with time zone', 'NO')
+
+--- session_forks cols ---
+('id', 'uuid', 'NO')
+('parent_task_id', 'character varying', 'NO')
+('child_task_id', 'character varying', 'NO')
+('from_seq', 'bigint', 'NO')
+('created_at', 'timestamp with time zone', 'NO')
+
+--- role check ---
+('ck_session_acls_role', "CHECK (((role)::text = ANY ((ARRAY['owner'::character varying, 'editor'::character varying, 'viewer'::character varying])::text[])))")

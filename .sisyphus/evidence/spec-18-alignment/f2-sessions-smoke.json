@@ -1,0 +1,108 @@
+{
+  "api_base_url": "http://localhost:18000",
+  "run_at": "2026-04-24T11:48:51Z",
+  "summary": {
+    "PASS": 8,
+    "FAIL": 0,
+    "GAP": 1,
+    "SKIP": 0
+  },
+  "phases": [
+    {
+      "name": "prereqs",
+      "verdict": "PASS",
+      "duration_sec": 0.01,
+      "detail": "env + API reachable",
+      "evidence": {}
+    },
+    {
+      "name": "org_setup",
+      "verdict": "PASS",
+      "duration_sec": 0.01,
+      "detail": "",
+      "evidence": {
+        "ws_a": "f7ab3bd3-0e82-4789-b5ce-07cf72f0ada1",
+        "ws_b": "5195c7d2-9e3b-4b07-916f-91d21d9aaaf4"
+      }
+    },
+    {
+      "name": "sdk_prereqs",
+      "verdict": "PASS",
+      "duration_sec": 0.28,
+      "detail": "",
+      "evidence": {
+        "workspace_id": "f7ab3bd3-0e82-4789-b5ce-07cf72f0ada1",
+        "ticket_id": "0567357f-844f-4bc2-9bef-da9ccab6d22c"
+      }
+    },
+    {
+      "name": "session_create",
+      "verdict": "PASS",
+      "duration_sec": 0.03,
+      "detail": "",
+      "evidence": {
+        "session_id": "f016c437-be03-4b98-b819-2b33f97389de",
+        "idem_key": "smoke-d95ba880-f662-4da9-828b-7cd779a28ef0",
+        "ticket_id": null
+      }
+    },
+    {
+      "name": "session_create_ticketless",
+      "verdict": "PASS",
+      "duration_sec": 0.02,
+      "detail": "",
+      "evidence": {
+        "session_id": "f38bcd06-2b42-445c-9ce8-1a724cca8bdb",
+        "workspace_id": "ffe8321a-948d-4815-9470-9085ce8ad33f",
+        "github_repo": "octocat/hello-world"
+      }
+    },
+    {
+      "name": "session_get",
+      "verdict": "PASS",
+      "duration_sec": 0.01,
+      "detail": "",
+      "evidence": {
+        "id": "f016c437-be03-4b98-b819-2b33f97389de",
+        "status": "pending",
+        "has_session_id_alias": true
+      }
+    },
+    {
+      "name": "session_reply",
+      "verdict": "PASS",
+      "duration_sec": 10.04,
+      "detail": "",
+      "evidence": {
+        "text": "hello-from-smoke-b81c8b24",
+        "seq": 1
+      }
+    },
+    {
+      "name": "session_fork",
+      "verdict": "PASS",
+      "duration_sec": 10.03,
+      "detail": "",
+      "evidence": {
+        "parent_id": "f016c437-be03-4b98-b819-2b33f97389de",
+        "child_id": "f3056442-ed15-43bf-9bc4-7a1d62f5315d",
+        "from_seq": 2,
+        "child_seqs": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "session_share",
+      "verdict": "GAP",
+      "duration_sec": 0.09,
+      "detail": "share rejected synthetic user (expected without a real peer): ServerError('Internal server error')",
+      "evidence": {}
+    }
+  ],
+  "cleanup": [
+    "del sdk_session: 404",
+    "del sdk_fork: 404",
+    "sdk_client: closed"
+  ]
+}

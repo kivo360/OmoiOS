@@ -47,7 +47,7 @@ class TestAsyncClientAuth:
 
     @pytest.mark.asyncio
     async def test_api_key_auth(self, client):
-        """Test API key is sent in X-API-Key header."""
+        """Test API key is sent as Authorization: Bearer (spec §01) + legacy X-API-Key."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = []
@@ -57,6 +57,9 @@ class TestAsyncClientAuth:
             await client.credentials.list(workspace_id="ws-1")
 
             call_args = mock_request.call_args
+            # Spec §01 primary: Bearer token
+            assert call_args.kwargs["headers"]["Authorization"] == "Bearer test-api-key"
+            # Transitional echo for backends not yet on Bearer
             assert call_args.kwargs["headers"]["X-API-Key"] == "test-api-key"
 
     @pytest.mark.asyncio
@@ -120,7 +123,7 @@ class TestAsyncClientCredentials:
             mock_request.assert_called_once_with(
                 "GET",
                 "http://localhost:18000/api/v1/credentials",
-                headers={"X-API-Key": "test-api-key"},
+                headers={"Authorization": "Bearer test-api-key", "X-API-Key": "test-api-key"},
                 params={"workspace_id": "ws-1"},
             )
 
@@ -149,7 +152,7 @@ class TestAsyncClientCredentials:
             mock_request.assert_called_once_with(
                 "GET",
                 "http://localhost:18000/api/v1/credentials/550e8400-e29b-41d4-a716-446655440000",
-                headers={"X-API-Key": "test-api-key"},
+                headers={"Authorization": "Bearer test-api-key", "X-API-Key": "test-api-key"},
             )
 
     @pytest.mark.asyncio
@@ -215,7 +218,7 @@ class TestAsyncClientCredentials:
             mock_request.assert_called_once_with(
                 "DELETE",
                 "http://localhost:18000/api/v1/credentials/550e8400-e29b-41d4-a716-446655440000",
-                headers={"X-API-Key": "test-api-key"},
+                headers={"Authorization": "Bearer test-api-key", "X-API-Key": "test-api-key"},
             )
 
 
@@ -248,7 +251,7 @@ class TestAsyncClientEnvironments:
             mock_request.assert_called_once_with(
                 "GET",
                 "http://localhost:18000/api/v1/environments",
-                headers={"X-API-Key": "test-api-key"},
+                headers={"Authorization": "Bearer test-api-key", "X-API-Key": "test-api-key"},
                 params={"org_id": "org-1"},
             )
 
@@ -421,7 +424,7 @@ class TestAsyncClientArtifacts:
             mock_request.assert_called_once_with(
                 "GET",
                 "http://localhost:18000/api/v1/artifacts/art-1/download",
-                headers={"X-API-Key": "test-api-key"},
+                headers={"Authorization": "Bearer test-api-key", "X-API-Key": "test-api-key"},
             )
 
     @pytest.mark.asyncio
@@ -437,7 +440,7 @@ class TestAsyncClientArtifacts:
             mock_request.assert_called_once_with(
                 "DELETE",
                 "http://localhost:18000/api/v1/artifacts/art-1",
-                headers={"X-API-Key": "test-api-key"},
+                headers={"Authorization": "Bearer test-api-key", "X-API-Key": "test-api-key"},
             )
 
 
@@ -507,7 +510,7 @@ class TestAsyncClientWebhooks:
             mock_request.assert_called_once_with(
                 "DELETE",
                 "http://localhost:18000/api/v1/webhooks/wh-1",
-                headers={"X-API-Key": "test-api-key"},
+                headers={"Authorization": "Bearer test-api-key", "X-API-Key": "test-api-key"},
             )
 
     @pytest.mark.asyncio
@@ -563,7 +566,7 @@ class TestAsyncClientWorkspaces:
             mock_request.assert_called_once_with(
                 "GET",
                 "http://localhost:18000/api/v1/workspaces/ws-1/settings",
-                headers={"X-API-Key": "test-api-key"},
+                headers={"Authorization": "Bearer test-api-key", "X-API-Key": "test-api-key"},
             )
 
     @pytest.mark.asyncio

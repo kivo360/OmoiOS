@@ -1,0 +1,35 @@
+{
+    "id": "2e758381-f9b8-4ef6-92f4-dd0632a3198d",
+    "ticket_id": "b7abc689-4010-465b-be3c-fcb3a711d276",
+    "phase_id": "PHASE_IMPLEMENTATION",
+    "task_type": "implementation",
+    "title": "envelope test",
+    "description": "envelope test task",
+    "priority": "MEDIUM",
+    "status": "pending",
+    "sandbox_id": null,
+    "assigned_agent_id": null,
+    "conversation_id": null,
+    "result": null,
+    "error_message": null,
+    "dependencies": null,
+    "timeout_seconds": null,
+    "retry_count": 0,
+    "max_retries": 3,
+    "created_at": "2026-04-24T03:12:22.113321-03:00",
+    "updated_at": "2026-04-24T03:12:22.113324-03:00",
+    "started_at": null,
+    "completed_at": null,
+    "urls": {
+        "events_sse": "http://127.0.0.1:18000/api/v1/sessions/2e758381-f9b8-4ef6-92f4-dd0632a3198d/events",
+        "websocket": "ws://127.0.0.1:18000/api/v1/sessions/2e758381-f9b8-4ef6-92f4-dd0632a3198d/ws",
+        "editor": null
+    },
+    "usage": {
+        "compute_seconds": 0.0,
+        "tokens_input": 0,
+        "tokens_output": 0,
+        "total_cost": 0.0
+    },
+    "session_id": "2e758381-f9b8-4ef6-92f4-dd0632a3198d"
+}

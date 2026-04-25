@@ -190,3 +190,105 @@ class UpdateWorkspaceSettingsRequest(BaseModel):
     allowed_binding_kinds: Optional[list[BindingKind]] = Field(
         None, description="Allowed credential binding kinds"
     )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Spec §03 session surface
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class Session(BaseModel):
+    """A session — the unit of agent execution (spec §02).
+
+    Backed by the `tasks` table today; the API surface is session-shaped.
+    `session_token` populates only on the `create` response; it's the
+    one-time sandbox bearer from `agent-platform-gaps.md` Task 5 and must
+    never be logged or persisted on the client side.
+
+    `ticket_id` is nullable since migration 071 — SDK-direct sessions have
+    no ticket. Legacy ticket-driven rows created by the dashboard still
+    populate it.
+    """
+
+    id: str
+    session_id: Optional[str] = None  # legacy alias, still echoed by backend
+    ticket_id: Optional[str] = None
+    workspace_id: Optional[str] = None
+    environment_id: Optional[str] = None
+    environment_version: Optional[int] = None
+    environment_version_id: Optional[str] = None
+    github_repo: Optional[str] = None
+    status: Optional[str] = None
+    initial_prompt: Optional[str] = Field(None, description="Prompt used on create")
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    session_token: Optional[str] = Field(
+        None,
+        description=(
+            "One-time sandbox bearer returned on `create`. Null on reads."
+        ),
+    )
+
+    model_config = {"extra": "allow"}
+
+
+class Event(BaseModel):
+    """Spec §03 event envelope — every frame in the SSE stream / WS channel."""
+
+    id: str
+    seq: int
+    type: str
+    session_id: str
+    actor: str
+    timestamp: Optional[str] = None
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"extra": "allow"}
+
+
+class Grant(BaseModel):
+    """One ACL grant for POST /sessions/{id}/share (spec §07)."""
+
+    user_id: str
+    role: str = Field(..., pattern="^(owner|editor|viewer)$")
+
+
+class CreateSessionRequest(BaseModel):
+    """Body for POST /api/v1/sessions (spec §03).
+
+    Either `workspace_id` or `github_repo` must be supplied. `prompt` is the
+    primary payload; workflow fields like `phase_id` / `priority` remain as
+    optional escape hatches for callers integrating with the dashboard
+    workflow engine.
+    """
+
+    model_config = {"extra": "ignore"}
+
+    workspace_id: Optional[str] = None
+    environment_id: Optional[str] = None
+    prompt: str = Field(..., min_length=1)
+    github_repo: Optional[str] = Field(
+        default=None, pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    )
+    share_with: list[str] = Field(default_factory=list)
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ForkRequest(BaseModel):
+    """Body for POST /api/v1/sessions/{id}/fork."""
+
+    from_seq: int = Field(..., ge=0)
+    prompt: str = Field(..., min_length=1)
+
+
+class ReplyRequest(BaseModel):
+    """Body for POST /api/v1/sessions/{id}/messages."""
+
+    text: str = Field(..., min_length=1)
+
+
+class ShareRequest(BaseModel):
+    """Body for POST /api/v1/sessions/{id}/share."""
+
+    grants: list[Grant] = Field(default_factory=list)

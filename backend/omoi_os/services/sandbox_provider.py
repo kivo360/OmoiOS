@@ -27,7 +27,13 @@ class SandboxStatus:
 
 @runtime_checkable
 class SandboxProvider(Protocol):
-    """Protocol for sandbox lifecycle management."""
+    """Protocol for sandbox lifecycle management.
+
+    The tunnel + volume methods are optional — providers that can't expose
+    ports (e.g. LocalDockerProvider) or don't support named volumes simply
+    don't implement them. Callers use `hasattr(provider, 'expose_port')` /
+    `hasattr(provider, 'mount_volume')` to feature-detect at spawn time.
+    """
 
     async def spawn_for_task(
         self,
@@ -46,3 +52,18 @@ class SandboxProvider(Protocol):
     async def get_status(self, sandbox_id: str) -> SandboxStatus: ...
 
     async def list_active(self) -> list[SandboxStatus]: ...
+
+    # --- Optional capability: port tunnels (spec §15 §11) ------------------
+    # Providers that support hosted-editor tunnels implement `expose_port`
+    # returning a public HTTPS URL for the given port. Callers use `hasattr`
+    # detection because `Protocol` inheritance doesn't distinguish optional
+    # methods.
+    #
+    # async def expose_port(self, sandbox_id: str, port: int) -> str: ...
+
+    # --- Optional capability: named volumes (spec §15 §4 #3) ---------------
+    # Providers that support workspace-scoped persistent volumes implement
+    # `get_or_create_volume` returning a provider-specific volume id. The
+    # sandbox creation call then references that id via volumes=[...].
+    #
+    # async def get_or_create_volume(self, volume_name: str) -> str: ...

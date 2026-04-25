@@ -112,6 +112,8 @@ def build_image() -> Image:
         # Layer 4: bootstrap script.
         .add_local_file(str(SANDBOX_BOOTSTRAP), "/usr/local/bin/omoios-init")
         .run_commands("sudo chmod +x /usr/local/bin/omoios-init")
+        .add_local_file(str(REPO / "egress-proxy" / "egress-proxy"), "/usr/local/bin/omoios-egress-proxy")
+        .run_commands("sudo chmod +x /usr/local/bin/omoios-egress-proxy")
         # Environment + ports. Leave PATH to the base image's default so nvm
         # scripts in /etc/profile.d still work for interactive shells; our
         # symlinks cover non-interactive exec.
@@ -137,7 +139,7 @@ def dry_run(image: Image) -> None:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    p = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     p.add_argument("--name", default=DEFAULT_SNAPSHOT_NAME,
                    help=f"snapshot name (default: {DEFAULT_SNAPSHOT_NAME})")
     p.add_argument("--dry-run", action="store_true",

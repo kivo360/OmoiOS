@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import DateTime, Index, String, text
+from sqlalchemy import DateTime, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,6 +48,14 @@ class CredentialAccessLog(Base):
         nullable=True,
         index=True,
         comment="Credential binding ID (null for list operations)",
+    )
+
+    # Sandbox session reference (nullable for user/admin operations)
+    sandbox_session_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("sandbox_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Sandbox session that triggered this access (nullable)",
     )
 
     # Workspace reference
@@ -99,6 +107,11 @@ class CredentialAccessLog(Base):
             "idx_credential_access_logs_binding",
             "credential_binding_id",
             "accessed_at",
+        ),
+        # Index for sandbox-session audit queries
+        Index(
+            "idx_credential_access_logs_sandbox_session",
+            "sandbox_session_id",
         ),
         # Index for actor audit queries
         Index(

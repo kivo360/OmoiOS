@@ -3,6 +3,7 @@
 import importlib.metadata
 import asyncio
 import os
+from typing import Any
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
@@ -41,6 +42,7 @@ from omoi_os.api.routes import (
     branch_workflow,
     collaboration,
     commits,
+    connections,
     costs,
     debug,
     diagnostic,
@@ -68,6 +70,7 @@ from omoi_os.api.routes import (
     specs,
     tasks,
     tickets,
+    usage,
     validation,
     watchdog,
     webhooks,
@@ -266,6 +269,7 @@ async def orchestrator_loop():
                             execution_mode=execution_mode,
                             require_spec_skill=require_spec_skill,
                             project_id=project_id,
+                            sandbox_session_token=None,
                         )
 
                         # Update task with sandbox info
@@ -930,7 +934,35 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.warning("Failed to start MonitoringLoop", error=str(e))
 
+    # Bring up the sandbox warm pool if the feature flag is on. It's a
+    # no-op when FEATURE_SANDBOX_WARM_POOL_SIZE=0 so no cost unless
+    # explicitly enabled.
+    try:
+        from omoi_os.services.sandbox_pool import start as _pool_start
+
+        await _pool_start()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Sandbox warm pool start failed", error=str(e))
+
     yield
+
+    # Tear the pool down before any other shutdown work so we don't
+    # leak pre-baked Daytona sandboxes on process exit.
+    #
+    # IMPORTANT: we deliberately do NOT call `sandboxed_agent.close_all()`
+    # here. Active per-session sandboxes are owned by OmoiOS sessions that
+    # may outlive a single uvicorn process (think: a graceful restart
+    # during a deploy). Tearing them down on shutdown would break the
+    # crash-recovery invariant — the next process can rehydrate from
+    # task.result.sandbox_agent and keep the conversation alive. Stale
+    # sandboxes from orphaned sessions are eventually reaped by Daytona's
+    # lifetime limit and by the explicit DELETE /sessions/{id} path.
+    try:
+        from omoi_os.services.sandbox_pool import shutdown as _pool_shutdown
+
+        await _pool_shutdown()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Sandbox warm pool shutdown failed", error=str(e))
 
     # Cleanup (only if tasks were started)
     if orchestrator_task:
@@ -1053,6 +1085,57 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 
+# Spec §11 error envelope helpers. Every error response carries BOTH the
+# legacy `detail` field (for backwards compat with dashboards + existing
+# clients) AND the canonical `error` object the SDKs + spec validators
+# expect. Request-id is pulled off the request state when logfire/sentry
+# middleware has set it; otherwise synthesised fresh per response.
+import uuid as _uuid
+
+
+def _status_code_to_error_code(http_status: int) -> tuple[str, str]:
+    """Map an HTTP status to (error_code, error_type) for spec §11."""
+    if http_status == 400:
+        return ("bad_request", "validation")
+    if http_status == 401:
+        return ("unauthorized", "auth")
+    if http_status == 403:
+        return ("forbidden", "auth")
+    if http_status == 404:
+        return ("not_found", "not_found")
+    if http_status == 409:
+        return ("conflict", "conflict")
+    if http_status == 422:
+        return ("validation_error", "validation")
+    if http_status == 429:
+        return ("rate_limited", "rate_limit")
+    if 500 <= http_status < 600:
+        return ("internal_error", "server")
+    return (f"http_{http_status}", "error")
+
+
+def _error_envelope(
+    request: Request,
+    http_status: int,
+    message: str,
+    detail: Any = None,
+) -> dict:
+    """Build the spec §11 error envelope + legacy detail field."""
+    code, kind = _status_code_to_error_code(http_status)
+    req_id = getattr(getattr(request, "state", None), "request_id", None) or str(
+        _uuid.uuid4()
+    )
+    return {
+        "error": {
+            "code": code,
+            "type": kind,
+            "message": message,
+            "request_id": req_id,
+        },
+        "detail": detail if detail is not None else message,
+    }
+
+
 # Exception handler for RequestValidationError (returns 422, but sometimes shows as 400)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -1063,7 +1146,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"detail": exc.errors()},
+        content=_error_envelope(
+            request,
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Request validation failed",
+            detail=exc.errors(),
+        ),
     )
 
 
@@ -1077,10 +1165,14 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             f"detail={exc.detail}, headers={dict(request.headers)}",
             exc_info=True,
         )
-    # Return JSONResponse with CORS headers
+    message = (
+        exc.detail
+        if isinstance(exc.detail, str)
+        else _status_code_to_error_code(exc.status_code)[0]
+    )
     return JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.detail},
+        content=_error_envelope(request, exc.status_code, message, detail=exc.detail),
         headers=dict(exc.headers) if exc.headers else {},
     )
 
@@ -1108,7 +1200,11 @@ async def general_exception_handler(request: Request, exc: Exception):
         sentry_sdk.capture_exception(exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Internal server error"},
+        content=_error_envelope(
+            request,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Internal server error",
+        ),
     )
 
 
@@ -1128,6 +1224,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Idempotency-Key middleware — spec §03 dedup for POST /api/v1/sessions.
+# Runs before logging so replay responses still carry a fresh request_id.
+from omoi_os.api.middleware.idempotency import idempotency_middleware  # noqa: E402
+
+app.middleware("http")(idempotency_middleware)
 
 
 # Logging context middleware - adds request_id to all logs within a request
@@ -1176,6 +1279,8 @@ app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
 
 # Sessions API (deprecated aliases for tasks, guarded by feature flag)
 app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["sessions"])
+app.include_router(connections.router)  # prefix + tags baked into router
+app.include_router(usage.router)  # prefix + tags baked into router
 app.include_router(phases.router, prefix="/api/v1", tags=["phases"])
 app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
 app.include_router(collaboration.router, prefix="/api/v1", tags=["collaboration"])
@@ -1251,11 +1356,12 @@ app.include_router(
 )
 
 # Credential Broker routes (encrypted per-workspace credentials)
-from omoi_os.api.routes import credentials_broker
+from omoi_os.api.routes import broker_runtime, credentials_broker
 
 app.include_router(
     credentials_broker.router, prefix="/api/v1/credentials", tags=["credentials"]
 )
+app.include_router(broker_runtime.router, prefix="/broker", tags=["broker-runtime"])
 
 # Tenant-level workspaces (spec §02 — org-scoped grouping resource)
 from omoi_os.api.routes import workspaces

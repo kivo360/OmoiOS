@@ -11,7 +11,17 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -140,6 +150,50 @@ class EnvironmentVersion(Base):
         default=dict,
         server_default="{}",
         comment="Environment variables with type and value",
+    )
+
+    # Credential alias map
+    # Structure: {"alias": {"kind": "bearer_secret|github_app|...", "binding_id": "uuid"}}
+    # Allows binding named credentials without storing secrets directly
+    credentials: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        default=dict,
+        server_default="{}",
+        comment="Credential alias map: {alias: {kind, binding_id}}",
+    )
+
+    # Egress allowlist configuration
+    # Structure: {"allowed_hosts": ["github.com", "api.openai.com", ...]}
+    # When present, the spawner injects proxy env vars and bootstrap starts
+    # the omoios-egress-proxy binary inside the sandbox.
+    egress: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        default=dict,
+        server_default="{}",
+        comment="Egress allowlist: {allowed_hosts: [host, ...]}",
+    )
+
+    # Exposed ports (spec §15 §11)
+    # Structure: list of int ports that the sandbox should expose via a
+    # Daytona/Modal tunnel at spawn. Frozen per version (spec §05).
+    exposed_ports: Mapped[list[int] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Ports to expose via sandbox tunnel (e.g. [8443]).",
+    )
+
+    # Persistent volume declaration (spec §15 §4 #3)
+    # Whether this version mounts a workspace-scoped volume at /workspace.
+    # The volume's name is derived from `task.workspace_id` at spawn time;
+    # not stored here.
+    persistent_volume: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+        comment="Mount a workspace-scoped volume at /workspace at spawn.",
     )
 
     # Timestamps

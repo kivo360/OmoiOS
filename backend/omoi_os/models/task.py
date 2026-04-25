@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
 
@@ -19,6 +19,9 @@ if TYPE_CHECKING:
     from omoi_os.models.task_discovery import TaskDiscovery
     from omoi_os.models.quality_metric import QualityMetric
     from omoi_os.models.validation_review import ValidationReview
+    from omoi_os.models.user import User
+    from omoi_os.models.workspace import Workspace
+    from omoi_os.models.environment import EnvironmentVersion
 
 
 class Task(Base):
@@ -29,8 +32,32 @@ class Task(Base):
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid4())
     )
-    ticket_id: Mapped[str] = mapped_column(
-        String, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True
+    # Nullable since migration 071: SDK-direct sessions don't require a ticket.
+    # Legacy ticket-driven flows still populate this; runtime code consults
+    # SessionSubject, which reads the direct columns first and falls back to
+    # the ticket chain for legacy rows.
+    ticket_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    workspace_id: Mapped[Optional[UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    environment_version_id: Mapped[Optional[UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("environment_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_by: Mapped[Optional[UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    github_repo: Mapped[Optional[str]] = mapped_column(
+        String(511),
+        nullable=True,
+        comment="Denormalized owner/repo string for SDK-direct sessions without a project.",
     )
     phase_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     task_type: Mapped[str] = mapped_column(
@@ -170,7 +197,14 @@ class Task(Base):
     )
 
     # Relationships
-    ticket: Mapped["Ticket"] = relationship("Ticket", back_populates="tasks")
+    ticket: Mapped[Optional["Ticket"]] = relationship("Ticket", back_populates="tasks")
+    workspace: Mapped[Optional["Workspace"]] = relationship(
+        "Workspace", foreign_keys=[workspace_id]
+    )
+    environment_version: Mapped[Optional["EnvironmentVersion"]] = relationship(
+        "EnvironmentVersion", foreign_keys=[environment_version_id]
+    )
+    creator: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
     memories: Mapped[list["TaskMemory"]] = relationship(
         "TaskMemory", back_populates="task", cascade="all, delete-orphan"
     )

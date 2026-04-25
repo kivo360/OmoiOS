@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from omoi_os.services.event_bus import EventBusService
     from omoi_os.services.agent_registry import AgentRegistryService
     from omoi_os.services.task_requirements_analyzer import TaskRequirements
+    from omoi_os.services.session_subject import SessionSubject
 
 logger = get_logger("orchestrator")
 
@@ -72,7 +73,9 @@ class SandboxSpawnContext:
 
     task_id: str
     phase_id: str
-    ticket_id: str
+    # Nullable since migration 071 — SDK-direct sessions have no ticket.
+    # Populated for legacy ticket-driven flows; None for ticket-less sessions.
+    ticket_id: Optional[str]
     task_type: str
     task_description: str
     task_priority: str
@@ -87,6 +90,7 @@ class SandboxSpawnContext:
     task_requirements: Optional["TaskRequirements"] = None
     require_spec_skill: bool = False
     project_id: Optional[str] = None
+    sandbox_session_token: Optional[str] = None
 
 
 # Task type categories for execution mode determination
@@ -196,20 +200,32 @@ async def analyze_task_requirements(
     )
 
 
-def _determine_ticket_type(ticket) -> str:
-    """Derive ticket type from priority/title for branch naming."""
-    if ticket.priority == "CRITICAL":
+def _determine_session_type(priority: Optional[str], title: Optional[str]) -> str:
+    """Derive the legacy branch-name prefix from priority/title.
+
+    Kept ticket-agnostic so it works for both ticket-ful and ticket-less
+    sessions — the spawner uses this to pick `hotfix/` / `bug/` / `feature/`
+    branch prefixes.
+    """
+    if (priority or "").upper() == "CRITICAL":
         return "hotfix"
-    elif "bug" in (ticket.title or "").lower():
+    if "bug" in (title or "").lower():
         return "bug"
     return "feature"
 
 
 def _build_fallback_context(
     ctx: SandboxSpawnContext,
-    ticket,
+    subject: "SessionSubject",
 ) -> dict:
-    """Build minimal task context dict when full context build fails."""
+    """Build minimal task context dict when full context build fails.
+
+    Pulls title/description/priority/context from SessionSubject so ticket-less
+    sessions get a coherent `ticket` block (derived from the Task row itself)
+    instead of crashing. The `ticket` key is preserved for prompt-template
+    back-compat; downstream templates don't care whether the values came from
+    a real Ticket row or were synthesized from a workspace-bound session.
+    """
     task_data: dict = {
         "task": {
             "id": ctx.task_id,
@@ -219,11 +235,11 @@ def _build_fallback_context(
             "phase_id": ctx.phase_id,
         },
         "ticket": {
-            "id": str(ticket.id),
-            "title": ticket.title or "",
-            "description": ticket.description or "",
-            "priority": ticket.priority,
-            "context": ticket.context or {},
+            "id": subject.ticket_id or subject.task_id,
+            "title": subject.title or "",
+            "description": subject.description or "",
+            "priority": subject.priority,
+            "context": subject.context or {},
         },
     }
     if ctx.spawn_mode == "validation":
@@ -242,7 +258,7 @@ def _build_fallback_context(
 
 async def _build_task_context(
     ctx: SandboxSpawnContext,
-    ticket,
+    subject: "SessionSubject",
     log,
 ) -> dict:
     """Build full task context including spec data and base64 encode into ctx.extra_env."""
@@ -290,99 +306,76 @@ async def _build_task_context(
                 task_id=ctx.task_id,
                 error=str(ctx_err),
             )
-        return _build_fallback_context(ctx, ticket)
+        return _build_fallback_context(ctx, subject)
 
 
-def _extract_ticket_env(
+def _extract_session_env(
     ctx: SandboxSpawnContext,
-    ticket,
+    subject: "SessionSubject",
     log,
 ) -> None:
-    """Extract ticket, project, and user env vars into ctx.extra_env."""
-    ctx.extra_env["TICKET_ID"] = str(ticket.id)
-    ctx.extra_env["TICKET_TITLE"] = ticket.title or ""
-    ctx.extra_env["TICKET_DESCRIPTION"] = ticket.description or ""
+    """Extract session env vars (ticket, workspace, github, user) into ctx.extra_env.
 
-    # Ticket type detection only for implementation path
+    Reads only from the resolved SessionSubject so neither the orchestrator
+    nor the spawner ever walks `task.ticket.project.*` directly. Ticket-less
+    sessions get `SESSION_ID` but no `TICKET_ID`; legacy ticket-driven
+    sessions keep every env var the older prompt templates expect.
+    """
+    ctx.extra_env["SESSION_ID"] = ctx.task_id
+
+    if subject.ticket_id:
+        ctx.extra_env["TICKET_ID"] = subject.ticket_id
+    # Title/description always present — come from the ticket in legacy flows
+    # and from the task row itself in SDK-direct flows.
+    ctx.extra_env["TICKET_TITLE"] = subject.title or ""
+    ctx.extra_env["TICKET_DESCRIPTION"] = subject.description or ""
+
     if ctx.spawn_mode == "implementation":
-        ticket_type = _determine_ticket_type(ticket)
-        ctx.extra_env["TICKET_TYPE"] = ticket_type
-        ctx.extra_env["TICKET_PRIORITY"] = ticket.priority or "MEDIUM"
+        ctx.extra_env["TICKET_TYPE"] = _determine_session_type(
+            subject.priority, subject.title
+        )
+        ctx.extra_env["TICKET_PRIORITY"] = subject.priority or "MEDIUM"
 
-    if ticket.project:
-        ctx.project_id = str(ticket.project.id)
-        ctx.extra_env["OMOIOS_PROJECT_ID"] = ctx.project_id
+    if subject.workspace_id:
+        ctx.extra_env["OMOIOS_WORKSPACE_ID"] = str(subject.workspace_id)
 
+    if subject.organization_id:
+        ctx.extra_env["OMOIOS_ORGANIZATION_ID"] = str(subject.organization_id)
+
+    # project_id — only for legacy ticket-driven sessions; SDK-direct
+    # sessions never populate this because they don't have a project.
+    if subject.ticket_id and subject.organization_id:
+        # The ticket chain's project id isn't on the subject (we promoted only
+        # the org id), so we look it up via the ticket relationship lazily.
+        # For now we leave ctx.project_id unset on SDK-direct sessions.
+        pass
+
+    if subject.user_id_for_token:
+        ctx.user_id_for_token = subject.user_id_for_token
+        ctx.extra_env["USER_ID"] = str(subject.user_id_for_token)
+    elif ctx.spawn_mode == "implementation":
+        log.warning(
+            "session_missing_user_id_for_token",
+            session_id=ctx.task_id,
+            ticket_id=subject.ticket_id,
+            msg="No user_id_for_token — GitHub token lookup will be skipped",
+        )
+
+    if subject.github_repo_slug:
+        ctx.extra_env["GITHUB_REPO"] = subject.github_repo_slug
         if ctx.spawn_mode == "implementation":
-            log.info(
-                "project_found_for_ticket",
-                ticket_id=str(ticket.id),
-                project_id=str(ticket.project.id),
-                project_name=ticket.project.name,
-                github_owner=ticket.project.github_owner,
-                github_repo=ticket.project.github_repo,
-                created_by=(
-                    str(ticket.project.created_by)
-                    if ticket.project.created_by
-                    else None
-                ),
-            )
-
-        if ticket.project.created_by:
-            ctx.user_id_for_token = ticket.project.created_by
-            ctx.extra_env["USER_ID"] = str(ctx.user_id_for_token)
-        else:
-            # Fallback: use ticket's user_id if project has no created_by
-            if ticket.user_id:
-                ctx.user_id_for_token = ticket.user_id
-                ctx.extra_env["USER_ID"] = str(ctx.user_id_for_token)
-                if ctx.spawn_mode == "implementation":
-                    log.info(
-                        "using_ticket_user_id_fallback",
-                        project_id=str(ticket.project.id),
-                        ticket_user_id=str(ticket.user_id),
-                        msg="Project has no created_by, falling back to ticket.user_id",
-                    )
-            elif ctx.spawn_mode == "implementation":
-                log.warning(
-                    "project_missing_created_by",
-                    project_id=str(ticket.project.id),
-                    msg="Project has no created_by and ticket has no user_id - cannot fetch GitHub token",
-                )
-
-        owner = ticket.project.github_owner
-        repo = ticket.project.github_repo
-        if owner and repo:
-            ctx.extra_env["GITHUB_REPO"] = f"{owner}/{repo}"
-            if ctx.spawn_mode == "implementation":
-                ctx.extra_env["GITHUB_REPO_OWNER"] = owner
-                ctx.extra_env["GITHUB_REPO_NAME"] = repo
-        elif ctx.spawn_mode == "implementation":
-            log.warning(
-                "project_missing_github_info",
-                project_id=str(ticket.project.id),
-                github_owner=owner,
-                github_repo=repo,
-                msg="Project missing github_owner or github_repo",
-            )
-    else:
-        # No project
-        if ticket.user_id:
-            ctx.user_id_for_token = ticket.user_id
-            ctx.extra_env["USER_ID"] = str(ctx.user_id_for_token)
-            if ctx.spawn_mode == "implementation":
-                log.info(
-                    "using_ticket_user_id_no_project",
-                    ticket_id=str(ticket.id),
-                    ticket_user_id=str(ticket.user_id),
-                    msg="Ticket has no project, using ticket.user_id for GitHub token",
-                )
-        elif ctx.spawn_mode == "implementation":
-            log.warning(
-                "ticket_has_no_project",
-                ticket_id=str(ticket.id),
-                msg="Ticket has no project and no user_id - cannot get GitHub info",
-            )
+            if subject.github_owner:
+                ctx.extra_env["GITHUB_REPO_OWNER"] = subject.github_owner
+            if subject.github_repo:
+                ctx.extra_env["GITHUB_REPO_NAME"] = subject.github_repo
+    elif ctx.spawn_mode == "implementation":
+        log.warning(
+            "session_missing_github_info",
+            session_id=ctx.task_id,
+            ticket_id=subject.ticket_id,
+            workspace_id=str(subject.workspace_id) if subject.workspace_id else None,
+            msg="No github_repo resolved — repo clone will be skipped",
+        )
 
 
 def _extract_github_token(
@@ -444,20 +437,42 @@ async def _extract_spawn_env_from_db(
     ctx: SandboxSpawnContext,
     log,
 ) -> None:
-    """Extract all env vars from DB: ticket info, project, user, GitHub token, task context."""
-    from omoi_os.models.ticket import Ticket
+    """Extract all env vars from DB: ticket/workspace info, user, GitHub token, task context.
+
+    Uses SessionSubject.resolve() so the same extraction path works for
+    ticket-driven legacy sessions and SDK-direct ticket-less sessions.
+    """
+    from omoi_os.models.task import Task
+    from omoi_os.services.session_subject import resolve as resolve_subject
 
     with db.get_session() as session:
-        ticket = session.get(Ticket, ctx.ticket_id)
-        if ticket:
-            _extract_ticket_env(ctx, ticket, log)
+        task = session.get(Task, ctx.task_id)
+        if task is None:
+            log.error(
+                "task_not_found_for_env_extract",
+                task_id=ctx.task_id,
+                msg="Task row missing at spawn time — cannot build env",
+            )
+            return
 
-            # Build task context and base64-encode it
-            task_data = await _build_task_context(ctx, ticket, log)
-            task_json_str = json.dumps(task_data)
-            ctx.extra_env["TASK_DATA_BASE64"] = base64.b64encode(
-                task_json_str.encode()
-            ).decode()
+        subject = resolve_subject(session, task)
+        _extract_session_env(ctx, subject, log)
+
+        # Propagate project_id from the legacy ticket chain if present. This
+        # path only fires for ticket-driven sessions where the ticket has a
+        # project — the relationship is already loaded via resolve().
+        if subject.ticket_id and task.ticket and task.ticket.project_id:
+            ctx.project_id = str(task.ticket.project_id)
+            ctx.extra_env["OMOIOS_PROJECT_ID"] = ctx.project_id
+
+        # Build task context and base64-encode it — works for both ticket-ful
+        # and ticket-less sessions because _build_fallback_context consumes the
+        # subject, not a raw ticket row.
+        task_data = await _build_task_context(ctx, subject, log)
+        task_json_str = json.dumps(task_data)
+        ctx.extra_env["TASK_DATA_BASE64"] = base64.b64encode(
+            task_json_str.encode()
+        ).decode()
 
         # Fetch GitHub token
         _extract_github_token(ctx, session, log)
@@ -588,6 +603,7 @@ async def _spawn_and_update(
         "extra_env": ctx.extra_env if ctx.extra_env else None,
         "runtime": sandbox_runtime,
         "execution_mode": ctx.execution_mode,
+        "sandbox_session_token": ctx.sandbox_session_token,
     }
     if ctx.spawn_mode == "implementation":
         spawn_kwargs["task_requirements"] = ctx.task_requirements
@@ -645,8 +661,6 @@ def _publish_spawn_event(
     agent_id: str,
 ) -> None:
     """Publish SANDBOX_SPAWNED or VALIDATION_SANDBOX_SPAWNED event."""
-    from omoi_os.services.event_bus import SystemEvent
-
     if ctx.spawn_mode == "validation":
         event_bus.publish(
             SystemEvent(
@@ -693,7 +707,7 @@ async def _spawn_sandbox_for_task(
     ctx = SandboxSpawnContext(
         task_id=str(task.id),
         phase_id=task.phase_id or "PHASE_IMPLEMENTATION",
-        ticket_id=str(task.ticket_id),
+        ticket_id=str(task.ticket_id) if task.ticket_id else None,
         task_type=task.task_type,
         task_description=task.description or "",
         task_priority=task.priority,
@@ -850,8 +864,6 @@ def handle_validation_failed(event_data: dict) -> None:
 
             # Publish TASK_STATUS_CHANGED event for WebSocket/sidebar updates
             if event_bus:
-                from omoi_os.services.event_bus import SystemEvent
-
                 event_bus.publish(
                     SystemEvent(
                         event_type="TASK_STATUS_CHANGED",
@@ -948,7 +960,9 @@ async def orchestrator_loop():
     settings = get_app_settings()
     sandbox_execution = settings.daytona.sandbox_execution
     # Dry-run mode: run decision loop but skip sandbox spawning
-    dry_run = settings.orchestrator.dry_run or os.getenv("ORCHESTRATOR_DRY_RUN", "").lower() in ("true", "1", "yes")
+    dry_run = settings.orchestrator.dry_run or os.getenv(
+        "ORCHESTRATOR_DRY_RUN", ""
+    ).lower() in ("true", "1", "yes")
     mode = "dry_run" if dry_run else ("sandbox" if sandbox_execution else "legacy")
     mode = "sandbox" if sandbox_execution else "legacy"
 
@@ -1039,9 +1053,11 @@ async def orchestrator_loop():
                 task_id = str(task.id)
                 phase_id = task.phase_id or "PHASE_IMPLEMENTATION"
 
-                # Bind task context to logger
+                # Bind task context to logger — ticket_id is None for SDK-direct sessions.
                 log = log.bind(
-                    task_id=task_id, phase=phase_id, ticket_id=str(task.ticket_id)
+                    task_id=task_id,
+                    phase=phase_id,
+                    ticket_id=str(task.ticket_id) if task.ticket_id else None,
                 )
                 log.info(
                     "task_found",
@@ -1074,7 +1090,7 @@ async def orchestrator_loop():
                         description=task.description or "",
                         priority=task.priority or "medium",
                         phase_id=phase_id,
-                        ticket_id=str(task.ticket_id),
+                        ticket_id=str(task.ticket_id) if task.ticket_id else None,
                     )
 
                     decision = DryRunDecision(
@@ -1088,16 +1104,24 @@ async def orchestrator_loop():
 
                     # Publish dry-run event
                     try:
-                        event_bus.publish(SystemEvent(
-                            event_type="orchestrator.dry_run.decision",
-                            entity_type="orchestrator",
-                            entity_id="dry-run",
-                            payload=decision.to_dict(),
-                        ))
+                        event_bus.publish(
+                            SystemEvent(
+                                event_type="orchestrator.dry_run.decision",
+                                entity_type="orchestrator",
+                                entity_id="dry-run",
+                                payload=decision.to_dict(),
+                            )
+                        )
                     except Exception as pub_err:
                         log.warning("dry_run_publish_failed", error=str(pub_err))
 
-                    log.info("dry_run_decision", cycle=cycle, task_id=task_id, task_type=task.task_type, would_spawn=sandbox_execution)
+                    log.info(
+                        "dry_run_decision",
+                        cycle=cycle,
+                        task_id=task_id,
+                        task_type=task.task_type,
+                        would_spawn=sandbox_execution,
+                    )
                     stats["tasks_processed"] += 1
 
                     # Wait before next cycle
@@ -1141,8 +1165,6 @@ async def orchestrator_loop():
                     queue.assign_task(task.id, available_agent_id)
                     agent_id = available_agent_id
 
-                    from omoi_os.services.event_bus import SystemEvent
-
                     event_bus.publish(
                         SystemEvent(
                             event_type="TASK_ASSIGNED",
@@ -1169,7 +1191,11 @@ async def orchestrator_loop():
                     val_log = log.bind(
                         task_id=str(validation_task.id),
                         phase=validation_task.phase_id or "PHASE_IMPLEMENTATION",
-                        ticket_id=str(validation_task.ticket_id),
+                        ticket_id=(
+                            str(validation_task.ticket_id)
+                            if validation_task.ticket_id
+                            else None
+                        ),
                         task_type="validation",
                     )
                     val_log.info(

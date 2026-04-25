@@ -1,6 +1,6 @@
 [project]
 name = "omoios-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "OmoiOS SDK for agent workspace platform"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -22,10 +22,23 @@ dependencies = [
     "pydantic>=2.5",
 ]
 
+[project.optional-dependencies]
+# SSE streaming: `httpx-sse` backs `client.sessions.events(...)`. Not required
+# for CRUD-only usage so we keep it optional.
+sse = ["httpx-sse>=0.4"]
+# WebSocket multiplayer: `httpx-ws` backs `client.sessions.connect(...)`.
+# Chosen over raw `websockets` because it reuses our existing httpx client
+# (shared connection pool, same timeouts, same auth plumbing).
+ws = ["httpx-ws>=0.6"]
+# Everything.
+all = ["httpx-sse>=0.4", "httpx-ws>=0.6"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "httpx-sse>=0.4",
+    "httpx-ws>=0.6",
 ]
 
 [build-system]
@@ -41,6 +54,9 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+markers = [
+    "e2e: end-to-end tests that require a live backend + real Daytona (gated on env vars)",
+]
 
 [tool.ruff]
 line-length = 100

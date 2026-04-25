@@ -187,8 +187,17 @@ describe('OmoiOSClient integration', () => {
   }
 
   describe('initialization', () => {
-    it('throws if neither apiKey nor jwtToken is provided', () => {
-      expect(() => new OmoiOSClient({ baseUrl })).toThrow('Either apiKey or jwtToken must be provided');
+    it('throws if no credential kind is provided', () => {
+      expect(() => new OmoiOSClient({ baseUrl })).toThrow(
+        'One of apiKey, jwtToken, or sessionToken must be provided'
+      );
+    });
+
+    it('throws if multiple credential kinds are provided', () => {
+      expect(
+        () =>
+          new OmoiOSClient({ baseUrl, apiKey: 'a', jwtToken: 'b' })
+      ).toThrow('mutually exclusive');
     });
 
     it('accepts apiKey', () => {
@@ -203,6 +212,11 @@ describe('OmoiOSClient integration', () => {
       expect(client.apiKey).toBeUndefined();
     });
 
+    it('accepts sessionToken', () => {
+      const client = new OmoiOSClient({ baseUrl, sessionToken: 'sess_tok_abc' });
+      expect(client.sessionToken).toBe('sess_tok_abc');
+    });
+
     it('strips trailing slash from baseUrl', () => {
       const client = new OmoiOSClient({ baseUrl: baseUrl + '/', apiKey: 'test-key' });
       expect(client.baseUrl).toBe(baseUrl);
@@ -210,12 +224,14 @@ describe('OmoiOSClient integration', () => {
   });
 
   describe('authentication headers', () => {
-    it('sends X-API-Key header for apiKey auth', async () => {
+    it('sends Authorization Bearer + X-API-Key for platform keys (spec §01)', async () => {
       const client = new OmoiOSClient({ baseUrl, apiKey: 'my-api-key' });
       await client.credentials.list('ws_1');
 
+      // Spec §01 wants Bearer for all token kinds; we also keep X-API-Key as
+      // a transitional echo so old backends still recognize the caller.
+      expect(requestLog[0].headers['authorization']).toBe('Bearer my-api-key');
       expect(requestLog[0].headers['x-api-key']).toBe('my-api-key');
-      expect(requestLog[0].headers['authorization']).toBeUndefined();
     });
 
     it('sends Authorization Bearer header for jwtToken auth', async () => {
@@ -223,6 +239,14 @@ describe('OmoiOSClient integration', () => {
       await client.credentials.list('ws_1');
 
       expect(requestLog[0].headers['authorization']).toBe('Bearer my-jwt-token');
+      expect(requestLog[0].headers['x-api-key']).toBeUndefined();
+    });
+
+    it('sends Authorization Bearer header for sessionToken auth', async () => {
+      const client = new OmoiOSClient({ baseUrl, sessionToken: 'sess_tok_xyz' });
+      await client.credentials.list('ws_1');
+
+      expect(requestLog[0].headers['authorization']).toBe('Bearer sess_tok_xyz');
       expect(requestLog[0].headers['x-api-key']).toBeUndefined();
     });
   });

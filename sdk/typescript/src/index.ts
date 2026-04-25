@@ -21,6 +21,15 @@ export type {
   WorkspaceSettings,
   UpdateWorkspaceSettingsRequest,
   GetEnvironmentResult,
+  // Spec §03 session surface
+  Session,
+  SessionRole,
+  Event,
+  Grant,
+  CreateSessionRequest,
+  ForkRequest,
+  ShareRequest,
+  ChannelMessage,
 } from './types.js';
 
 // Client
@@ -34,6 +43,8 @@ export {
   BaseResource,
   CredentialsResource,
   EnvironmentsResource,
+  SessionsResource,
+  SessionChannel,
   WebhooksResource,
   WorkspacesResource,
 } from './resources/index.js';

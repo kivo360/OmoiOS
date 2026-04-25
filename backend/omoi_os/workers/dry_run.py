@@ -15,7 +15,7 @@ class TaskSummary:
     description: str
     priority: str
     phase_id: str
-    ticket_id: str
+    ticket_id: Optional[str]
 
 
 @dataclass

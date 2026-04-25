@@ -1,0 +1,20 @@
+{
+  "api_base_url": "http://localhost:18000",
+  "run_at": "2026-04-24T09:43:01Z",
+  "summary": {
+    "PASS": 0,
+    "FAIL": 1,
+    "GAP": 0,
+    "SKIP": 0
+  },
+  "phases": [
+    {
+      "name": "prereqs",
+      "verdict": "FAIL",
+      "duration_sec": 0.0,
+      "detail": "missing env vars: ['OMOIOS_PLATFORM_API_KEY', 'DAYTONA_API_KEY', 'CREDENTIAL_ENCRYPTION_KEY']",
+      "evidence": {}
+    }
+  ],
+  "cleanup": []
+}

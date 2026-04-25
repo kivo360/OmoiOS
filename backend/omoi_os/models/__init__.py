@@ -90,6 +90,8 @@ from omoi_os.models.workspace import (
     WorkspaceCommit,
 )
 from omoi_os.models.workspace_settings import WorkspaceSettings
+from omoi_os.models.sandbox_session import SandboxSession
+from omoi_os.models.session_acl import SessionACL, SessionFork
 
 __all__ = [
     "Agent",
@@ -156,6 +158,7 @@ __all__ = [
     "ResourceLock",
     "Role",
     "SandboxEvent",
+    "SandboxSession",
     "ClaudeSessionTranscript",
     "Session",
     "Spec",
@@ -188,5 +191,7 @@ __all__ = [
     "Workspace",
     "WorkspaceCommit",
     "WorkspaceSettings",
+    "SessionACL",
+    "SessionFork",
     "MergeConflictResolution",
 ]

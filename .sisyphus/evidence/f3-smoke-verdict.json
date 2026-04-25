@@ -1,0 +1,230 @@
+{
+  "api_base_url": "http://localhost:18000",
+  "run_at": "2026-04-24T07:36:36Z",
+  "summary": {
+    "PASS": 2,
+    "FAIL": 11,
+    "GAP": 3,
+    "SKIP": 13
+  },
+  "phases": [
+    {
+      "name": "prereqs",
+      "verdict": "FAIL",
+      "duration_sec": 0.0,
+      "detail": "missing env vars: ['OMOIOS_PLATFORM_API_KEY', 'DAYTONA_API_KEY', 'CREDENTIAL_ENCRYPTION_KEY']",
+      "evidence": {}
+    },
+    {
+      "name": "org_setup",
+      "verdict": "FAIL",
+      "duration_sec": 0.01,
+      "detail": "exception: LocalProtocolError(\"Illegal header value b'Bearer '\")",
+      "evidence": {}
+    },
+    {
+      "name": "credentials_crud",
+      "verdict": "FAIL",
+      "duration_sec": 0.0,
+      "detail": "exception: LocalProtocolError(\"Illegal header value b'Bearer '\")",
+      "evidence": {}
+    },
+    {
+      "name": "environments_crud",
+      "verdict": "FAIL",
+      "duration_sec": 0.0,
+      "detail": "exception: LocalProtocolError(\"Illegal header value b'Bearer '\")",
+      "evidence": {}
+    },
+    {
+      "name": "artifacts_roundtrip",
+      "verdict": "FAIL",
+      "duration_sec": 0.0,
+      "detail": "exception: LocalProtocolError(\"Illegal header value b'Bearer '\")",
+      "evidence": {}
+    },
+    {
+      "name": "webhooks_hmac",
+      "verdict": "FAIL",
+      "duration_sec": 0.51,
+      "detail": "exception: LocalProtocolError(\"Illegal header value b'Bearer '\")",
+      "evidence": {}
+    },
+    {
+      "name": "workspace_isolation",
+      "verdict": "FAIL",
+      "duration_sec": 0.0,
+      "detail": "exception: LocalProtocolError(\"Illegal header value b'Bearer '\")",
+      "evidence": {}
+    },
+    {
+      "name": "sessions_alias",
+      "verdict": "FAIL",
+      "duration_sec": 0.0,
+      "detail": "exception: LocalProtocolError(\"Illegal header value b'Bearer '\")",
+      "evidence": {}
+    },
+    {
+      "name": "daytona_allocation",
+      "verdict": "PASS",
+      "duration_sec": 7.51,
+      "detail": "",
+      "evidence": {
+        "sandbox_id": "6244e4f8-2b0f-468b-ae97-976245a63da7",
+        "exec_output": "hello-from-daytona\n200"
+      }
+    },
+    {
+      "name": "egress_proxy_wiring",
+      "verdict": "GAP",
+      "duration_sec": 1.28,
+      "detail": "HTTPS_PROXY/NO_PROXY not injected into sandbox env \u2014 daytona_spawner.py needs to set these. Proxy binary exists standalone but is not in the sandbox data path.",
+      "evidence": {
+        "env_check": "NOT_SET"
+      }
+    },
+    {
+      "name": "egress_allow_deny",
+      "verdict": "SKIP",
+      "duration_sec": 1.23,
+      "detail": "HTTPS_PROXY unset in sandbox; cannot verify allow/deny behavior",
+      "evidence": {}
+    },
+    {
+      "name": "opencode_auth_json",
+      "verdict": "GAP",
+      "duration_sec": 1.38,
+      "detail": "auth.json not written at sandbox boot. Need: bootstrap script that calls /broker/creds/<alias> for each declared alias and writes the result as auth.json (mode 0600). Required for GitHub Copilot OAuth; recommended for all providers.",
+      "evidence": {}
+    },
+    {
+      "name": "opencode_config",
+      "verdict": "PASS",
+      "duration_sec": 1.19,
+      "detail": "",
+      "evidence": {
+        "files": [
+          "/home/daytona/.config/opencode/opencode.json"
+        ]
+      }
+    },
+    {
+      "name": "spec_broker_flow",
+      "verdict": "GAP",
+      "duration_sec": 0.19,
+      "detail": "broker endpoint exists (status 401) but session-token issuance needs to be wired into session create",
+      "evidence": {
+        "http_code": 401,
+        "body": "{\"detail\":\"Invalid or expired session token\"}"
+      }
+    },
+    {
+      "name": "spec_event_envelope",
+      "verdict": "FAIL",
+      "duration_sec": 0.0,
+      "detail": "exception: LocalProtocolError(\"Illegal header value b'Bearer '\")",
+      "evidence": {}
+    },
+    {
+      "name": "sdk_prereqs",
+      "verdict": "FAIL",
+      "duration_sec": 0.03,
+      "detail": "AsyncOmoiOSClient init failed: ValueError('One of api_key, jwt_token, or session_token must be provided')",
+      "evidence": {}
+    },
+    {
+      "name": "session_create",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "sdk_prereqs not satisfied",
+      "evidence": {}
+    },
+    {
+      "name": "session_get",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "session_create not satisfied",
+      "evidence": {}
+    },
+    {
+      "name": "session_events_sse",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no session",
+      "evidence": {}
+    },
+    {
+      "name": "session_events_resume",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no session",
+      "evidence": {}
+    },
+    {
+      "name": "session_reply",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no session",
+      "evidence": {}
+    },
+    {
+      "name": "session_fork",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no session",
+      "evidence": {}
+    },
+    {
+      "name": "session_share",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no session",
+      "evidence": {}
+    },
+    {
+      "name": "session_ws_presence",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no session",
+      "evidence": {}
+    },
+    {
+      "name": "session_ws_message",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no session",
+      "evidence": {}
+    },
+    {
+      "name": "session_ws_cursor",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no session",
+      "evidence": {}
+    },
+    {
+      "name": "error_envelope_shape",
+      "verdict": "FAIL",
+      "duration_sec": 0.0,
+      "detail": "exception: LocalProtocolError(\"Illegal header value b'Bearer '\")",
+      "evidence": {}
+    },
+    {
+      "name": "idempotency_conflict",
+      "verdict": "SKIP",
+      "duration_sec": 0.0,
+      "detail": "no ticket_id",
+      "evidence": {}
+    },
+    {
+      "name": "egress_denied_envelope",
+      "verdict": "SKIP",
+      "duration_sec": 1.32,
+      "detail": "HTTPS_PROXY unset in sandbox; can't test egress envelope",
+      "evidence": {}
+    }
+  ],
+  "cleanup": [
+    "sandbox 6244e4f8-2b0f-468b-ae97-976245a63da7: deleted"
+  ]
+}

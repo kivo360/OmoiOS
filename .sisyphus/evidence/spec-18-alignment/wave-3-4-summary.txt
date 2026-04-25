@@ -1,0 +1,33 @@
+                           Table "public.environment_versions"
+      Column       |           Type           | Collation | Nullable |      Default
+-------------------+--------------------------+-----------+----------+-------------------
+ id                | uuid                     |           | not null | gen_random_uuid()
+ environment_id    | uuid                     |           | not null |
+ version_number    | integer                  |           | not null |
+ variables         | jsonb                    |           | not null | '{}'::jsonb
+ created_at        | timestamp with time zone |           | not null |
+ credentials       | jsonb                    |           |          | '{}'::jsonb
+ exposed_ports     | jsonb                    |           |          |
+ persistent_volume | boolean                  |           | not null | false
+Indexes:
+    "environment_versions_pkey" PRIMARY KEY, btree (id)
+    "idx_environment_versions_env" btree (environment_id, version_number)
+    "idx_environment_versions_env_id" btree (environment_id)
+    "uq_environment_version_number" UNIQUE CONSTRAINT, btree (environment_id, version_number)
+Foreign-key constraints:
+    "environment_versions_environment_id_fkey" FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "tasks" CONSTRAINT "fk_tasks_environment_version_id" FOREIGN KEY (environment_version_id) REFERENCES environment_versions(id) ON DELETE SET NULL
+    TABLE "sandbox_sessions" CONSTRAINT "sandbox_sessions_environment_version_id_fkey" FOREIGN KEY (environment_version_id) REFERENCES environment_versions(id)
+
+---
+warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/Users/kevinhill/Coding/Experiments/senior-sandbox/omoi_os/.venv` and will be ignored; use `--active` to target the active environment instead
+............................                                             [100%]
+28 passed in 0.41s
+---
+.............                                                            [100%]
+13 passed in 0.45s
+---
+      Tests  68 passed | 7 skipped (75)
+   Start at  08:04:36
+   Duration  866ms (transform 201ms, setup 0ms, collect 599ms, tests 137ms, environment 1ms, prepare 876ms)

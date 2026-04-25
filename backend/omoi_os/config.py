@@ -523,17 +523,23 @@ class MonitoringSettings(OmoiBaseSettings):
     replay_mode: bool = False
     replay_dir: str = ".monitoring-recordings"
 
+
 class OrchestratorSettings(OmoiBaseSettings):
     """Orchestrator worker configuration."""
+
     yaml_section = "orchestrator"
     model_config = SettingsConfigDict(
         env_prefix="ORCHESTRATOR_",
         extra="ignore",
     )
-    dry_run: bool = False  # When True, orchestrator captures decisions without spawning sandboxes
+    dry_run: bool = (
+        False  # When True, orchestrator captures decisions without spawning sandboxes
+    )
+
 
 class GitSettings(OmoiBaseSettings):
     """Git provider configuration."""
+
     yaml_section = "git"
     model_config = SettingsConfigDict(
         env_prefix="GIT_",
@@ -545,16 +551,21 @@ class GitSettings(OmoiBaseSettings):
 
 class SpecSettings(OmoiBaseSettings):
     """Spec pipeline configuration."""
+
     yaml_section = "spec"
     model_config = SettingsConfigDict(
         env_prefix="SPEC_",
         extra="ignore",
     )
     fixture_mode: bool = False
-    fixture_dir: str = "subsystems/spec-sandbox/.claude/skills/spec-driven-dev/references"
+    fixture_dir: str = (
+        "subsystems/spec-sandbox/.claude/skills/spec-driven-dev/references"
+    )
+
 
 class SandboxSettings(OmoiBaseSettings):
     """Sandbox provider configuration."""
+
     yaml_section = "sandbox"
     model_config = SettingsConfigDict(
         env_prefix="SANDBOX_",
@@ -564,8 +575,6 @@ class SandboxSettings(OmoiBaseSettings):
     local_image: str = "nikolaik/python-nodejs:python3.12-nodejs22"
     local_mount_workspace: Optional[str] = None
     local_api_base_url: str = "http://host.docker.internal:18000"
-
-
 
 
 class DiagnosticSettings(OmoiBaseSettings):
@@ -865,11 +874,13 @@ def load_artifact_settings() -> ArtifactSettings:
     """Load artifact settings (cached)."""
     return get_app_settings().artifacts
 
+
 class FeatureFlagsSettings(OmoiBaseSettings):
     """
     Feature flags for agent workspace platform.
     All flags default to False and must be explicitly enabled.
     """
+
     yaml_section = "feature_flags"
     model_config = SettingsConfigDict(
         env_prefix="FEATURE_",
@@ -883,6 +894,12 @@ class FeatureFlagsSettings(OmoiBaseSettings):
     egress_proxy_enabled: bool = False
     artifacts_unified_v1: bool = False
     webhooks_enabled: bool = False
+    # Route session.message responses through a Daytona sandbox running
+    # opencode-ai instead of the direct host-side LLM call. Spawns one
+    # sandbox per session on first message, keeps it warm for follow-up
+    # turns, tears it down on session cancel/delete.
+    sandboxed_agent_enabled: bool = False
+
 
 def load_auth_settings() -> AuthSettings:
     return get_app_settings().auth
