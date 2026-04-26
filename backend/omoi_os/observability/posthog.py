@@ -41,7 +41,7 @@ from typing import Any, Dict, Iterator, Optional
 
 from omoi_os.config import get_app_settings
 from omoi_os.logging import get_logger
-from omoi_os.observability.sentry import (
+from omoi_os.observability._pii import (
     SENSITIVE_KEYS,
     _is_sensitive_key,
     _redact_value,

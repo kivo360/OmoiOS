@@ -16,7 +16,6 @@ from fastapi.exceptions import RequestValidationError
 
 from omoi_os.config import get_app_settings
 from omoi_os.logging import configure_logging, get_logger, bind_context, clear_context
-from omoi_os.observability.sentry import init_sentry
 from omoi_os.observability.posthog import init_posthog_observability
 from omoi_os.analytics.posthog import init_posthog
 
@@ -24,11 +23,6 @@ from omoi_os.analytics.posthog import init_posthog
 # This ensures logging is configured before any other imports that might log
 _env = os.environ.get("OMOIOS_ENV", "development")
 configure_logging(env=_env)  # type: ignore[arg-type]
-
-# Initialize Sentry for error tracking and performance monitoring.
-# Sentry stays during the PostHog migration window — both error pipelines fire
-# in parallel until the cleanup commit drops Sentry.
-init_sentry()
 
 # Initialize PostHog *error tracking* (v7 module-level context API). Required
 # before the posthog_request_context middleware can do anything useful.
@@ -1210,10 +1204,10 @@ async def general_exception_handler(request: Request, exc: Exception):
         f"Unhandled exception on {request.method} {request.url.path}: {exc}",
         exc_info=True,
     )
-    # Dual-write capture: Sentry stays during the migration window, PostHog
-    # is the future home. Both wrappers are no-ops when their respective
-    # SDK isn't configured.
-    import sentry_sdk
+    # Capture to PostHog with request context (Sentry was removed in the
+    # cleanup commit; the autocapture inside posthog_request_context_middleware
+    # also catches this exception, but the explicit call here adds the
+    # request.method/path/query tags that aren't in the middleware).
     from omoi_os.observability.posthog import (
         capture_exception as posthog_capture_exception,
     )
@@ -1223,9 +1217,6 @@ async def general_exception_handler(request: Request, exc: Exception):
         "path": request.url.path,
         "query": str(request.query_params),
     }
-    with sentry_sdk.push_scope() as scope:
-        scope.set_context("request", request_context)
-        sentry_sdk.capture_exception(exc)
     posthog_capture_exception(
         exc,
         **{f"request.{k}": v for k, v in request_context.items()},

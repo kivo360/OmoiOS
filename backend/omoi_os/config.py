@@ -734,49 +734,6 @@ class ObservabilitySettings(OmoiBaseSettings):
     logfire_token: Optional[str] = None
 
 
-class SentrySettings(OmoiBaseSettings):
-    """
-    Sentry error tracking and performance monitoring configuration.
-
-    Environment variables:
-      - SENTRY_DSN: Sentry project DSN
-      - SENTRY_ENVIRONMENT: Environment name (development, staging, production)
-      - SENTRY_TRACES_SAMPLE_RATE: Transaction sampling rate (0.0 to 1.0)
-      - SENTRY_PROFILES_SAMPLE_RATE: Profile sampling rate (0.0 to 1.0)
-      - SENTRY_DEBUG: Enable debug mode
-    """
-
-    yaml_section = "sentry"
-    model_config = SettingsConfigDict(
-        env_prefix="SENTRY_",
-        extra="ignore",
-    )
-
-    # Core settings
-    dsn: Optional[str] = None  # SENTRY_DSN
-    environment: str = "development"  # SENTRY_ENVIRONMENT
-    release: Optional[str] = None  # SENTRY_RELEASE (auto-detected from git if not set)
-    debug: bool = False  # SENTRY_DEBUG
-
-    # Sampling rates
-    traces_sample_rate: float = 0.1  # 10% of transactions in production
-    profile_session_sample_rate: float = 0.1  # Profile 10% of sessions
-    profile_lifecycle: str = "trace"  # Run profiler when there's an active transaction
-
-    # Performance monitoring
-    enable_tracing: bool = True  # Enable performance monitoring
-    send_default_pii: bool = False  # Never send PII by default
-
-    # Additional settings
-    attach_stacktrace: bool = True  # Attach stacktrace to events
-    max_breadcrumbs: int = 100  # Max breadcrumbs per event
-
-    @property
-    def is_configured(self) -> bool:
-        """Check if Sentry is configured with a valid DSN."""
-        return bool(self.dsn)
-
-
 class PostHogSettings(OmoiBaseSettings):
     """
     PostHog configuration for server-side analytics AND error tracking.
@@ -949,7 +906,9 @@ class AppSettings:
         self.integrations = IntegrationSettings()
         self.embedding = EmbeddingSettings()
         self.observability = ObservabilitySettings()
-        self.sentry = SentrySettings()
+        # NOTE: SentrySettings was removed when Sentry was retired in favor of
+        # PostHog Error Tracking. SENTRY_* env vars are now ignored. See
+        # omoi_os.observability.posthog for the replacement.
         self.posthog = PostHogSettings()
         self.title_generation = TitleGenerationSettings()
         self.demo = DemoSettings()
