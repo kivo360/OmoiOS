@@ -1,3 +1,0 @@
-warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/Users/kevinhill/Coding/Experiments/senior-sandbox/omoi_os/.venv` and will be ignored; use `--active` to target the active environment instead
-........................................                                 [100%]
-40 passed in 0.93s

@@ -4523,7 +4523,12 @@ The following dependencies were automatically installed before you started:
                 # Launch preview setup in background (non-blocking)
                 preview_mgr = PreviewSetupManager(self.config)
                 if preview_mgr.enabled:
-                    asyncio.create_task(preview_mgr.setup_preview())
+                    from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+                    fire_and_forget(
+                        preview_mgr.setup_preview(),
+                        name="claude_sandbox:preview_setup",
+                    )
 
                 try:
                     # Debug: Log options structure before creating client

@@ -520,7 +520,7 @@ class IntelligentGuardian:
         try:
             with self.db.get_session() as session:
                 query = text("""
-                    SELECT 
+                    SELECT
                         trajectory_summary,
                         alignment_score,
                         current_focus,
@@ -937,12 +937,13 @@ class IntelligentGuardian:
                     try:
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
-                            # Already in async context, create task
-                            asyncio.ensure_future(
-                                self._sandbox_intervention(intervention, task)
+                            from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+                            fire_and_forget(
+                                self._sandbox_intervention(intervention, task),
+                                name="guardian:sandbox_intervention",
                             )
-                            # Can't await in sync context, but task is scheduled
-                            success = True  # Optimistic
+                            success = True  # Optimistic — fire-and-forget
                         else:
                             success = loop.run_until_complete(
                                 self._sandbox_intervention(intervention, task)

@@ -113,7 +113,12 @@ def create_agent_tools():
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(args["content"])
-            asyncio.create_task(report_event("file_written", {"path": str(file_path)}))
+            from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+            fire_and_forget(
+                report_event("file_written", {"path": str(file_path)}),
+                name="claude_worker:file_written",
+            )
             return {
                 "content": [
                     {"type": "text", "text": f"Successfully wrote to {file_path}"}
@@ -134,7 +139,12 @@ def create_agent_tools():
         cwd = args.get("cwd", "/workspace")
 
         try:
-            asyncio.create_task(report_event("command_started", {"command": command}))
+            from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+            fire_and_forget(
+                report_event("command_started", {"command": command}),
+                name="claude_worker:command_started",
+            )
 
             result = subprocess.run(
                 command,
@@ -260,7 +270,7 @@ async def run_claude_agent(task_description: str, workspace_dir: str = "/workspa
         allowed_tools=tool_names + ["Read", "Write", "Bash", "Edit", "Glob", "Grep"],
         permission_mode="bypassPermissions",  # Auto-approve all in sandbox
         system_prompt=f"""You are an AI coding agent working on a software development task.
-        
+
 Your workspace is at {workspace_dir}. You have access to tools for reading/writing files,
 running commands, and reporting progress.
 

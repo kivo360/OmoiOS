@@ -36,3 +36,15 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
         args: ['--markdown-linebreak-ext=md']
+
+  # Block bare asyncio.create_task / ensure_future — tasks not held by
+  # a strong reference get garbage-collected before they run.
+  # See docs/rules/asyncio-create-task.md.
+  - repo: local
+    hooks:
+      - id: asyncio-create-task-guard
+        name: asyncio.create_task guard
+        entry: scripts/check_asyncio_tasks.sh
+        language: script
+        pass_filenames: false
+        files: ^backend/.*\.py$

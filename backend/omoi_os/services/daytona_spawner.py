@@ -1044,12 +1044,15 @@ class DaytonaSpawnerService:
 
             # Kick off preview setup in background for frontend tasks (non-blocking)
             if is_frontend:
-                asyncio.create_task(
+                from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+                fire_and_forget(
                     self._setup_preview_for_sandbox(
                         sandbox_id=sandbox_id,
                         task_id=task_id,
                         project_id=project_id,
-                    )
+                    ),
+                    name="daytona:setup_preview",
                 )
 
             return sandbox_id
@@ -2607,7 +2610,9 @@ def create_event_callback():
 
     def sync_callback(event):
         """Synchronous wrapper for async callback."""
-        asyncio.create_task(check_and_report(event))
+        from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+        fire_and_forget(check_and_report(event), name="daytona:check_and_report")
 
     return sync_callback
 
@@ -3072,7 +3077,12 @@ def create_tools():
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(args["content"])
-            asyncio.create_task(report_event("agent.file_written", {"path": str(file_path)}))
+            from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+            fire_and_forget(
+                report_event("agent.file_written", {"path": str(file_path)}),
+                name="daytona:agent.file_written",
+            )
             return {"content": [{"type": "text", "text": f"Wrote to {file_path}"}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
@@ -3081,9 +3091,17 @@ def create_tools():
     async def run_command(args: dict[str, Any]) -> dict[str, Any]:
         command = args["command"]
         try:
-            asyncio.create_task(report_event("agent.command_started", {"command": command}))
+            from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+            fire_and_forget(
+                report_event("agent.command_started", {"command": command}),
+                name="daytona:agent.command_started",
+            )
             result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=300, cwd="/workspace")
-            asyncio.create_task(report_event("agent.command_completed", {"command": command, "exit_code": result.returncode}))
+            fire_and_forget(
+                report_event("agent.command_completed", {"command": command, "exit_code": result.returncode}),
+                name="daytona:agent.command_completed",
+            )
             return {"content": [{"type": "text", "text": f"Exit: {result.returncode}\\nStdout: {result.stdout}\\nStderr: {result.stderr}"}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
@@ -3699,7 +3717,12 @@ if __name__ == "__main__":
                 info.extra_data["result"] = result
 
             if self.auto_cleanup:
-                asyncio.create_task(self.terminate_sandbox(sandbox_id))
+                from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+                fire_and_forget(
+                    self.terminate_sandbox(sandbox_id),
+                    name="daytona:cleanup_completed",
+                )
 
     def mark_failed(self, sandbox_id: str, error: str) -> None:
         """Mark a sandbox as failed."""
@@ -3710,7 +3733,12 @@ if __name__ == "__main__":
             info.error = error
 
             if self.auto_cleanup:
-                asyncio.create_task(self.terminate_sandbox(sandbox_id))
+                from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+                fire_and_forget(
+                    self.terminate_sandbox(sandbox_id),
+                    name="daytona:cleanup_failed",
+                )
 
     def get_sandbox_info(self, sandbox_id: str) -> Optional[SandboxInfo]:
         """Get information about a sandbox."""

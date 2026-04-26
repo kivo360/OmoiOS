@@ -536,20 +536,24 @@ async def main():
     # Setup signal handlers
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown()))
+        loop.add_signal_handler(
+            sig,
+            lambda s=sig: asyncio.create_task(shutdown()),  # noqa: bare-create-task — signal handler, process exiting
+        )
 
     try:
         await init_services()
 
         logger.info("Starting monitoring loops")
 
-        # Create all monitoring tasks
+        # Create all monitoring tasks — held in `tasks` list for the
+        # full lifetime of the worker process; awaited via gather below.
         tasks = [
-            asyncio.create_task(heartbeat_monitoring_loop()),
-            asyncio.create_task(diagnostic_monitoring_loop()),
-            asyncio.create_task(anomaly_monitoring_loop()),
-            asyncio.create_task(blocking_detection_loop()),
-            asyncio.create_task(approval_timeout_loop()),
+            asyncio.create_task(heartbeat_monitoring_loop()),  # noqa: bare-create-task
+            asyncio.create_task(diagnostic_monitoring_loop()),  # noqa: bare-create-task
+            asyncio.create_task(anomaly_monitoring_loop()),  # noqa: bare-create-task
+            asyncio.create_task(blocking_detection_loop()),  # noqa: bare-create-task
+            asyncio.create_task(approval_timeout_loop()),  # noqa: bare-create-task
         ]
 
         # Start intelligent monitoring loop if available

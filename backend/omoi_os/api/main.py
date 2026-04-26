@@ -943,7 +943,11 @@ async def lifespan(app: FastAPI):
         # Start intelligent monitoring loop if available (as background task, don't block startup)
         if monitoring_loop:
             try:
-                asyncio.create_task(monitoring_loop.start())
+                from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+                fire_and_forget(
+                    monitoring_loop.start(), name="api:monitoring_loop_start"
+                )
                 logger.info("Intelligent Monitoring Loop started (background)")
             except Exception as e:
                 logger.warning("Failed to start MonitoringLoop", error=str(e))

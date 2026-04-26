@@ -578,8 +578,11 @@ class CollaborationService:
                         try:
                             loop = asyncio.get_event_loop()
                             if loop.is_running():
-                                # If loop is running, schedule as task
-                                asyncio.create_task(
+                                from omoi_os.utils.asyncio_tasks import (
+                                    fire_and_forget,
+                                )
+
+                                fire_and_forget(
                                     self._save_message_to_memory(
                                         memory_service,
                                         message,
@@ -587,7 +590,8 @@ class CollaborationService:
                                         from_agent_id,
                                         ticket_id,
                                         task_id,
-                                    )
+                                    ),
+                                    name="collaboration:save_to_memory",
                                 )
                             else:
                                 # If no loop, run in executor

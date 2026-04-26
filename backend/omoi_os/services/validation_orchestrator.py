@@ -653,8 +653,9 @@ class ValidationOrchestrator:
 
                 try:
                     asyncio.get_running_loop()
-                    # Event loop exists, create task
-                    asyncio.create_task(
+                    from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+                    fire_and_forget(
                         self.diagnostic.spawn_diagnostic_agent(
                             workflow_id=task.ticket_id,
                             context={
@@ -664,9 +665,9 @@ class ValidationOrchestrator:
                                 "last_feedback": task.last_validation_feedback,
                             },
                             max_tasks=5,
-                        )
+                        ),
+                        name="validation:diagnostic_repeated_failures",
                     )
-                    # Don't await in sync context - fire and forget
                     diagnostic_run = None  # Will be None, but task is running
                     logger.warning(
                         "Diagnosis spawned for repeated validation failures",
@@ -736,8 +737,11 @@ class ValidationOrchestrator:
 
                                 try:
                                     asyncio.get_running_loop()
-                                    # Event loop exists, create task
-                                    asyncio.create_task(
+                                    from omoi_os.utils.asyncio_tasks import (
+                                        fire_and_forget,
+                                    )
+
+                                    fire_and_forget(
                                         self.diagnostic.spawn_diagnostic_agent(
                                             workflow_id=task.ticket_id,
                                             context={
@@ -747,7 +751,8 @@ class ValidationOrchestrator:
                                                 "timeout_minutes": timeout_minutes,
                                             },
                                             max_tasks=5,
-                                        )
+                                        ),
+                                        name="validation:diagnostic_timeout",
                                     )
                                     # Don't await in sync context - fire and forget
                                     diagnostic_run = None

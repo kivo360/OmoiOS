@@ -1,5 +1,0 @@
-tests/unit/services/test_daytona_spawner.py::TestDaytonaSpawnerBrokerEnvVars::test_session_token_not_logged PASSED [ 88%]
-tests/unit/services/test_daytona_spawner.py::TestDaytonaSpawnerPhaseMapping::test_phase_to_mode_mapping_exists PASSED [ 94%]
-tests/unit/services/test_daytona_spawner.py::TestDaytonaSpawnerPhaseMapping::test_all_spec_phases_have_mapping PASSED [100%]
-
-============================== 18 passed in 0.19s ==============================

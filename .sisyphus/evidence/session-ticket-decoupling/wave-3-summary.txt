@@ -1,5 +1,0 @@
-tests/unit/test_session_aliases.py::TestSessionCreateModel::test_accepts_session_type_alias PASSED [ 96%]
-tests/unit/test_session_aliases.py::TestSessionCreateModel::test_default_values PASSED [ 98%]
-tests/unit/test_session_aliases.py::TestDeprecationHeaderConstant::test_contains_correct_message PASSED [100%]
-
-============================== 53 passed in 1.71s ==============================

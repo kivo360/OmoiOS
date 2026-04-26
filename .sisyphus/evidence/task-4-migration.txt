@@ -1,1 +1,0 @@
-Migration 062_add_environments (env tables) and 063_add_artifacts (artifact tables) applied. Head: 063_add_artifacts. Downgrade/upgrade cycle verified via direct DB inspection: tables environments, environment_versions, artifacts all present; alembic_version = 063_add_artifacts.

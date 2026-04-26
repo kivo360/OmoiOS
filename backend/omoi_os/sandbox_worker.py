@@ -287,7 +287,11 @@ async def run_sandbox_worker():
                 try:
                     loop = asyncio.get_event_loop()
                     if loop.is_running():
-                        asyncio.create_task(on_agent_event(event))
+                        from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+                        fire_and_forget(
+                            on_agent_event(event), name="sandbox_worker:on_event"
+                        )
                     else:
                         asyncio.run(on_agent_event(event))
                 except Exception:

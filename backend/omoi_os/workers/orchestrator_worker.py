@@ -1618,7 +1618,7 @@ async def shutdown():
 
 def signal_handler(sig, frame):
     """Handle shutdown signals."""
-    asyncio.create_task(shutdown())
+    asyncio.create_task(shutdown())  # noqa: bare-create-task — process exiting
 
 
 async def main():
@@ -1634,7 +1634,10 @@ async def main():
     # Setup signal handlers
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown()))
+        loop.add_signal_handler(
+            sig,
+            lambda s=sig: asyncio.create_task(shutdown()),  # noqa: bare-create-task — signal handler, process exiting
+        )
 
     try:
         await init_services()

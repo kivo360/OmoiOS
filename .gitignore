@@ -1,6 +1,10 @@
 # External dependencies
 external/
 
+# Sisyphus local evidence + state — generated test artifacts, not source
+.sisyphus/evidence/
+.sisyphus/poof.state.json
+
 # Compiled Go binaries (build artifacts, not source)
 egress-proxy/egress-proxy
 

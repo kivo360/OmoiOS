@@ -1,5 +1,0 @@
-warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/Users/kevinhill/Coding/Experiments/senior-sandbox/omoi_os/.venv` and will be ignored; use `--active` to target the active environment instead
-list_sessions signature: (request: 'Request', response: 'Response', status: 'str | None' = None, phase_id: 'str | None' = None, has_sandbox: 'bool | None' = None, ticket_id: 'str | None' = None, workspace_id: 'str | None' = None, limit: 'int' = 100, current_user: 'User' = Depends(dependency=<function get_current_user at 0x10a4c4ea0>, use_cache=True, scope=None), db: 'DatabaseService' = Depends(dependency=<function get_db_service at 0x10a3e1f80>, use_cache=True, scope=None))
-
-Verified: no longer delegates to tasks_router.list_tasks
-Verified: 4-arm visibility union + archived-spec filter preserved

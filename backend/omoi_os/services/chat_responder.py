@@ -290,7 +290,15 @@ async def _call_chat_completion(
 def schedule_response(session_id: str, db: DatabaseService) -> asyncio.Task[Any]:
     """Fire-and-forget helper for route handlers.
 
-    Creates an asyncio task bound to the current event loop. The task is
-    returned so tests can await it — production callers ignore the handle.
+    Creates an asyncio task bound to the current event loop. Uses
+    `fire_and_forget` so the task isn't garbage-collected before it runs
+    — bare `asyncio.create_task` here lost initial-prompt agent replies
+    in production until 2026-04-26. The task is returned so tests can
+    await it; production callers ignore the handle.
     """
-    return asyncio.create_task(respond_to_session(session_id, db=db))
+    from omoi_os.utils.asyncio_tasks import fire_and_forget
+
+    return fire_and_forget(
+        respond_to_session(session_id, db=db),
+        name=f"chat_responder:{session_id[:8]}",
+    )
