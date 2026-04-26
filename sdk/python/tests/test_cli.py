@@ -377,3 +377,55 @@ class TestWhoami:
         monkeypatch.setattr("httpx.Client.get", fake_get, raising=True)
         rc = invoke("whoami")
         assert rc == 1
+
+
+# ─── connect TUI (Textual Pilot) ─────────────────────────────────────────────
+
+
+class TestConnectTUI:
+    """Headless drive of the Textual TUI via Pilot.
+
+    Uses `pytest-asyncio`'s default loop. We patch the SDK's events()
+    iterator + WebSocket open() so the TUI's reactive loop runs without
+    a live backend. Quits cleanly on Ctrl+Q.
+    """
+
+    @pytest.mark.asyncio
+    async def test_layout_mounts_and_quit(self) -> None:
+        from omoios.cli.connect_tui import ConnectApp
+
+        # Stub the SDK so events() yields nothing and connect() raises —
+        # exercises the SSE-only fallback path the user actually hits when
+        # the WS rejects (confirmed live).
+        async def empty_events(self, session_id, last_event_id=None):
+            return
+            yield  # noqa: unreachable — typed as AsyncIterator
+
+        with patch(
+            "omoios.resources.sessions.SessionsResource.events", empty_events
+        ), patch(
+            "omoios.resources.sessions.SessionsResource.connect",
+            lambda self, session_id, user_token=None: (_ for _ in ()).throw(
+                RuntimeError("ws disabled in test")
+            ),
+        ):
+            app = ConnectApp(
+                api_base_url="http://localhost:18000",
+                api_key="fake",  # pragma: allowlist secret
+                session_id="00000000-0000-0000-0000-000000000000",
+                my_user_id="u1",
+            )
+            async with app.run_test(size=(110, 32)) as pilot:
+                await pilot.pause()
+                # All five widgets should mount cleanly.
+                assert app.query("Input")
+                assert app.query("#chat")
+                assert app.query("#sidebar")
+                assert app.query("#participants")
+                assert app.query("#events")
+                # Type into the input — fires the typing-debounce branch
+                # which logs a send.error since WS is stubbed off.
+                await pilot.press(*list("hi"))
+                await pilot.pause(0.1)
+                # Quit via the binding.
+                await pilot.press("ctrl+q")
