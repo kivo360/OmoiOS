@@ -24,7 +24,9 @@ class WebhooksResource(BaseResource):
         Example:
             >>> webhooks = await client.webhooks.list()
         """
-        response = await self._client._request("GET", "/api/v1/webhooks")
+        response = await self._client._request(
+            "GET", "/api/v1/webhooks/subscriptions"
+        )
         return [WebhookSubscription.model_validate(item) for item in response.json()]
 
     async def create(self, request: CreateWebhookRequest) -> WebhookSubscription:
@@ -46,7 +48,7 @@ class WebhooksResource(BaseResource):
         """
         response = await self._client._request(
             "POST",
-            "/api/v1/webhooks",
+            "/api/v1/webhooks/subscriptions",
             json=request.model_dump(mode="json"),
         )
         return WebhookSubscription.model_validate(response.json())
@@ -63,7 +65,9 @@ class WebhooksResource(BaseResource):
         Example:
             >>> await client.webhooks.delete("wh-1")
         """
-        await self._client._request("DELETE", f"/api/v1/webhooks/{webhook_id}")
+        await self._client._request(
+            "DELETE", f"/api/v1/webhooks/subscriptions/{webhook_id}"
+        )
 
     async def list_deliveries(self, subscription_id: str) -> List[WebhookDelivery]:
         """List webhook deliveries for a subscription.
@@ -81,6 +85,7 @@ class WebhooksResource(BaseResource):
             >>> deliveries = await client.webhooks.list_deliveries("wh-1")
         """
         response = await self._client._request(
-            "GET", f"/api/v1/webhooks/{subscription_id}/deliveries"
+            "GET",
+            f"/api/v1/webhooks/subscriptions/{subscription_id}/deliveries",
         )
         return [WebhookDelivery.model_validate(item) for item in response.json()]

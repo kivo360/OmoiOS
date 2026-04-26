@@ -28,11 +28,13 @@ VALID_VARIABLE_TYPES = {"string", "secret", "json"}
 
 class EnvironmentServiceError(Exception):
     """Base exception for environment service errors."""
+
     pass
 
 
 class InvalidVariableError(EnvironmentServiceError):
     """Raised when variable structure is invalid."""
+
     pass
 
 
@@ -158,9 +160,7 @@ class EnvironmentService:
         db = self._get_db()
         with db.get_session() as session:
             environment = (
-                session.query(Environment)
-                .filter(Environment.id == env_id)
-                .first()
+                session.query(Environment).filter(Environment.id == env_id).first()
             )
 
             if environment is None:
@@ -178,6 +178,40 @@ class EnvironmentService:
             if latest_version is not None:
                 session.expunge(latest_version)
             return environment, latest_version
+
+    def get_version_by_number(
+        self,
+        env_id: UUID,
+        version_number: int,
+    ) -> EnvironmentVersion:
+        """Fetch a specific version of an environment by its sequential number.
+
+        Args:
+            env_id: Environment ID
+            version_number: Version number (1, 2, 3...)
+
+        Returns:
+            EnvironmentVersion model (detached from session)
+
+        Raises:
+            EnvironmentServiceError: If environment or version not found
+        """
+        db = self._get_db()
+        with db.get_session() as session:
+            version = (
+                session.query(EnvironmentVersion)
+                .filter(
+                    EnvironmentVersion.environment_id == env_id,
+                    EnvironmentVersion.version_number == version_number,
+                )
+                .first()
+            )
+            if version is None:
+                raise EnvironmentServiceError(
+                    f"Version {version_number} not found for environment {env_id}"
+                )
+            session.expunge(version)
+            return version
 
     def _validate_variable(
         self,
@@ -243,9 +277,7 @@ class EnvironmentService:
         with db.get_session() as session:
             # Verify environment exists
             environment = (
-                session.query(Environment)
-                .filter(Environment.id == env_id)
-                .first()
+                session.query(Environment).filter(Environment.id == env_id).first()
             )
             if environment is None:
                 raise EnvironmentServiceError(f"Environment not found: {env_id}")

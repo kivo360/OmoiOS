@@ -63,21 +63,26 @@ from pydantic import BaseModel, Field
 
 class CreateEnvironmentRequest(BaseModel):
     """Request model for creating an environment."""
+
     name: str = Field(..., min_length=1, max_length=255, description="Environment name")
-    description: Optional[str] = Field(None, description="Optional environment description")
+    description: Optional[str] = Field(
+        None, description="Optional environment description"
+    )
     org_id: UUID = Field(..., description="Organization ID")
 
 
 class CreateVersionRequest(BaseModel):
     """Request model for creating a version."""
+
     variables: dict[str, dict] = Field(
         ...,
-        description="Variables dict: {name: {type: 'string|secret|json', value: '...'}}"
+        description="Variables dict: {name: {type: 'string|secret|json', value: '...'}}",
     )
 
 
 class EnvironmentResponse(BaseModel):
     """Response model for environment metadata."""
+
     id: UUID
     org_id: UUID
     name: str
@@ -99,6 +104,7 @@ class EnvironmentResponse(BaseModel):
 
 class EnvironmentVersionResponse(BaseModel):
     """Response model for environment version."""
+
     id: UUID
     environment_id: UUID
     version_number: int
@@ -135,6 +141,7 @@ class EnvironmentVersionResponse(BaseModel):
 
 class EnvironmentWithVersionResponse(BaseModel):
     """Response model for environment with latest version."""
+
     environment: EnvironmentResponse
     latest_version: Optional[EnvironmentVersionResponse]
 
@@ -142,6 +149,7 @@ class EnvironmentWithVersionResponse(BaseModel):
 # ============================================================================
 # API Endpoints
 # ============================================================================
+
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_environment(
@@ -244,7 +252,8 @@ async def get_environment(
         return EnvironmentWithVersionResponse(
             environment=EnvironmentResponse.from_model(environment),
             latest_version=EnvironmentVersionResponse.from_model(latest_version)
-            if latest_version else None,
+            if latest_version
+            else None,
         )
 
     except EnvironmentServiceError as e:
@@ -259,6 +268,32 @@ async def get_environment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get environment: {str(e)}",
+        )
+
+
+@router.get("/{env_id}/versions/{version_number}")
+async def get_version(
+    env_id: UUID,
+    version_number: int,
+) -> EnvironmentVersionResponse:
+    """Fetch a specific version of an environment by its sequential number.
+
+    Spec rule: versions are immutable. This endpoint exists so callers
+    (CLI rollback, audit logs, sandbox rehydration) can read v(N-1)
+    without relying on the latest pointer.
+
+    Raises:
+        HTTPException: 404 if env or version doesn't exist.
+    """
+    check_feature_flag()
+    try:
+        service = get_service()
+        version = service.get_version_by_number(env_id, version_number)
+        return EnvironmentVersionResponse.from_model(version, masked=True)
+    except EnvironmentServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
         )
 
 

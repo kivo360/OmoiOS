@@ -507,6 +507,15 @@ async def list_sessions(
         result = await session.execute(query)
         tasks = result.scalars().unique().all()
 
+        # Spec §03 status mapping — `Task.status="completed"` is the
+        # internal label, but the SSE event taxonomy emits
+        # `session.succeeded`. The single-row `GET /sessions/{id}` already
+        # rewrites this in `_enrich_session_response`; do the same on the
+        # list path so the two endpoints don't disagree about what state
+        # the same row is in.
+        def _map_status(s: Optional[str]) -> Optional[str]:
+            return "succeeded" if s == "completed" else s
+
         rows = [
             {
                 "id": task.id,
@@ -517,7 +526,7 @@ async def list_sessions(
                 "title": task.title,
                 "description": task.description,
                 "priority": task.priority,
-                "status": task.status,
+                "status": _map_status(task.status),
                 "sandbox_id": task.sandbox_id,
                 "assigned_agent_id": task.assigned_agent_id,
                 "created_at": task.created_at.isoformat() if task.created_at else None,
@@ -1228,7 +1237,31 @@ async def session_reply(
             session_id=session_id,
         )
 
-    # 2. Emit the envelope event.
+    # 2. Re-open the session if it had reached a terminal state in a
+    #    previous turn. Multi-turn chat works by flipping the Task back
+    #    to `running` so the chat_responder will fire again and the
+    #    spec §03 status mapping doesn't short-circuit the SSE stream.
+    try:
+        from omoi_os.models.task import Task
+
+        with db.get_session() as session:
+            task = session.query(Task).filter(Task.id == session_id).first()
+            if task is not None and task.status in (
+                "completed",
+                "succeeded",
+                "failed",
+                "canceled",
+            ):
+                task.status = "running"
+                session.commit()
+    except Exception as exc:  # noqa: BLE001 — re-open is best-effort
+        logger.warning(
+            "session reply could not re-open task for follow-up",
+            session_id=session_id,
+            error=str(exc),
+        )
+
+    # 3. Emit the envelope event for the user's message.
     with db.get_session() as session:
         envelope = SessionEventEnvelope(session, bus)
         envelope.emit(

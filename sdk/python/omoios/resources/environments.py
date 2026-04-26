@@ -64,6 +64,23 @@ class EnvironmentsResource(BaseResource):
             result["latest_version"] = None
         return result
 
+    async def get_version(
+        self, environment_id: str, version_number: int
+    ) -> EnvironmentVersion:
+        """Fetch a specific (non-latest) version by its sequential number.
+
+        Used by `omoios environments rollback` and any caller that needs
+        to read v(N-1) — versions are immutable, so this never changes.
+
+        Raises:
+            NotFoundError: If env or version doesn't exist.
+        """
+        response = await self._client._request(
+            "GET",
+            f"/api/v1/environments/{environment_id}/versions/{version_number}",
+        )
+        return EnvironmentVersion.model_validate(response.json())
+
     async def create(self, request: CreateEnvironmentRequest) -> Environment:
         """Create a new environment.
 

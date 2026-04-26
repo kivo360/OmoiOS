@@ -349,18 +349,17 @@ def rollback_cmd(
     Immutability is preserved: we never edit the target version or the
     current version. We just append a fresh version with the older
     payload. Sessions pinned to whatever version they spawned with stay
-    put.
-
-    NOTE: today the public API only returns the *latest* version on
-    `get`, so the CLI can't fetch v3 directly. This command is a stub
-    that documents the intended UX; full rollback ships when a
-    `GET /environments/{id}/versions/{n}` endpoint exists.
+    put — only future spawns see the rollback.
     """
-    raise CliError(
-        f"`environments rollback --to {target}` not wired yet — the public "
-        "API doesn't expose a per-version GET endpoint, so the CLI can't "
-        "read the older version's payload. Track this on the spec gap "
-        "list (project_sdk_surface_gap)."
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
+    new_version = run_sdk(_rollback(cfg.api_base_url, cfg.api_key, env_id, target))
+    ok(
+        f"created v{new_version.version_number} as a copy of v{target} "
+        f"({len(new_version.variables or {})} var(s))"
+    )
+    console.print(
+        "  [dim]running sessions stay pinned to the version they spawned "
+        "with; only new spawns see this rollback.[/dim]"
     )
 
 
@@ -397,6 +396,33 @@ async def _create(api_base_url, api_key, name, org_id, description):
                 name=name, org_id=org_id, description=description or None
             )
         )
+
+
+async def _rollback(api_base_url, api_key, env_id, target_version):
+    """Read v(target), then INSERT a new version copying its payload.
+
+    Immutability is preserved: the target row stays untouched.
+    """
+    from omoios import AsyncOmoiOSClient
+    from omoios.types import (
+        CreateEnvironmentVersionRequest,
+        EnvironmentVariable,
+    )
+
+    async with AsyncOmoiOSClient(
+        base_url=api_base_url, api_key=api_key, timeout=30.0
+    ) as client:
+        target = await client.environments.get_version(env_id, target_version)
+        as_models = {}
+        for k, v in (target.variables or {}).items():
+            as_models[k] = (
+                v if hasattr(v, "model_dump") else EnvironmentVariable.model_validate(v)
+            )
+        request = CreateEnvironmentVersionRequest(
+            variables=as_models,
+            credentials=getattr(target, "credentials", None),
+        )
+        return await client.environments.create_version(env_id, request)
 
 
 async def _merge_and_create_version(

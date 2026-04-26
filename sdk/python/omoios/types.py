@@ -83,13 +83,30 @@ class Environment(BaseModel):
 
 
 class EnvironmentVersion(BaseModel):
-    """Environment version (immutable snapshot)."""
+    """Environment version (immutable snapshot).
+
+    Mirrors `backend/omoi_os/models/environment.py:EnvironmentVersion`.
+    Egress / exposed_ports / persistent_volume are intentionally not
+    surfaced here — those require deploying the egress proxy + tunnel
+    services and are out of scope for the current milestone.
+    """
 
     id: str = Field(..., description="Unique identifier")
     environment_id: str = Field(..., description="Parent environment ID")
     version_number: int = Field(..., description="Version number (1, 2, 3...)")
     variables: Dict[str, EnvironmentVariable] = Field(
         ..., description="Environment variables"
+    )
+    credentials: Optional[Dict[str, Dict[str, Any]]] = Field(
+        default=None,
+        description=(
+            "Credential alias map: {alias: {kind, binding_id}}. "
+            "Resolved at sandbox boot via the credential broker."
+        ),
+    )
+    image: Optional[str] = Field(
+        default=None,
+        description="Optional sandbox image override; spawner falls back to default if None.",
     )
     created_at: datetime = Field(..., description="Creation timestamp")
 
@@ -107,6 +124,14 @@ class CreateEnvironmentVersionRequest(BaseModel):
 
     variables: Dict[str, EnvironmentVariable] = Field(
         ..., description="Environment variables"
+    )
+    credentials: Optional[Dict[str, Dict[str, Any]]] = Field(
+        default=None,
+        description="Optional credential alias map merged into the new version.",
+    )
+    image: Optional[str] = Field(
+        default=None,
+        description="Optional image override for sandboxes that boot from this version.",
     )
 
 
