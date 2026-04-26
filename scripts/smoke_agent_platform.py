@@ -1695,14 +1695,33 @@ async def phase_session_list_autopagination(ctx: Context) -> PhaseResult:
         telemetry=_telemetry,
     )
 
-    try:
-        seen_ids: set[str] = set()
+    seen_ids: set[str] = set()
+
+    async def _walk() -> None:
         # Cap to avoid scanning the full org if it has hundreds of sessions
-        # — we just need to prove the iterator walked ≥2 pages.
+        # — we just need to prove the iterator walked ≥2 pages. Hard cap at
+        # 5 distinct ids; the iterator is broken out of as soon as we have
+        # enough proof.
         async for s in probe.sessions.list(page_size=2):
             seen_ids.add(s.id)
             if len(seen_ids) >= 5:
-                break
+                return
+
+    try:
+        # Wall-clock cap: orgs with thousands of rows + slow GET pages can
+        # eat the smoke; 30s is generous for fetching 5 sessions.
+        await asyncio.wait_for(_walk(), timeout=30.0)
+    except asyncio.TimeoutError:
+        await probe.close()
+        return PhaseResult(
+            "session_list_autopagination", Verdict.FAIL,
+            detail=(
+                f"iteration did not yield 5 sessions within 30s "
+                f"(saw {len(seen_ids)}); pagination is likely stuck or "
+                f"the backend list endpoint is slow"
+            ),
+            evidence={"seen": len(seen_ids)},
+        )
     except Exception as e:  # noqa: BLE001
         await probe.close()
         return PhaseResult(

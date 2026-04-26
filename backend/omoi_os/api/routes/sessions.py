@@ -417,6 +417,7 @@ async def list_sessions(
     ticket_id: str | None = None,
     workspace_id: str | None = None,
     limit: int = 100,
+    offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
@@ -495,7 +496,7 @@ async def list_sessions(
         elif has_sandbox is False:
             query = query.where(Task.sandbox_id.is_(None))
 
-        query = query.order_by(Task.created_at.desc()).limit(limit)
+        query = query.order_by(Task.created_at.desc()).offset(offset).limit(limit)
         result = await session.execute(query)
         tasks = result.scalars().unique().all()
 

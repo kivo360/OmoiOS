@@ -452,7 +452,10 @@ class TaskQueueService:
                     task.persistence_dir = persistence_dir
                 if status == "running" and not task.started_at:
                     task.started_at = utc_now()
-                elif status in ("completed", "failed") and not task.completed_at:
+                elif (
+                    status in ("completed", "failed", "cancelled")
+                    and not task.completed_at
+                ):
                     task.completed_at = utc_now()
 
                 session.commit()
@@ -936,33 +939,38 @@ class TaskQueueService:
 
     def cancel_task(self, task_id: str, reason: str = "cancelled_by_request") -> bool:
         """
-        Cancel a running task.
+        Cancel a task (pending, claiming, assigned, or running).
+
+        Spec §18 §1.5 says cancellation must propagate end-to-end. The most
+        important case is cancelling a session BEFORE it starts running —
+        this is exactly what every CLI Ctrl+C and Edge-Function timeout
+        does. Refusing pending sessions makes those clients leak rows.
 
         Args:
             task_id: UUID of the task to cancel
             reason: Reason for cancellation
 
         Returns:
-            True if task was cancelled, False if task not found or not cancellable
+            True if task was cancelled, False if task not found or already
+            in a terminal state (completed / failed / cancelled).
         """
-        from omoi_os.utils.datetime import utc_now
-
+        # Delegate to update_task_status so callers get the canonical
+        # session.cancelled envelope event for free (spec §03 §1.5). Doing
+        # the column write inline here would skip the event emission and
+        # leave SDK clients waiting on `events()` forever.
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
             if not task:
                 return False
-
-            # Only cancel running tasks
-            if task.status not in ["assigned", "running"]:
+            if task.status in ["completed", "failed", "cancelled"]:
                 return False
 
-            # Update task status
-            task.status = "failed"
-            task.error_message = f"Task cancelled: {reason}"
-            task.completed_at = utc_now()
-
-            session.commit()
-            return True
+        self.update_task_status(
+            task_id=task_id,
+            status="cancelled",
+            error_message=f"Task cancelled: {reason}",
+        )
+        return True
 
     def get_timed_out_tasks(self) -> list[Task]:
         """
@@ -1615,7 +1623,10 @@ class TaskQueueService:
                     task.persistence_dir = persistence_dir
                 if status == "running" and not task.started_at:
                     task.started_at = utc_now()
-                elif status in ("completed", "failed") and not task.completed_at:
+                elif (
+                    status in ("completed", "failed", "cancelled")
+                    and not task.completed_at
+                ):
                     task.completed_at = utc_now()
 
                 await session.commit()
