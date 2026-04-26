@@ -520,10 +520,24 @@ async def phase_sessions_alias(ctx: Context) -> PhaseResult:
 
 @phase("daytona_allocation")
 async def phase_daytona_allocation(ctx: Context) -> PhaseResult:
-    """Spin up a real Daytona sandbox and run a command inside it.
+    """Spin up a real sandbox and run a command inside it.
 
-    Baseline: proves Daytona creds + image work. Required before egress tests.
+    Baseline: proves the configured provider's creds + image work. Required
+    before egress tests. The phase name is `daytona_allocation` for backwards
+    compatibility with prior reports, but the actual backend is whichever
+    provider `SANDBOX_PROVIDER` (or `OMOIOS_SMOKE_SANDBOX_PROVIDER`) selects.
     """
+    provider_name = os.environ.get(
+        "OMOIOS_SMOKE_SANDBOX_PROVIDER",
+        os.environ.get("SANDBOX_PROVIDER", "daytona"),
+    ).lower()
+
+    if provider_name == "modal":
+        return await _allocate_via_modal(ctx)
+    return await _allocate_via_daytona(ctx)
+
+
+async def _allocate_via_daytona(ctx: Context) -> PhaseResult:
     try:
         from daytona import Daytona, DaytonaConfig, CreateSandboxFromSnapshotParams
     except ImportError as e:
@@ -552,7 +566,60 @@ async def phase_daytona_allocation(ctx: Context) -> PhaseResult:
             return PhaseResult("daytona_allocation", Verdict.FAIL,
                                detail=f"exec echo failed; stdout={str(out)[:200]}")
         return PhaseResult("daytona_allocation", Verdict.PASS,
-                           evidence={"sandbox_id": ctx.daytona_sandbox_id,
+                           evidence={"provider": "daytona",
+                                     "sandbox_id": ctx.daytona_sandbox_id,
+                                     "exec_output": str(out)[:300]})
+    except Exception as e:
+        return PhaseResult("daytona_allocation", Verdict.FAIL,
+                           detail=f"exec failed: {e}")
+
+
+async def _allocate_via_modal(ctx: Context) -> PhaseResult:
+    """Modal-backed allocation that goes through the OmoiOS provider stack."""
+    try:
+        # Import lazily so the smoke can run even if `modal` isn't installed.
+        # The factory returns ModalProvider when SANDBOX_PROVIDER=modal.
+        os.environ["SANDBOX_PROVIDER"] = "modal"
+        from omoi_os.services.sandbox_factory import create_sandbox_provider
+        from omoi_os.services.modal_provider import ModalProvider
+        from omoi_os.services.modal_spawner import get_modal_spawner
+    except Exception as e:
+        return PhaseResult("daytona_allocation", Verdict.SKIP,
+                           detail=f"modal provider not importable: {e}")
+
+    try:
+        provider = create_sandbox_provider(db=None, event_bus=None)
+        if not isinstance(provider, ModalProvider):
+            return PhaseResult(
+                "daytona_allocation", Verdict.FAIL,
+                detail=f"factory returned {type(provider).__name__}; expected ModalProvider")
+        result = await provider.spawn_for_task(
+            task_id=f"smoke-{uuid.uuid4().hex[:8]}",
+            agent_id="smoke-agent",
+            phase_id="PHASE_SMOKE",
+            env_vars={"SMOKE_TEST": "1"},
+            runtime="claude",
+            execution_mode="implementation",
+        )
+        ctx.daytona_sandbox_id = result.sandbox_id  # reused field; provider-agnostic
+    except Exception as e:
+        return PhaseResult("daytona_allocation", Verdict.FAIL,
+                           detail=f"modal spawn failed: {e}")
+
+    try:
+        spawner = get_modal_spawner()
+        out_obj = await spawner.exec(
+            ctx.daytona_sandbox_id,
+            "sh", "-c",
+            "echo hello-from-modal && curl -s -o /dev/null -w '%{http_code}' https://api.github.com",
+        )
+        out = (out_obj.get("stdout") or "")
+        if "hello-from-modal" not in str(out):
+            return PhaseResult("daytona_allocation", Verdict.FAIL,
+                               detail=f"exec echo failed; stdout={str(out)[:200]}")
+        return PhaseResult("daytona_allocation", Verdict.PASS,
+                           evidence={"provider": "modal",
+                                     "sandbox_id": ctx.daytona_sandbox_id,
                                      "exec_output": str(out)[:300]})
     except Exception as e:
         return PhaseResult("daytona_allocation", Verdict.FAIL,
@@ -1814,12 +1881,22 @@ async def cleanup(ctx: Context, keep_sandbox: bool) -> list[str]:
             notes.append(f"sdk_client close: {e}")
 
     if ctx.daytona_sandbox_id and not keep_sandbox:
+        provider_name = os.environ.get(
+            "OMOIOS_SMOKE_SANDBOX_PROVIDER",
+            os.environ.get("SANDBOX_PROVIDER", "daytona"),
+        ).lower()
         try:
-            from daytona import Daytona, DaytonaConfig
-            cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
-            sb = Daytona(cfg).get(ctx.daytona_sandbox_id)
-            sb.delete()
-            notes.append(f"sandbox {ctx.daytona_sandbox_id}: deleted")
+            if provider_name == "modal":
+                from omoi_os.services.modal_spawner import get_modal_spawner
+                spawner = get_modal_spawner()
+                await spawner.terminate_sandbox(ctx.daytona_sandbox_id)
+                notes.append(f"modal sandbox {ctx.daytona_sandbox_id}: terminated")
+            else:
+                from daytona import Daytona, DaytonaConfig
+                cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
+                sb = Daytona(cfg).get(ctx.daytona_sandbox_id)
+                sb.delete()
+                notes.append(f"sandbox {ctx.daytona_sandbox_id}: deleted")
         except Exception as e:
             notes.append(f"sandbox cleanup: {e}")
 
