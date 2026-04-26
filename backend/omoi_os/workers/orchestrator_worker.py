@@ -973,35 +973,37 @@ async def orchestrator_loop():
         max_concurrent_per_project=max_concurrent_per_project,
     )
 
-    # Initialize Daytona spawner if sandbox mode enabled (skip in dry-run mode)
+    # Initialize sandbox spawner if sandbox mode enabled (skip in dry-run).
+    # Variable name stays `daytona_spawner` for downstream call sites; the
+    # selected backend is whichever `sandbox.provider` (env var
+    # SANDBOX_PROVIDER) names — Daytona by default, Modal when configured.
+    def _build_sandbox_spawner():
+        from omoi_os.config import get_app_settings
+
+        provider = (
+            getattr(getattr(get_app_settings(), "sandbox", None), "provider", "daytona")
+            or "daytona"
+        ).lower()
+        if provider == "modal":
+            from omoi_os.services.modal_spawner import get_modal_spawner
+
+            return get_modal_spawner(db=db, event_bus=event_bus), "modal"
+        from omoi_os.services.daytona_spawner import get_daytona_spawner
+
+        return get_daytona_spawner(db=db, event_bus=event_bus), "daytona"
+
     daytona_spawner = None
     if sandbox_execution and not dry_run:
         try:
-            from omoi_os.services.daytona_spawner import get_daytona_spawner
-
-            daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
-            logger.info("daytona_spawner_initialized", mode=mode)
+            daytona_spawner, _backend = _build_sandbox_spawner()
+            logger.info("sandbox_spawner_initialized", mode=mode, backend=_backend)
         except Exception as e:
-            logger.error("daytona_spawner_failed", error=str(e))
+            logger.error("sandbox_spawner_failed", error=str(e))
             logger.warning("falling_back_to_legacy_mode")
             sandbox_execution = False
             mode = "legacy"
     elif dry_run:
         logger.info("dry_run_mode_enabled", mode=mode)
-    else:
-        logger.info("legacy_mode_enabled", mode=mode)
-    daytona_spawner = None
-    if sandbox_execution:
-        try:
-            from omoi_os.services.daytona_spawner import get_daytona_spawner
-
-            daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
-            logger.info("daytona_spawner_initialized", mode=mode)
-        except Exception as e:
-            logger.error("daytona_spawner_failed", error=str(e))
-            logger.warning("falling_back_to_legacy_mode")
-            sandbox_execution = False
-            mode = "legacy"
     else:
         logger.info("legacy_mode_enabled", mode=mode)
 
@@ -1377,12 +1379,24 @@ async def idle_sandbox_check_loop():
     idle_threshold = timedelta(minutes=idle_threshold_minutes)
     check_interval = int(os.getenv("IDLE_CHECK_INTERVAL_SECONDS", "30"))
 
-    # Initialize idle sandbox monitor
-    from omoi_os.services.daytona_spawner import get_daytona_spawner
+    # Initialize idle sandbox monitor — pick spawner based on configured
+    # provider (mirrors orchestrator_loop init).
+    from omoi_os.config import get_app_settings
     from omoi_os.services.idle_sandbox_monitor import IdleSandboxMonitor
 
     try:
-        daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
+        provider = (
+            getattr(getattr(get_app_settings(), "sandbox", None), "provider", "daytona")
+            or "daytona"
+        ).lower()
+        if provider == "modal":
+            from omoi_os.services.modal_spawner import get_modal_spawner
+
+            daytona_spawner = get_modal_spawner(db=db, event_bus=event_bus)
+        else:
+            from omoi_os.services.daytona_spawner import get_daytona_spawner
+
+            daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
         idle_monitor = IdleSandboxMonitor(
             db=db,
             daytona_spawner=daytona_spawner,
