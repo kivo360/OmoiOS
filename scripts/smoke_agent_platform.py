@@ -634,22 +634,39 @@ def _is_modal_provider() -> bool:
     ).lower() == "modal"
 
 
-def _modal_skip(name: str) -> PhaseResult:
-    """SKIP verdict for phases whose body still hits the Daytona SDK.
+async def _sandbox_exec(ctx: Context, cmd_str: str) -> tuple[str, int]:
+    """Provider-agnostic exec that returns (stdout, exit_code).
 
-    These phases verify behavior of `daytona_spawner.py`'s injection (egress
-    env vars, opencode auth.json, etc.). When the provider is Modal, the
-    Daytona spawner doesn't run at all, so there's nothing to verify with
-    those tests in their current form. The Modal equivalent lives in
-    `modal_spawner.py` and is covered by `scripts/modal_smoke.py`.
+    `cmd_str` is a single shell string — both backends invoke it via
+    `sh -c "<cmd_str>"` so quoting works the same on both. Returns the
+    stdout as a stripped string and the process exit code (0 on success).
+    Raises if the sandbox handle isn't available.
     """
-    return PhaseResult(
-        name, Verdict.SKIP,
-        detail=(
-            "modal provider: phase still uses Daytona-SDK probes; "
-            "modal-mode equivalents are covered by scripts/modal_smoke.py"
-        ),
-    )
+    if not ctx.daytona_sandbox_id:
+        raise RuntimeError("no sandbox allocated")
+
+    if _is_modal_provider():
+        from omoi_os.services.modal_spawner import get_modal_spawner
+
+        spawner = get_modal_spawner()
+        result = await spawner.exec(ctx.daytona_sandbox_id, "sh", "-c", cmd_str)
+        stdout = (result.get("stdout") or "")
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode("utf-8", errors="replace")
+        exit_code = int(result.get("exit_code") or 0)
+        return str(stdout), exit_code
+
+    # Daytona path.
+    from daytona import Daytona, DaytonaConfig
+
+    cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
+    sb = Daytona(cfg).get(ctx.daytona_sandbox_id)
+    result = sb.process.exec(cmd_str)
+    out = getattr(result, "result", None)
+    if out is None:
+        out = getattr(result, "stdout", "")
+    code = int(getattr(result, "exit_code", 0) or 0)
+    return str(out), code
 
 
 @phase("egress_proxy_wiring")
@@ -670,22 +687,17 @@ async def phase_egress_proxy_wiring(ctx: Context) -> PhaseResult:
     if not ctx.daytona_sandbox_id:
         return PhaseResult("egress_proxy_wiring", Verdict.SKIP,
                            detail="no sandbox allocated")
-    if _is_modal_provider():
-        return _modal_skip("egress_proxy_wiring")
     try:
-        from daytona import Daytona, DaytonaConfig
-        cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
-        d = Daytona(cfg)
-        sb = d.get(ctx.daytona_sandbox_id)
-        result = sb.process.exec("env | grep -E '^(HTTPS_PROXY|HTTP_PROXY|NO_PROXY)=' || echo NOT_SET")
-        out = str(getattr(result, "result", "") or getattr(result, "stdout", ""))
+        out, _ = await _sandbox_exec(
+            ctx, "env | grep -E '^(HTTPS_PROXY|HTTP_PROXY|NO_PROXY)=' || echo NOT_SET",
+        )
         if "NOT_SET" in out:
             return PhaseResult(
                 "egress_proxy_wiring", Verdict.SKIP,
                 detail=(
-                    "raw Daytona sandbox; spawner injection only fires when an "
-                    "EnvironmentVersion with egress.allowed_hosts is bound. To "
-                    "exercise this path, allocate via OmoiOS, not directly."
+                    "bare sandbox; spawner injection only fires when an "
+                    "EnvironmentVersion with egress.allowed_hosts is bound. "
+                    "To exercise this path, allocate via OmoiOS, not directly."
                 ),
                 evidence={"env_check": out[:400]})
         return PhaseResult("egress_proxy_wiring", Verdict.PASS,
@@ -703,31 +715,24 @@ async def phase_egress_allow_deny(ctx: Context) -> PhaseResult:
     """
     if not ctx.daytona_sandbox_id:
         return PhaseResult("egress_allow_deny", Verdict.SKIP, detail="no sandbox")
-    if _is_modal_provider():
-        return _modal_skip("egress_allow_deny")
 
     try:
-        from daytona import Daytona, DaytonaConfig
-        cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
-        d = Daytona(cfg)
-        sb = d.get(ctx.daytona_sandbox_id)
-
         # Probe: is HTTPS_PROXY set? If not, skip — nothing to verify.
-        probe = sb.process.exec("echo $HTTPS_PROXY")
-        proxy_val = str(getattr(probe, "result", "") or getattr(probe, "stdout", "")).strip()
+        proxy_val, _ = await _sandbox_exec(ctx, "echo $HTTPS_PROXY")
+        proxy_val = proxy_val.strip()
         if not proxy_val:
             return PhaseResult(
                 "egress_allow_deny", Verdict.SKIP,
                 detail="HTTPS_PROXY unset in sandbox; cannot verify allow/deny behavior")
 
-        allowed = sb.process.exec(
-            f"curl -s -o /dev/null -w '%{{http_code}}' https://{EGRESS_ALLOWED_HOST}"
+        a_code, _ = await _sandbox_exec(
+            ctx, f"curl -s -o /dev/null -w '%{{http_code}}' https://{EGRESS_ALLOWED_HOST}",
         )
-        blocked = sb.process.exec(
-            f"curl -s -o /dev/null -w '%{{http_code}}' https://{EGRESS_BLOCKED_HOST}"
+        b_code, _ = await _sandbox_exec(
+            ctx, f"curl -s -o /dev/null -w '%{{http_code}}' https://{EGRESS_BLOCKED_HOST}",
         )
-        a_code = str(getattr(allowed, "result", "") or getattr(allowed, "stdout", "")).strip()
-        b_code = str(getattr(blocked, "result", "") or getattr(blocked, "stdout", "")).strip()
+        a_code = a_code.strip()
+        b_code = b_code.strip()
 
         a_ok = a_code.startswith("2") or a_code.startswith("3")
         b_blocked = b_code == "451" or b_code == "000"  # 000 = connection closed
@@ -758,42 +763,34 @@ async def phase_opencode_auth_json(ctx: Context) -> PhaseResult:
     """
     if not ctx.daytona_sandbox_id:
         return PhaseResult("opencode_auth_json", Verdict.SKIP, detail="no sandbox")
-    if _is_modal_provider():
-        return _modal_skip("opencode_auth_json")
     try:
-        from daytona import Daytona, DaytonaConfig
-        cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
-        sb = Daytona(cfg).get(ctx.daytona_sandbox_id)
-
-        # Try both root and non-root home locations.
-        probe = sb.process.exec(
+        out, _ = await _sandbox_exec(
+            ctx,
             "for f in /root/.local/share/opencode/auth.json "
             "$HOME/.local/share/opencode/auth.json; do "
             "  if [ -f \"$f\" ]; then "
             "    echo FOUND:$f:$(stat -c '%a' \"$f\"):$(cat \"$f\" | head -c 500); "
             "    exit 0; "
             "  fi; "
-            "done; echo MISSING"
+            "done; echo MISSING",
         )
-        out = str(getattr(probe, "result", "") or getattr(probe, "stdout", "")).strip()
+        out = out.strip()
 
         if out.startswith("MISSING"):
             # Probe for the bootstrap script + data dir — if those are in
             # place, the sandbox is wired correctly; auth.json would have
             # landed had credential aliases been configured.
-            dir_probe = sb.process.exec(
+            dir_out, _ = await _sandbox_exec(
+                ctx,
                 "for d in /root/.local/share/opencode "
                 "$HOME/.local/share/opencode; do "
                 "  if [ -d \"$d\" ]; then "
                 "    echo DATA_DIR:$d:$(stat -c '%a' \"$d\"); "
                 "    exit 0; "
                 "  fi; "
-                "done; echo NO_DATA_DIR"
+                "done; echo NO_DATA_DIR",
             )
-            dir_out = str(
-                getattr(dir_probe, "result", "")
-                or getattr(dir_probe, "stdout", "")
-            ).strip()
+            dir_out = dir_out.strip()
             if dir_out.startswith("DATA_DIR:"):
                 return PhaseResult(
                     "opencode_auth_json", Verdict.PASS,
@@ -857,22 +854,17 @@ async def phase_opencode_config(ctx: Context) -> PhaseResult:
     """
     if not ctx.daytona_sandbox_id:
         return PhaseResult("opencode_config", Verdict.SKIP, detail="no sandbox")
-    if _is_modal_provider():
-        return _modal_skip("opencode_config")
     try:
-        from daytona import Daytona, DaytonaConfig
-        cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
-        sb = Daytona(cfg).get(ctx.daytona_sandbox_id)
-
-        probe = sb.process.exec(
+        out, _ = await _sandbox_exec(
+            ctx,
             "for f in /root/.config/opencode/opencode.json "
             "$HOME/.config/opencode/opencode.json "
             "/root/.config/opencode/oh-my-openagent.jsonc "
             "$HOME/.config/opencode/oh-my-openagent.jsonc; do "
             "  if [ -f \"$f\" ]; then echo \"FOUND:$f\"; fi; "
-            "done; echo DONE"
+            "done; echo DONE",
         )
-        out = str(getattr(probe, "result", "") or getattr(probe, "stdout", "")).strip()
+        out = out.strip()
         found = [line.split(":", 1)[1] for line in out.splitlines()
                  if line.startswith("FOUND:")]
         if not found:
@@ -1810,21 +1802,15 @@ async def phase_egress_denied_envelope(ctx: Context) -> PhaseResult:
     """Blocked egress from sandbox returns 451 + `code=egress_denied` envelope."""
     if not ctx.daytona_sandbox_id:
         return PhaseResult("egress_denied_envelope", Verdict.SKIP, detail="no sandbox")
-    if _is_modal_provider():
-        return _modal_skip("egress_denied_envelope")
+
     try:
-        from daytona import Daytona, DaytonaConfig
-    except ImportError as e:
+        proxy_val, _ = await _sandbox_exec(ctx, "echo $HTTPS_PROXY")
+    except Exception as e:
         return PhaseResult(
-            "egress_denied_envelope", Verdict.SKIP,
-            detail=f"daytona SDK not importable: {e}",
+            "egress_denied_envelope", Verdict.FAIL,
+            detail=f"proxy probe failed: {e}",
         )
-
-    cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
-    sb = Daytona(cfg).get(ctx.daytona_sandbox_id)
-
-    probe = sb.process.exec("echo $HTTPS_PROXY")
-    proxy_val = str(getattr(probe, "result", "") or getattr(probe, "stdout", "")).strip()
+    proxy_val = proxy_val.strip()
     if not proxy_val:
         return PhaseResult(
             "egress_denied_envelope", Verdict.SKIP,
@@ -1832,10 +1818,9 @@ async def phase_egress_denied_envelope(ctx: Context) -> PhaseResult:
         )
 
     # Fetch the body the proxy returns on block (curl -w to expose status code too).
-    result = sb.process.exec(
-        f"curl -s -w 'HTTP:%{{http_code}}' https://{EGRESS_BLOCKED_HOST}"
+    out, _ = await _sandbox_exec(
+        ctx, f"curl -s -w 'HTTP:%{{http_code}}' https://{EGRESS_BLOCKED_HOST}",
     )
-    out = str(getattr(result, "result", "") or getattr(result, "stdout", ""))
 
     # Extract HTTP status; body precedes the "HTTP:<code>" suffix.
     http_marker = out.rfind("HTTP:")

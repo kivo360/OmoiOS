@@ -1,24 +1,24 @@
 {
   "api_base_url": "https://api.omoios.dev",
-  "run_at": "2026-04-26T00:23:38Z",
+  "run_at": "2026-04-26T02:01:23Z",
   "summary": {
     "PASS": 23,
-    "FAIL": 0,
-    "GAP": 0,
-    "SKIP": 7
+    "FAIL": 1,
+    "GAP": 1,
+    "SKIP": 5
   },
   "phases": [
     {
       "name": "prereqs",
       "verdict": "PASS",
-      "duration_sec": 0.7,
+      "duration_sec": 0.4,
       "detail": "env + API reachable",
       "evidence": {}
     },
     {
       "name": "org_setup",
       "verdict": "PASS",
-      "duration_sec": 0.42,
+      "duration_sec": 0.33,
       "detail": "",
       "evidence": {
         "ws_a": "c75b19b9-e943-4fca-a602-bbc0e66be024",
@@ -28,10 +28,10 @@
     {
       "name": "credentials_crud",
       "verdict": "PASS",
-      "duration_sec": 0.94,
+      "duration_sec": 0.98,
       "detail": "",
       "evidence": {
-        "binding_id": "718245ca-06ee-4893-9269-aa0d9c00561c"
+        "binding_id": "b6d14383-9a2d-4f3b-bb88-dfd291b1c2f9"
       }
     },
     {
@@ -40,7 +40,7 @@
       "duration_sec": 1.13,
       "detail": "",
       "evidence": {
-        "env_id": "3bc743ce-6990-43c2-8c90-cd814e1d7dbb",
+        "env_id": "46d95bfc-4a25-4eb8-83ef-fb7c0a7f9558",
         "v1": 1,
         "v2": 2
       }
@@ -48,11 +48,11 @@
     {
       "name": "artifacts_roundtrip",
       "verdict": "PASS",
-      "duration_sec": 1.18,
+      "duration_sec": 1.23,
       "detail": "",
       "evidence": {
-        "artifact_id": "3f24cff8-6364-49ea-831a-541473bebc5a",
-        "sha256": "22a9868b73d4a233b5a779b1f460cf4a3d43ce11cb2fccc92695668331bbb53d"
+        "artifact_id": "3ad5538d-a5ee-41a7-aa6f-959091b03ed2",
+        "sha256": "02f2644cb7571d3ddfff502e2108dd8e3c77889c71aa65b422e68e873ad838bb"
       }
     },
     {
@@ -65,7 +65,7 @@
     {
       "name": "workspace_isolation",
       "verdict": "PASS",
-      "duration_sec": 0.76,
+      "duration_sec": 0.82,
       "detail": "",
       "evidence": {
         "binding_a_in_a": true,
@@ -75,10 +75,10 @@
     {
       "name": "sessions_alias",
       "verdict": "PASS",
-      "duration_sec": 1.0,
+      "duration_sec": 1.03,
       "detail": "",
       "evidence": {
-        "sessions_count": 36,
+        "sessions_count": 40,
         "tasks_status": 200,
         "bodies_match": false
       }
@@ -86,46 +86,51 @@
     {
       "name": "daytona_allocation",
       "verdict": "PASS",
-      "duration_sec": 4.53,
+      "duration_sec": 6.45,
       "detail": "",
       "evidence": {
         "provider": "modal",
-        "sandbox_id": "omoios-smoke-b6-8f9f5c",
+        "sandbox_id": "omoios-smoke-f3-ba04ad",
         "exec_output": "hello-from-modal\n200"
       }
     },
     {
       "name": "egress_proxy_wiring",
       "verdict": "SKIP",
-      "duration_sec": 0.0,
-      "detail": "modal provider: phase still uses Daytona-SDK probes; modal-mode equivalents are covered by scripts/modal_smoke.py",
-      "evidence": {}
+      "duration_sec": 1.16,
+      "detail": "bare sandbox; spawner injection only fires when an EnvironmentVersion with egress.allowed_hosts is bound. To exercise this path, allocate via OmoiOS, not directly.",
+      "evidence": {
+        "env_check": "NOT_SET\n"
+      }
     },
     {
       "name": "egress_allow_deny",
       "verdict": "SKIP",
-      "duration_sec": 0.0,
-      "detail": "modal provider: phase still uses Daytona-SDK probes; modal-mode equivalents are covered by scripts/modal_smoke.py",
+      "duration_sec": 1.06,
+      "detail": "HTTPS_PROXY unset in sandbox; cannot verify allow/deny behavior",
       "evidence": {}
     },
     {
       "name": "opencode_auth_json",
-      "verdict": "SKIP",
-      "duration_sec": 0.0,
-      "detail": "modal provider: phase still uses Daytona-SDK probes; modal-mode equivalents are covered by scripts/modal_smoke.py",
-      "evidence": {}
+      "verdict": "FAIL",
+      "duration_sec": 2.15,
+      "detail": "bootstrap did not create the OpenCode data dir (~/.local/share/opencode). Snapshot entrypoint may be misconfigured.",
+      "evidence": {
+        "probe": "MISSING",
+        "dir_probe": "NO_DATA_DIR"
+      }
     },
     {
       "name": "opencode_config",
-      "verdict": "SKIP",
-      "duration_sec": 0.0,
-      "detail": "modal provider: phase still uses Daytona-SDK probes; modal-mode equivalents are covered by scripts/modal_smoke.py",
+      "verdict": "GAP",
+      "duration_sec": 0.99,
+      "detail": "opencode.json / oh-my-openagent.jsonc not present. Bootstrap must render these from env.credentials + env.tools so OmO knows which providers + models + fallback chains to use. Without these, OmO has no provider surface and cannot route tasks.",
       "evidence": {}
     },
     {
       "name": "spec_broker_flow",
       "verdict": "PASS",
-      "duration_sec": 0.39,
+      "duration_sec": 0.42,
       "detail": "",
       "evidence": {
         "http_code": 401,
@@ -135,14 +140,14 @@
     {
       "name": "spec_event_envelope",
       "verdict": "SKIP",
-      "duration_sec": 0.44,
+      "duration_sec": 0.36,
       "detail": "no tasks to inspect",
       "evidence": {}
     },
     {
       "name": "sdk_prereqs",
       "verdict": "PASS",
-      "duration_sec": 0.4,
+      "duration_sec": 0.38,
       "detail": "",
       "evidence": {
         "workspace_id": "c75b19b9-e943-4fca-a602-bbc0e66be024",
@@ -152,11 +157,11 @@
     {
       "name": "session_create",
       "verdict": "PASS",
-      "duration_sec": 1.23,
+      "duration_sec": 1.14,
       "detail": "",
       "evidence": {
-        "session_id": "0431f112-5d21-49ae-8f6f-c342350d3602",
-        "idem_key": "smoke-4d604d7c-efde-4034-9778-99931d89362d",
+        "session_id": "20c5d5ef-a960-4bb3-a5e4-a20ad5f8b352",
+        "idem_key": "smoke-aa671c76-b3b0-45bc-9b8f-2462d1fdaf32",
         "ticket_id": null
       }
     },
@@ -166,7 +171,7 @@
       "duration_sec": 0.56,
       "detail": "",
       "evidence": {
-        "session_id": "a5791705-ca97-4372-a370-06b84f2612ce",
+        "session_id": "ae3c8161-5ba6-45fb-bf6c-944172f6f4a8",
         "workspace_id": "ecce13c3-9048-4151-b949-7a9bc6efac4b",
         "github_repo": "octocat/hello-world"
       }
@@ -174,10 +179,10 @@
     {
       "name": "session_get",
       "verdict": "PASS",
-      "duration_sec": 0.52,
+      "duration_sec": 0.49,
       "detail": "",
       "evidence": {
-        "id": "0431f112-5d21-49ae-8f6f-c342350d3602",
+        "id": "20c5d5ef-a960-4bb3-a5e4-a20ad5f8b352",
         "status": "pending",
         "has_session_id_alias": true
       }
@@ -198,7 +203,7 @@
     {
       "name": "session_events_resume",
       "verdict": "PASS",
-      "duration_sec": 1.23,
+      "duration_sec": 1.25,
       "detail": "",
       "evidence": {
         "resume_from": 1,
@@ -208,21 +213,21 @@
     {
       "name": "session_reply",
       "verdict": "PASS",
-      "duration_sec": 10.68,
+      "duration_sec": 10.51,
       "detail": "",
       "evidence": {
-        "text": "hello-from-smoke-6025d17a",
-        "seq": 3
+        "text": "hello-from-smoke-8f023d47",
+        "seq": 4
       }
     },
     {
       "name": "session_fork",
       "verdict": "PASS",
-      "duration_sec": 1.0,
+      "duration_sec": 1.09,
       "detail": "",
       "evidence": {
-        "parent_id": "0431f112-5d21-49ae-8f6f-c342350d3602",
-        "child_id": "57dc7379-80be-4312-bcb6-d9abf93c7d04",
+        "parent_id": "20c5d5ef-a960-4bb3-a5e4-a20ad5f8b352",
+        "child_id": "2aa77b9f-9cd8-4940-a0df-4baee4904ec0",
         "from_seq": 2,
         "child_seqs": [
           1,
@@ -233,19 +238,19 @@
     {
       "name": "session_share",
       "verdict": "PASS",
-      "duration_sec": 2.16,
+      "duration_sec": 2.12,
       "detail": "",
       "evidence": {
         "acl_keys": [
           "grants"
         ],
-        "target_user": "44e0ee4c-3c70-4ab9-a9bc-93afe77dacf6"
+        "target_user": "9bb95343-3a50-46d7-ad0f-1cc12c194938"
       }
     },
     {
       "name": "session_ws_presence",
       "verdict": "PASS",
-      "duration_sec": 2.07,
+      "duration_sec": 1.95,
       "detail": "",
       "evidence": {
         "b_received": {
@@ -259,17 +264,17 @@
     {
       "name": "session_ws_message",
       "verdict": "PASS",
-      "duration_sec": 2.42,
+      "duration_sec": 2.34,
       "detail": "",
       "evidence": {
-        "text": "ws-smoke-3a540c3b",
+        "text": "ws-smoke-0689a936",
         "seq": 6
       }
     },
     {
       "name": "session_ws_cursor",
       "verdict": "PASS",
-      "duration_sec": 5.79,
+      "duration_sec": 5.44,
       "detail": "",
       "evidence": {
         "broadcast_seen": {
@@ -286,7 +291,7 @@
     {
       "name": "error_envelope_shape",
       "verdict": "PASS",
-      "duration_sec": 0.55,
+      "duration_sec": 0.61,
       "detail": "",
       "evidence": {
         "status": 404,
@@ -294,25 +299,25 @@
           "code": "not_found",
           "type": "not_found",
           "message": "Task not found",
-          "request_id": "bafcd1b2-6634-41c1-b460-1399c251a3dd"
+          "request_id": "b984a083-a01b-46ee-b653-c85e1e4777ba"
         }
       }
     },
     {
       "name": "idempotency_conflict",
       "verdict": "PASS",
-      "duration_sec": 0.93,
+      "duration_sec": 0.86,
       "detail": "",
       "evidence": {
-        "first_id": "f26baf9d-53ea-4470-b82e-bf2903ffc055",
+        "first_id": "26ba073e-de7f-43e7-af30-3cbf237cafa4",
         "conflict_status": 409
       }
     },
     {
       "name": "egress_denied_envelope",
       "verdict": "SKIP",
-      "duration_sec": 0.0,
-      "detail": "modal provider: phase still uses Daytona-SDK probes; modal-mode equivalents are covered by scripts/modal_smoke.py",
+      "duration_sec": 1.17,
+      "detail": "HTTPS_PROXY unset in sandbox; can't test egress envelope",
       "evidence": {}
     }
   ],
@@ -323,6 +328,6 @@
     "del sdk_session: 404",
     "del sdk_fork: 404",
     "sdk_client: closed",
-    "modal sandbox omoios-smoke-b6-8f9f5c: terminated"
+    "modal sandbox omoios-smoke-f3-ba04ad: terminated"
   ]
 }

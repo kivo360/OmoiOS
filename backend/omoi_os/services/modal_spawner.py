@@ -246,9 +246,17 @@ class ModalSpawnerService:
         image_ref = (env_version and getattr(env_version, "image", None)) or (
             self.sandbox_image
         )
+        # Bake the OpenCode bootstrap dirs into the image so they're present
+        # the moment the sandbox becomes ready — mirrors the pre-built dirs
+        # in Daytona's `omoios-omo-vnc` snapshot. Modal caches built images,
+        # so this only adds latency on the first cold build per (image_ref,
+        # commands) tuple.
         # Don't pass `add_python=` — our default base image already ships
         # Python, and Modal's symlink injection collides with /usr/local/bin/python.
-        image = modal.Image.from_registry(image_ref)
+        image = modal.Image.from_registry(image_ref).run_commands(
+            "mkdir -p /root/.local/share/opencode /root/.config/opencode",
+            "chmod 700 /root/.local/share/opencode",
+        )
 
         # Volumes: opt-in via `env_version.persistent_volume` flag, same
         # contract as `daytona_spawner.py` line ~1567.
