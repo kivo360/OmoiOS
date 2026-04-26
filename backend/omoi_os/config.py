@@ -571,10 +571,13 @@ class SandboxSettings(OmoiBaseSettings):
         env_prefix="SANDBOX_",
         extra="ignore",
     )
-    provider: str = "daytona"  # "daytona" | "local"
+    provider: str = "daytona"  # "daytona" | "modal" | "local"
     local_image: str = "nikolaik/python-nodejs:python3.12-nodejs22"
     local_mount_workspace: Optional[str] = None
     local_api_base_url: str = "http://host.docker.internal:18000"
+    # Modal-specific. Tokens come from MODAL_TOKEN_ID / MODAL_TOKEN_SECRET
+    # env vars (read by the modal SDK directly) — no fields needed here.
+    modal_app_name: str = "omoi-os-sandboxes"
 
 
 class DiagnosticSettings(OmoiBaseSettings):

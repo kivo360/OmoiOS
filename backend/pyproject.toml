@@ -44,6 +44,7 @@ dependencies = [
     "openhands-workspace>=1.1.0",
     "openhands-agent-server>=1.1.0",
     "daytona-sdk>=0.119.0",
+    "modal>=0.69.0",
     "structlog>=24.0.0",
     "rich>=13.0.0",
     "claude-agent-sdk>=0.1.17",

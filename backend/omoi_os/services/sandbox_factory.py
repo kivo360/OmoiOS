@@ -19,11 +19,17 @@ def create_sandbox_provider(db=None, event_bus=None, **kwargs) -> SandboxProvide
             mount_workspace=settings.sandbox.local_mount_workspace,
             api_base_url=settings.sandbox.local_api_base_url,
         )
-    else:
-        if db is None or event_bus is None:
-            raise ValueError("DaytonaProvider requires db and event_bus")
-        from omoi_os.services.daytona_spawner import get_daytona_spawner
-        from omoi_os.services.daytona_provider import DaytonaProvider
+    if provider_type == "modal":
+        from omoi_os.services.modal_provider import ModalProvider
+        from omoi_os.services.modal_spawner import get_modal_spawner
 
-        spawner = get_daytona_spawner(db=db, event_bus=event_bus)
-        return DaytonaProvider(spawner)
+        spawner = get_modal_spawner(db=db, event_bus=event_bus)
+        return ModalProvider(spawner)
+    # Default: Daytona
+    if db is None or event_bus is None:
+        raise ValueError("DaytonaProvider requires db and event_bus")
+    from omoi_os.services.daytona_spawner import get_daytona_spawner
+    from omoi_os.services.daytona_provider import DaytonaProvider
+
+    spawner = get_daytona_spawner(db=db, event_bus=event_bus)
+    return DaytonaProvider(spawner)
