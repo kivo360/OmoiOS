@@ -24,11 +24,12 @@ from omoios.cli._ui import CliError
 def invoke(*tokens: str) -> int:
     """Run the cyclopts app with a token list and return the exit code.
 
-    Returns 0 on clean completion, 1 on `CliError`, propagates SystemExit
-    for everything else (e.g. cyclopts' own validation errors).
+    Goes through `app.meta` to exercise the launcher (matches the real
+    `main()` entry point). `--no-tips` is appended so the random tip
+    line never appears in stdout/stderr during tests.
     """
     try:
-        app(list(tokens))
+        app.meta(list(tokens) + ["--no-tips"])
         return 0
     except CliError:
         return 1
