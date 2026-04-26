@@ -29,6 +29,7 @@ from omoios.cli._ui import CliError, die, err_console
 from omoios.cli.auth import auth_app
 from omoios.cli.config import config_app
 from omoios.cli.providers import providers_app
+from omoios.cli.sessions import sessions_app
 from omoios.cli.signup import signup
 from omoios.cli.whoami import whoami
 
@@ -44,6 +45,7 @@ app = App(
 )
 
 app.command(providers_app)
+app.command(sessions_app)
 app.command(auth_app)
 app.command(config_app)
 app.command(signup)
@@ -66,6 +68,10 @@ TIPS: tuple[str, ...] = (
     "Run `omoios whoami` to verify the local API key is still valid.",
     "Inspect or wipe local creds with `omoios config show` / "
     "`omoios config clear`.",
+    "`omoios sessions create \"<prompt>\" --watch` opens a chat and streams "
+    "events live via SSE.",
+    "Stuck waiting? `omoios sessions list --status running` shows what's "
+    "still in-flight.",
     "GitHub device flow needs the production OAuth App. Override with "
     "$OMOIOS_GITHUB_CLIENT_ID if you have your own.",
 )
