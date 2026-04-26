@@ -273,9 +273,14 @@ class Event(BaseModel):
 
 
 class Grant(BaseModel):
-    """One ACL grant for POST /sessions/{id}/share (spec §07)."""
+    """One ACL grant for POST /sessions/{id}/share (spec §07).
 
-    user_id: str
+    Either `user_id` or `email` must be supplied. The backend resolves
+    emails internally so the CLI can pass whatever the user types.
+    """
+
+    user_id: Optional[str] = None
+    email: Optional[str] = None
     role: str = Field(..., pattern="^(owner|editor|viewer)$")
 
 

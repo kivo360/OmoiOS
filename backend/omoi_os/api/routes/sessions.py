@@ -1395,9 +1395,15 @@ async def session_fork(
 
 
 class Grant(BaseModel):
-    """One ACL grant in a share request."""
+    """One ACL grant in a share request.
 
-    user_id: UUID
+    Either `user_id` or `email` must be supplied. When `email` is given the
+    handler resolves it to the user's UUID before writing the ACL — keeps the
+    privacy surface narrow (no generic email-lookup route exposed).
+    """
+
+    user_id: Optional[UUID] = None
+    email: Optional[str] = None
     role: str = Field(..., pattern="^(owner|editor|viewer)$")
 
 
@@ -1430,45 +1436,110 @@ async def session_share(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
             )
 
-        # Validate target users exist BEFORE touching session_acls. Without
-        # this check the FK constraint fires inside the loop and we end up
-        # with a 500 (integrity error) on what should be a clean 422.
-        missing: list[str] = []
+        # Resolve {user_id | email} → concrete UUIDs up front so the FK
+        # constraint can't fire mid-loop. Both forms surface the same 422
+        # shape so the CLI can render one uniform error.
+        resolved: list[tuple[UUID, str]] = []
+        missing_ids: list[str] = []
+        missing_emails: list[str] = []
         for grant in body.grants:
-            target = session.get(User, grant.user_id)
+            target_id: Optional[UUID] = grant.user_id
+            if target_id is None and grant.email:
+                target_user = (
+                    session.query(User).filter(User.email == grant.email).first()
+                )
+                if target_user is None:
+                    missing_emails.append(grant.email)
+                    continue
+                target_id = target_user.id
+            if target_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Each grant must include either user_id or email",
+                )
+            target = session.get(User, target_id)
             if target is None:
-                missing.append(str(grant.user_id))
-        if missing:
+                missing_ids.append(str(target_id))
+                continue
+            resolved.append((target_id, grant.role))
+
+        if missing_ids or missing_emails:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
                     "message": "One or more target users do not exist",
-                    "missing_user_ids": missing,
+                    "missing_user_ids": missing_ids,
+                    "missing_emails": missing_emails,
                 },
             )
 
-        for grant in body.grants:
+        for target_id, role in resolved:
             existing = session.execute(
                 select(SessionACL).where(
                     SessionACL.task_id == session_id,
-                    SessionACL.user_id == grant.user_id,
+                    SessionACL.user_id == target_id,
                 )
             ).scalar_one_or_none()
 
             if existing:
-                existing.role = grant.role
+                existing.role = role
             else:
                 session.add(
                     SessionACL(
                         task_id=session_id,
-                        user_id=grant.user_id,
-                        role=grant.role,
+                        user_id=target_id,
+                        role=role,
                     )
                 )
 
         session.commit()
 
     return {"session_id": session_id, "granted": len(body.grants)}
+
+
+@router.delete(
+    "/{session_id}/share/{user_or_email}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def session_unshare(
+    session_id: str,
+    user_or_email: str,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+) -> Response:
+    """Revoke a participant's access to a session.
+
+    Accepts either a user UUID or an email in `user_or_email`. Idempotent:
+    revoking access for a user who already has no grant returns 204.
+    """
+    check_feature_flag()
+    await verify_task_access(session_id, current_user, db)
+
+    target_id: Optional[UUID] = None
+    try:
+        target_id = UUID(user_or_email)
+    except (TypeError, ValueError):
+        target_id = None
+
+    with db.get_session() as session:
+        if target_id is None:
+            target_user = (
+                session.query(User).filter(User.email == user_or_email).first()
+            )
+            if target_user is None:
+                # Idempotent: nothing to revoke.
+                return Response(status_code=status.HTTP_204_NO_CONTENT)
+            target_id = target_user.id
+
+        session.execute(
+            sa.delete(SessionACL).where(
+                SessionACL.task_id == session_id,
+                SessionACL.user_id == target_id,
+            )
+        )
+        session.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # WebSocket endpoint is defined in session_channel.py and registered via the

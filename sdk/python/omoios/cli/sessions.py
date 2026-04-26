@@ -282,6 +282,158 @@ def cancel_cmd(
     ok(f"canceled [bold]{session_id}[/bold]")
 
 
+# ─── omoios sessions events (drain history → exit) ──────────────────────────
+
+
+@sessions_app.command(name="events")
+def events_cmd(
+    session_id: Annotated[str, Parameter(help="Session ID.")],
+    json_output: Annotated[
+        bool,
+        Parameter(
+            name="--json",
+            help="Emit envelopes as a JSON array instead of a Rich table.",
+        ),
+    ] = False,
+    api_base_url: Annotated[
+        Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
+    ] = None,
+    api_key: Annotated[
+        Optional[str], Parameter(name="--api-key", env_var="OMOIOS_PLATFORM_API_KEY")
+    ] = None,
+) -> None:
+    """Drain a session's event history once and exit (separate from `watch`).
+
+    Use this to find seq numbers for `omoios sessions fork --from-seq N`.
+    Unlike `watch`, this stops at the end of the replay — it doesn't
+    keep the SSE connection open for live events.
+    """
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
+    events = _run(_drain_events(cfg.api_base_url, cfg.api_key, session_id))
+
+    if json_output:
+        console.print_json(_json.dumps([_event_to_dict(e) for e in events]))
+        return
+
+    if not events:
+        console.print("(no events)")
+        return
+
+    table = Table(title=f"events · session {session_id}")
+    table.add_column("SEQ", style="cyan", no_wrap=True)
+    table.add_column("TYPE", style="white")
+    table.add_column("ACTOR", style="dim")
+    table.add_column("DATA", style="dim")
+    for e in events:
+        data = _json.dumps(e.data or {}, separators=(",", ":"))
+        if len(data) > 60:
+            data = data[:57] + "..."
+        table.add_row(
+            str(getattr(e, "seq", "?")),
+            getattr(e, "type", None) or e.event_type,
+            (getattr(e, "actor", None) or "")[:24],
+            data,
+        )
+    console.print(table)
+
+
+# ─── omoios sessions fork ────────────────────────────────────────────────────
+
+
+@sessions_app.command(name="fork")
+def fork_cmd(
+    session_id: Annotated[str, Parameter(help="Source session ID to branch from.")],
+    from_seq: Annotated[
+        int,
+        Parameter(
+            name=["--from-seq"],
+            help="Event seq to branch at (use `omoios sessions events` to find it).",
+        ),
+    ],
+    prompt: Annotated[
+        str, Parameter(name="--prompt", help="Opening prompt for the new branch.")
+    ],
+    watch: Annotated[
+        bool,
+        Parameter(
+            name="--watch",
+            help="After forking, stream the new session's events until terminal.",
+        ),
+    ] = False,
+    api_base_url: Annotated[
+        Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
+    ] = None,
+    api_key: Annotated[
+        Optional[str], Parameter(name="--api-key", env_var="OMOIOS_PLATFORM_API_KEY")
+    ] = None,
+) -> None:
+    """Branch a session at a specific event seq with a new prompt."""
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
+    forked = _run(
+        _fork(cfg.api_base_url, cfg.api_key, session_id, from_seq, prompt)
+    )
+    ok(f"forked → [bold]{forked.id}[/bold] (from seq {from_seq})")
+    if watch:
+        _run(_watch_loop(cfg.api_base_url, cfg.api_key, str(forked.id)))
+
+
+# ─── omoios sessions share / unshare ─────────────────────────────────────────
+
+
+@sessions_app.command(name="share")
+def share_cmd(
+    session_id: Annotated[str, Parameter(help="Session ID.")],
+    user_or_email: Annotated[
+        str,
+        Parameter(help="UUID or email of the user to grant access to."),
+    ],
+    role: Annotated[
+        str,
+        Parameter(
+            name="--role",
+            help="ACL role. Backend accepts: viewer, editor, owner.",
+        ),
+    ] = "editor",
+    api_base_url: Annotated[
+        Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
+    ] = None,
+    api_key: Annotated[
+        Optional[str], Parameter(name="--api-key", env_var="OMOIOS_PLATFORM_API_KEY")
+    ] = None,
+) -> None:
+    """Grant a viewer/editor/owner role on a session.
+
+    Accepts either a UUID or an email; the backend resolves emails
+    server-side so the CLI can pass whatever the user types.
+    """
+    if role not in ("viewer", "editor", "owner"):
+        raise CliError(
+            f"--role must be one of viewer/editor/owner, got {role!r}"
+        )
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
+    _run(_share(cfg.api_base_url, cfg.api_key, session_id, user_or_email, role))
+    ok(f"granted [cyan]{role}[/cyan] to [bold]{user_or_email}[/bold]")
+
+
+@sessions_app.command(name="unshare")
+def unshare_cmd(
+    session_id: Annotated[str, Parameter(help="Session ID.")],
+    user_or_email: Annotated[
+        str, Parameter(help="UUID or email of the user to revoke access from.")
+    ],
+    api_base_url: Annotated[
+        Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
+    ] = None,
+    api_key: Annotated[
+        Optional[str], Parameter(name="--api-key", env_var="OMOIOS_PLATFORM_API_KEY")
+    ] = None,
+) -> None:
+    """Revoke a participant's access. Idempotent."""
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
+    _run(_unshare(cfg.api_base_url, cfg.api_key, session_id, user_or_email))
+    ok(f"revoked access for [bold]{user_or_email}[/bold]")
+
+
 # ─── omoios sessions list / get ──────────────────────────────────────────────
 
 
@@ -403,6 +555,68 @@ async def _cancel(api_base_url, api_key, session_id):
         base_url=api_base_url, api_key=api_key, timeout=30.0
     ) as client:
         await client.sessions.cancel(session_id)
+
+
+async def _drain_events(api_base_url, api_key, session_id):
+    """Drain the SSE stream once, collect every event into a list, return."""
+    from omoios import AsyncOmoiOSClient
+
+    out = []
+    async with AsyncOmoiOSClient(
+        base_url=api_base_url, api_key=api_key, timeout=None
+    ) as client:
+        async for evt in client.sessions.events(session_id):
+            out.append(evt)
+            etype = getattr(evt, "type", None) or evt.event_type
+            if etype in ("session.succeeded", "session.failed", "session.canceled"):
+                # Stop draining at the first terminal envelope so the iterator
+                # exits cleanly even when Redis would keep us subscribed.
+                return out
+    return out
+
+
+async def _fork(api_base_url, api_key, session_id, from_seq, prompt):
+    from omoios import AsyncOmoiOSClient
+
+    async with AsyncOmoiOSClient(
+        base_url=api_base_url, api_key=api_key, timeout=30.0
+    ) as client:
+        return await client.sessions.fork(session_id, from_seq, prompt)
+
+
+async def _share(api_base_url, api_key, session_id, user_or_email, role):
+    from omoios import AsyncOmoiOSClient
+    from omoios.types import Grant
+
+    grant = (
+        Grant(email=user_or_email, role=role)
+        if "@" in user_or_email
+        else Grant(user_id=user_or_email, role=role)
+    )
+    async with AsyncOmoiOSClient(
+        base_url=api_base_url, api_key=api_key, timeout=30.0
+    ) as client:
+        await client.sessions.share(session_id, [grant])
+
+
+async def _unshare(api_base_url, api_key, session_id, user_or_email):
+    from omoios import AsyncOmoiOSClient
+
+    async with AsyncOmoiOSClient(
+        base_url=api_base_url, api_key=api_key, timeout=30.0
+    ) as client:
+        await client.sessions.unshare(session_id, user_or_email)
+
+
+def _event_to_dict(evt) -> dict:
+    return {
+        "seq": getattr(evt, "seq", None),
+        "type": getattr(evt, "type", None) or getattr(evt, "event_type", None),
+        "session_id": getattr(evt, "session_id", None),
+        "actor": getattr(evt, "actor", None),
+        "timestamp": str(getattr(evt, "timestamp", "") or "") or None,
+        "data": getattr(evt, "data", None) or {},
+    }
 
 
 async def _watch_loop(

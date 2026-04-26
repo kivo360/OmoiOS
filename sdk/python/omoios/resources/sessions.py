@@ -206,19 +206,41 @@ class SessionsResource(BaseResource):
         *,
         cancel_scope: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        """Grant ACL roles on a session (spec §07)."""
-        body = {
-            "grants": [
-                {"user_id": str(g.user_id), "role": g.role} for g in grants
-            ]
-        }
+        """Grant ACL roles on a session (spec §07).
+
+        Each grant identifies its target by `user_id` or `email`. The
+        backend resolves emails internally.
+        """
+
+        def _serialize(g: Grant) -> Dict[str, Any]:
+            payload: Dict[str, Any] = {"role": g.role}
+            if g.user_id is not None:
+                payload["user_id"] = str(g.user_id)
+            if g.email is not None:
+                payload["email"] = g.email
+            return payload
+
         response = await self._client._request(
             "POST",
             f"/api/v1/sessions/{session_id}/share",
-            json=body,
+            json={"grants": [_serialize(g) for g in grants]},
             cancel_scope=cancel_scope,
         )
         return response.json()
+
+    async def unshare(
+        self,
+        session_id: str,
+        user_or_email: str,
+        *,
+        cancel_scope: Optional[Any] = None,
+    ) -> None:
+        """Revoke a participant's grant. Idempotent — no error if absent."""
+        await self._client._request(
+            "DELETE",
+            f"/api/v1/sessions/{session_id}/share/{user_or_email}",
+            cancel_scope=cancel_scope,
+        )
 
     async def artifacts(
         self,
