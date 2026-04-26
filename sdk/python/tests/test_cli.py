@@ -37,19 +37,133 @@ class TestRootHelp:
             assert action in result.output
 
 
-# ─── stubs raise a clean error, not a crash ──────────────────────────────────
+# ─── auth github (device-code flow, HTTP mocked) ─────────────────────────────
 
 
-class TestStubs:
-    def test_auth_github_is_a_clean_error(self, runner: CliRunner) -> None:
-        result = runner.invoke(cli, ["auth", "github"])
-        assert result.exit_code == 1
-        assert "not implemented yet" in result.output
+class TestAuthGitHub:
+    def test_device_flow_writes_token_to_config(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
 
-    def test_signup_is_a_clean_error(self, runner: CliRunner) -> None:
-        result = runner.invoke(cli, ["signup"])
-        assert result.exit_code == 1
-        assert "not implemented yet" in result.output
+        # First poll returns "authorization_pending", second returns the token.
+        device_resp = type(
+            "R", (), {
+                "status_code": 200,
+                "content": b"{}",
+                "json": lambda self: {
+                    "device_code": "DEV",
+                    "user_code": "ABCD-1234",
+                    "verification_uri": "https://github.com/login/device",
+                    "interval": 0,
+                    "expires_in": 60,
+                },
+            },
+        )()
+        token_resp_pending = type(
+            "R", (), {
+                "content": b"{}",
+                "json": lambda self: {"error": "authorization_pending"},
+            },
+        )()
+        token_resp_ok = type(
+            "R", (), {
+                "content": b"{}",
+                "json": lambda self: {
+                    "access_token": "ghs_test_token",
+                    "scope": "repo,read:user",
+                },
+            },
+        )()
+
+        calls = {"n": 0}
+
+        def fake_post(self, url, **kwargs):
+            if "device/code" in url:
+                return device_resp
+            calls["n"] += 1
+            return token_resp_pending if calls["n"] == 1 else token_resp_ok
+
+        monkeypatch.setattr(
+            "httpx.Client.post", fake_post, raising=True
+        )
+        # Don't actually open a browser during tests.
+        monkeypatch.setattr("webbrowser.open", lambda *_a, **_kw: None)
+
+        result = runner.invoke(cli, ["auth", "github", "--no-browser"])
+        assert result.exit_code == 0, result.output
+        assert "ABCD-1234" in result.output
+        assert "GitHub token saved" in result.output
+
+        import json as _json
+
+        cfg = _json.loads(
+            (tmp_path / "omoios" / "config.json").read_text()
+        )
+        assert cfg["github_token"] == "ghs_test_token"
+
+
+# ─── signup (HTTP mocked) ────────────────────────────────────────────────────
+
+
+class TestSignup:
+    def test_signup_registers_logs_in_and_writes_config(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        monkeypatch.setenv("OMOIOS_API_BASE_URL", "https://api.test")
+
+        def make_resp(status, body):
+            return type(
+                "R", (), {
+                    "status_code": status,
+                    "text": "",
+                    "content": b"{}",
+                    "json": lambda self, _b=body: _b,
+                },
+            )()
+
+        def fake_post(self, url, **kwargs):
+            if url.endswith("/auth/register"):
+                return make_resp(201, {"id": "user-1"})
+            if url.endswith("/auth/login"):
+                return make_resp(200, {"access_token": "jwt-abc"})
+            if url.endswith("/organizations"):
+                return make_resp(201, {"id": "org-1"})
+            if url.endswith("/auth/api-keys"):
+                return make_resp(
+                    201, {"key": "omk_test", "user_id": "user-1"}
+                )
+            raise AssertionError(f"unexpected POST to {url}")
+
+        def fake_get(self, url, **kwargs):
+            if url.endswith("/organizations"):
+                return make_resp(200, [])
+            raise AssertionError(f"unexpected GET to {url}")
+
+        monkeypatch.setattr("httpx.Client.post", fake_post, raising=True)
+        monkeypatch.setattr("httpx.Client.get", fake_get, raising=True)
+
+        result = runner.invoke(
+            cli,
+            [
+                "signup",
+                "--email", "new@example.com",
+                "--password", "Pa55word!",
+                "--full-name", "New User",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "registered new@example.com" in result.output
+        assert "minted api key" in result.output
+
+        import json as _json
+        cfg = _json.loads(
+            (tmp_path / "omoios" / "config.json").read_text()
+        )
+        assert cfg["api_key"] == "omk_test"  # pragma: allowlist secret
+        assert cfg["api_base_url"] == "https://api.test"
+        assert cfg["user_id"] == "user-1"
 
 
 # ─── providers list — env-var auth + JSON path ───────────────────────────────

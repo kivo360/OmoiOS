@@ -32,6 +32,7 @@ class CliConfig:
     api_key: str
     workspace_id: Optional[str] = None
     user_id: Optional[str] = None
+    github_token: Optional[str] = None
 
 
 def config_path() -> Path:
@@ -92,7 +93,27 @@ def resolve_config(
         api_key=key,
         workspace_id=file_data.get("workspace_id"),
         user_id=file_data.get("user_id"),
+        github_token=file_data.get("github_token"),
     )
+
+
+def update_config(**fields) -> Path:
+    """Merge `fields` into the existing config file (creating it if absent).
+
+    Useful for partial writes — e.g. `omoios auth github` setting only
+    `github_token` without needing the caller to know the rest of the
+    config. Only non-None values are written.
+    """
+    path = config_path()
+    existing = _load_file(path)
+    existing.update({k: v for k, v in fields.items() if v is not None})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(existing, indent=2))
+    try:
+        os.chmod(path, 0o600)  # noqa: PTH101
+    except OSError:
+        pass
+    return path
 
 
 def write_config(cfg: CliConfig) -> Path:
@@ -111,6 +132,8 @@ def write_config(cfg: CliConfig) -> Path:
         payload["workspace_id"] = cfg.workspace_id
     if cfg.user_id:
         payload["user_id"] = cfg.user_id
+    if cfg.github_token:
+        payload["github_token"] = cfg.github_token
     path.write_text(json.dumps(payload, indent=2))
     try:
         os.chmod(path, 0o600)  # noqa: PTH101 — direct os call is intentional
