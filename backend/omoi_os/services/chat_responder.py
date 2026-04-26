@@ -199,11 +199,36 @@ async def respond_to_session(
             session_id=session_id,
             reply_chars=len(response_text),
         )
+
+        # 5. Mark the task as `completed` so the session reaches a
+        # terminal state. For chat-mode SDK-direct sessions, the agent
+        # reply IS the work — there's no follow-on sandbox runtime to
+        # wait for. The task_queue maps `completed` → `session.succeeded`
+        # envelope automatically (see task_queue.update_task_status).
+        # When a real sandboxed-agent path is wired (e.g. Modal), this
+        # branch should be skipped for sessions that have an env_version
+        # with sandbox-bound credentials — the sandbox driver will
+        # complete the task itself.
+        try:
+            from omoi_os.services.task_queue import TaskQueueService
+
+            queue = TaskQueueService(db=db)
+            queue.update_task_status(session_id, "completed")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "chat responder could not mark session completed",
+                session_id=session_id,
+                error=str(exc),
+            )
     except Exception as exc:  # noqa: BLE001 — responder is best-effort
+        import traceback
+
         logger.warning(
             "chat responder failed",
             session_id=session_id,
-            error=str(exc),
+            error=repr(exc),
+            error_type=type(exc).__name__,
+            traceback=traceback.format_exc(),
         )
 
 
@@ -240,7 +265,7 @@ def _render_history(messages: list[dict[str, str]]) -> dict[str, str]:
 
 
 async def _call_chat_completion(
-    *, system_prompt: str, user_prompt: str, timeout: float = 30.0
+    *, system_prompt: str, user_prompt: str, timeout: float = 120.0
 ) -> str:
     """Call an OpenAI-compatible chat completions endpoint.
 

@@ -1233,3 +1233,100 @@ check-version:
 # Sync VERSION file to all package manifests
 sync-version:
     python3 scripts/sync-version.py
+
+# ============================================================================
+# Poof / proof-of-life — local API + prod DB, Fireworks-only
+# Cheatsheet: docs/poof-cheatsheet.md
+# ============================================================================
+
+# Alias — `just poof` opens the viewer in a new Terminal window.
+alias poof := poof-watch
+
+# Open the poof tmux session in a NEW Terminal window with a banner +
+# safe attach. Auto-starts the session if it's not already running.
+poof-watch:
+    @./scripts/poof_watch.sh
+
+# Boot the poof tmux session (idempotent — safe to call repeatedly).
+poof-start:
+    @./scripts/poof_tmux.sh start
+
+# Attach in the CURRENT terminal (use `Ctrl-B d` to detach).
+poof-attach:
+    @./scripts/poof_watch.sh --inline
+
+# Show session windows + API health without attaching.
+poof-status:
+    @./scripts/poof_tmux.sh status
+
+# Tear down the session AND uvicorn.
+poof-kill:
+    @./scripts/poof_tmux.sh kill
+
+# Quick health probe.
+poof-health:
+    @curl -s -o /dev/null -w "api=%{http_code} time=%{time_total}\n" --max-time 5 http://localhost:18000/health
+
+# Tail the uvicorn log (Ctrl-C to exit).
+poof-logs:
+    @tail -F /tmp/uvicorn-prod.log
+
+# Snapshot the last N lines of any window. Defaults to the poof window.
+# Usage:
+#   just poof-snap            # poof:1, last 200 lines
+#   just poof-snap api 100    # poof:0 (api), last 100 lines
+poof-snap window="poof" lines="200":
+    @echo "=== snapshot of poof:{{window}} ({{lines}} lines) ==="
+    @tmux capture-pane -p -t "poof:{{window}}" -S "-{{lines}}" 2>/dev/null \
+      || (echo "  ✗ window '{{window}}' not found. Use: api | poof | logs | probes" && exit 1)
+
+# Snapshot ALL four windows at once (handy after a run).
+poof-snap-all lines="100":
+    @for w in api poof logs probes; do \
+      echo "=== poof:$w (last {{lines}} lines) ==="; \
+      tmux capture-pane -p -t "poof:$w" -S "-{{lines}}" 2>/dev/null || echo "  (window not found)"; \
+      echo ""; \
+    done
+
+# Kick off the proof-of-life (sends keys to the poof window — the script
+# runs IN tmux so it's visible to anyone attached).
+poof-run:
+    @tmux send-keys -t poof:1 '.venv/bin/python scripts/agent_proof_of_life.py' Enter
+    @echo "  ▸ kicked off in poof:1 — `just poof-snap` to view"
+
+# Same but clears the cached state file first.
+poof-run-fresh:
+    @tmux send-keys -t poof:1 'rm -f .sisyphus/poof.state.json && .venv/bin/python scripts/agent_proof_of_life.py' Enter
+    @echo "  ▸ kicked off fresh in poof:1 — `just poof-snap` to view"
+
+# Run a single step (1-7).
+poof-step n:
+    @tmux send-keys -t poof:1 ".venv/bin/python scripts/agent_proof_of_life.py --step {{n}}" Enter
+    @echo "  ▸ step {{n}} kicked off in poof:1"
+
+# Show the cached resource ids from the most recent run.
+poof-state:
+    @if [ -f .sisyphus/poof.state.json ]; then jq . .sisyphus/poof.state.json; else echo "  · no state file yet — run `just poof-run-fresh`"; fi
+
+# Show events for the cached session (queries prod DB directly).
+poof-events:
+    @SID=$(jq -r .session_id .sisyphus/poof.state.json 2>/dev/null) && [ -n "$SID" ] || (echo "  ✗ no cached session_id — run `just poof-run-fresh` first" && exit 1); \
+    DB=$(railway variables --kv | grep '^DATABASE_URL=' | cut -d= -f2- | sed 's/postgresql+psycopg/postgresql/'); \
+    psql "$DB" -c "SELECT seq, event_type, actor, LEFT(payload::text, 100) AS payload FROM events WHERE entity_id = '$SID' ORDER BY seq;"
+
+# Run layered probes against the cached session — pinpoints which layer
+# is broken when something hangs.
+poof-probes:
+    @SID=$(jq -r .session_id .sisyphus/poof.state.json 2>/dev/null) && [ -n "$SID" ] || (echo "  ✗ no cached session_id — run `just poof-run-fresh` first" && exit 1); \
+    DB=$(railway variables --kv | grep '^DATABASE_URL=' | cut -d= -f2-); \
+    SESSION_ID=$SID DATABASE_URL=$DB OMOIOS_API_BASE_URL=http://localhost:18000 ./scripts/poof_probes.sh
+
+# Open the cheatsheet in the default markdown viewer.
+poof-cheat:
+    @open docs/poof-cheatsheet.md 2>/dev/null || cat docs/poof-cheatsheet.md
+
+# Restart the whole tmux session and uvicorn (kill + start).
+poof-reload:
+    @./scripts/poof_tmux.sh kill
+    @sleep 1
+    @./scripts/poof_tmux.sh start
