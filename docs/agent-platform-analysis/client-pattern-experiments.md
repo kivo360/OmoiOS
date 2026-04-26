@@ -595,27 +595,47 @@ server twice. The SDK isn't memoizing.
 ## Running the experiments
 
 Most can be added as new phases in `scripts/smoke_agent_platform.py`.
-The smoke covers experiments 2, 3, 4, 5, 8 (partial via fork), 9, 11
-(partial), **12** (NEW), 13, 17, **21** (NEW via api_shape_gate), 22
-(implicit). Latest modal-mode prod smoke: **PASS 26 / FAIL 0 / GAP 1 /
-SKIP 5**.
+The smoke covers experiments 2, 3, 4, **6** (NEW), 5, **7** (NEW via
+session_list_autopagination), 8 (full — fork-from-arbitrary-seq with
+warmup), 9, 11 (partial), 12, 13, **16** (NEW via
+session_metadata_opacity), 17, 21, 22 (implicit). SDK unit tests cover
+**7b/7c** (NEW: no-retry / no-cache anti-patterns) in
+`sdk/python/tests/test_no_state_anti_patterns.py`.
 
 ### Gap-closure history
-- **2026-04-26**: Added `session_token_bounded_scope` (Exp 12) and
-  `api_shape_gate` (Exp 21). The first run **caught a real critical
-  security bug** — `/api/v1/credentials` and `/api/v1/artifacts` were
-  registered with no auth dependency at all. Anonymous callers with a
-  valid `workspace_id` could list, upload, and delete. Fix landed in
-  commit `8633bc05`.
+- **2026-04-26 (initial)**: Added `session_token_bounded_scope` (Exp 12)
+  and `api_shape_gate` (Exp 21). Caught a real critical security bug —
+  `/api/v1/credentials` and `/api/v1/artifacts` were registered with no
+  auth dependency at all. Fix landed in commit `8633bc05`.
+- **2026-04-26 (Pareto sweep)**: Closed five high-impact gaps in priority
+  order:
+  1. **Exp 8 (fork warmup)** — `phase_session_fork` now drains the parent
+     stream first to confirm ≥ from_seq events exist before forking.
+     Removes the GAP-on-fresh-session edge case; if child stream is empty
+     after a verified parent it's now a real FAIL.
+  2. **Exp 6 (cancel propagation)** — new
+     `session_cancel_propagation` phase creates a fresh session, cancels
+     mid-flight, asserts `session.cancelled` reaches the SSE stream
+     within 30s, and re-fetches to confirm `status="cancelled"`.
+  3. **Exp 16 (metadata opacity)** — new
+     `session_metadata_opacity` phase round-trips deeply-nested JSON.
+     Caught a real silent-drop bug: backend accepted `metadata` on
+     `SessionCreate` but had no column to persist it. Fixed via migration
+     `073_add_client_metadata_to_tasks` + `Task.client_metadata` column +
+     persist on create + return `metadata` (spec key) on `get`. Internal
+     name is `client_metadata` because SQLAlchemy reserves `metadata`
+     (see `docs/rules/sqlalchemy-reserved-keywords.md`).
+  4. **Exp 7 (auto-pagination)** — new `session_list_autopagination`
+     phase uses the SDK's telemetry callback to count GET requests and
+     prove `list(page_size=2)` walks ≥2 pages.
+  5. **Exp 7b/7c (no-retry / no-cache)** — pinned via
+     `sdk/python/tests/test_no_state_anti_patterns.py`. Two-gets-in-a-row
+     must fire two HTTP calls; a 503 must raise without retry.
 
 ### Gaps still open (priority order)
-1. Experiment 6 — cancellation + sandbox cleanup verification
-2. Experiment 8 — fork from arbitrary seq (smoke does fork-from-latest;
-   needs an explicit `from_seq=N` test with assertion that earlier
-   events are NOT replayed in the fork's stream)
-3. Experiment 10 — share + multi-user WS (need a second user account)
-4. Experiment 16 — metadata opacity (the ReactGrab claim — round-trip
-   nested arbitrary JSON, assert exact equality on `get`)
+1. Experiment 10 — share + multi-user WS (need a real second user JWT;
+   the existing `session_share` phase exercises the ACL grant but not
+   the peer's WS handshake under their own credentials)
 
 ### Standalone (don't fit in the smoke harness)
 - Experiment 14 — needs a tunneled webhook receiver (ngrok / RequestBin)

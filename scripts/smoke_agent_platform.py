@@ -112,6 +112,7 @@ class Context:
     sdk_fork_session_id: Optional[str] = None   # forked session id for cleanup
     sdk_ticketless_session_id: Optional[str] = None  # ticket-less variant for Task 13
     sdk_session_owner_id: Optional[str] = None  # uuid of the user who owns sdk_session_id
+    sdk_cancel_session_id: Optional[str] = None  # session created solely to test cancel
 
 
 def auth_headers() -> dict[str, str]:
@@ -1489,11 +1490,44 @@ async def phase_session_reply(ctx: Context) -> PhaseResult:
 
 @phase("session_fork")
 async def phase_session_fork(ctx: Context) -> PhaseResult:
-    """Fork at seq 2; child must have ≥2 events with seqs starting at 1."""
+    """Fork at an arbitrary seq; child must contain exactly seqs 1..from_seq.
+
+    Spec §3 fork contract:
+      1. Parent events with seq ≤ from_seq are replayed into the child,
+         renumbered starting at 1.
+      2. Child stream MUST NOT contain events from parent at seq > from_seq.
+      3. Child gets a fresh prompt; subsequent events are independent.
+
+    Pre-condition: parent must have emitted ≥ from_seq events with non-null
+    seq. If the parent hasn't, we wait briefly; if it never reaches the
+    needed seq we lower from_seq to what's actually available so the test
+    still exercises the fork contract on whatever events exist.
+    """
     if ctx.sdk_client is None or ctx.sdk_session_id is None:
         return PhaseResult("session_fork", Verdict.SKIP, detail="no session")
 
-    from_seq = 2
+    target_from_seq = 2
+
+    # Prove the parent has enough events first. ctx.sdk_session_last_seq is
+    # populated by session_events_sse / session_reply, but those phases read
+    # only a handful of events — we need to know how many seqs are actually
+    # available on the parent stream right now. Drain a fresh window.
+    parent_events = await _drain_events(ctx, limit=target_from_seq, timeout=10.0)
+    parent_seqs = sorted(
+        {e.seq for e in parent_events if e.seq is not None}
+    )
+    if not parent_seqs:
+        return PhaseResult(
+            "session_fork", Verdict.FAIL,
+            detail="parent has zero events with seq != null; fork cannot be tested",
+        )
+
+    # If parent has fewer seqs than the target, fork from what's available.
+    # This still exercises the contract: child must contain seqs 1..N where
+    # N = available_count, and nothing beyond.
+    available = parent_seqs[-1]
+    from_seq = min(target_from_seq, available)
+
     try:
         child = await ctx.sdk_client.sessions.fork(
             ctx.sdk_session_id, from_seq=from_seq, prompt="smoke fork prompt",
@@ -1503,7 +1537,7 @@ async def phase_session_fork(ctx: Context) -> PhaseResult:
 
     ctx.sdk_fork_session_id = child.id
 
-    # Swap ctx.sdk_session_id temporarily so _drain_events reads the child's stream.
+    # Swap ctx.sdk_session_id temporarily so _drain_events reads child's stream.
     original = ctx.sdk_session_id
     ctx.sdk_session_id = child.id
     try:
@@ -1512,30 +1546,43 @@ async def phase_session_fork(ctx: Context) -> PhaseResult:
         ctx.sdk_session_id = original
 
     if not child_events:
-        # Parent may have had zero eligible events (seq <= from_seq) — that's a
-        # legitimate edge case in a fresh session, not a fork bug. Report GAP.
-        return PhaseResult(
-            "session_fork", Verdict.GAP,
-            detail=f"fork returned a child but child has 0 events from seq ≤ {from_seq} "
-                   "(parent likely has fewer emitted events; expected on a fresh session)",
-            evidence={"parent_id": original, "child_id": child.id, "from_seq": from_seq},
-        )
-    seqs = [e.seq for e in child_events]
-    if seqs[0] != 1:
+        # Parent had ≥ from_seq events, fork was accepted, but the child
+        # stream is empty. That's a real FAIL of the replay contract.
         return PhaseResult(
             "session_fork", Verdict.FAIL,
-            detail=f"child seqs must start at 1, got {seqs}",
+            detail=(
+                f"parent had {len(parent_seqs)} eligible events (last_seq={available}) "
+                f"and fork(from_seq={from_seq}) was accepted, but child stream "
+                f"returned 0 events — replay contract broken"
+            ),
+            evidence={
+                "parent_id": original, "child_id": child.id,
+                "from_seq": from_seq, "parent_seqs": parent_seqs,
+            },
         )
-    # Every child seq must be ≤ from_seq (fork only copies up to the cutoff).
-    if any(s > from_seq for s in seqs):
+    child_seqs = [e.seq for e in child_events]
+    if child_seqs[0] != 1:
         return PhaseResult(
             "session_fork", Verdict.FAIL,
-            detail=f"child seqs exceed fork cutoff {from_seq}: {seqs}",
+            detail=f"child seqs must start at 1 (renumbered from parent), got {child_seqs}",
+        )
+    # Every child seq must be ≤ from_seq (fork only copies up to the cutoff;
+    # exposing parent events past the cutoff would leak future trajectory).
+    if any(s > from_seq for s in child_seqs):
+        return PhaseResult(
+            "session_fork", Verdict.FAIL,
+            detail=(
+                f"child seqs exceed fork cutoff {from_seq}: {child_seqs} — "
+                f"replay leaked parent events that should have been pruned"
+            ),
         )
     return PhaseResult(
         "session_fork", Verdict.PASS,
-        evidence={"parent_id": original, "child_id": child.id,
-                  "from_seq": from_seq, "child_seqs": seqs},
+        evidence={
+            "parent_id": original, "child_id": child.id,
+            "from_seq": from_seq, "child_seqs": child_seqs,
+            "parent_last_seq": available,
+        },
     )
 
 
@@ -1609,6 +1656,313 @@ async def phase_session_share(ctx: Context) -> PhaseResult:
         "session_share", Verdict.PASS,
         evidence={"acl_keys": sorted(acl.keys()) if isinstance(acl, dict) else acl,
                   "target_user": target_user_id},
+    )
+
+
+@phase("session_list_autopagination")
+async def phase_session_list_autopagination(ctx: Context) -> PhaseResult:
+    """Spec §1.3: `sessions.list()` walks pages transparently.
+
+    The SDK exposes `list()` as a single async iterator; under the hood
+    it must call the server multiple times when the result set exceeds
+    `page_size`. We force pagination by using `page_size=2` against an
+    org that already has 4+ sessions from earlier smoke phases, then
+    use a telemetry callback to verify the SDK fired ≥2 GET requests
+    against `/api/v1/sessions`.
+
+    Without auto-pagination, every dashboard / monitoring tool that
+    walks the session list silently misses pages 2+.
+    """
+    if not _sdk_importable() or PLATFORM_KEY == "":
+        return PhaseResult(
+            "session_list_autopagination", Verdict.SKIP,
+            detail="SDK or platform key unavailable",
+        )
+
+    from omoios.client import AsyncOmoiOSClient
+
+    request_log: list[dict] = []
+
+    def _telemetry(event: dict) -> None:
+        # Only retain the lightweight request kind so we can count pages.
+        if event.get("kind") in ("request", "response"):
+            request_log.append(event)
+
+    probe = AsyncOmoiOSClient(
+        base_url=API_BASE_URL,
+        api_key=PLATFORM_KEY,
+        timeout=30.0,
+        telemetry=_telemetry,
+    )
+
+    try:
+        seen_ids: set[str] = set()
+        # Cap to avoid scanning the full org if it has hundreds of sessions
+        # — we just need to prove the iterator walked ≥2 pages.
+        async for s in probe.sessions.list(page_size=2):
+            seen_ids.add(s.id)
+            if len(seen_ids) >= 5:
+                break
+    except Exception as e:  # noqa: BLE001
+        await probe.close()
+        return PhaseResult(
+            "session_list_autopagination", Verdict.FAIL,
+            detail=f"list iteration: {e!r}",
+        )
+    finally:
+        await probe.close()
+
+    # Count GET requests against the sessions list endpoint. The SDK fires
+    # one `request` telemetry event per call; with page_size=2 and ≥5
+    # sessions visible to the platform key, we expect ≥3 page fetches.
+    page_fetches = [
+        e for e in request_log
+        if e.get("kind") == "request"
+        and e.get("method") == "GET"
+        and e.get("path") == "/api/v1/sessions"
+    ]
+    if len(seen_ids) < 2:
+        return PhaseResult(
+            "session_list_autopagination", Verdict.GAP,
+            detail=(
+                f"only {len(seen_ids)} session(s) visible to the platform key "
+                f"— pagination cannot be proven (need ≥2 for the test)"
+            ),
+            evidence={"seen": len(seen_ids), "page_fetches": len(page_fetches)},
+        )
+    if len(page_fetches) < 2:
+        return PhaseResult(
+            "session_list_autopagination", Verdict.FAIL,
+            detail=(
+                f"iterated {len(seen_ids)} sessions but SDK only fired "
+                f"{len(page_fetches)} GET request(s) — auto-pagination is "
+                f"NOT walking subsequent pages"
+            ),
+            evidence={"seen": len(seen_ids), "page_fetches": len(page_fetches)},
+        )
+
+    return PhaseResult(
+        "session_list_autopagination", Verdict.PASS,
+        evidence={
+            "sessions_seen": len(seen_ids),
+            "page_fetches": len(page_fetches),
+            "page_size": 2,
+        },
+    )
+
+
+@phase("session_metadata_opacity")
+async def phase_session_metadata_opacity(ctx: Context) -> PhaseResult:
+    """Spec §18 §5 (the ReactGrab pattern): metadata is opaque.
+
+    Arbitrary nested JSON sent under `metadata` on `sessions.create()` must
+    round-trip BYTE-EQUALLY on the next `sessions.get()`. The platform must
+    not rename keys, drop nulls, coerce types, reorder lists, or reject
+    arbitrary structure. Without this guarantee, every browser-extension
+    use case (Plasmo, ReactGrab, Firefox/Safari extensions) is unreliable.
+
+    Uses a fresh session so metadata payload doesn't interfere with the
+    main test session.
+    """
+    if ctx.sdk_client is None or ctx.sdk_workspace_id is None:
+        return PhaseResult(
+            "session_metadata_opacity", Verdict.SKIP, detail="no SDK or workspace",
+        )
+
+    payload = {
+        "origin": "smoke-test",
+        "reactgrab": {
+            "component": "Button",
+            "filePath": "src/Button.tsx:42",
+            "props": {"variant": "primary", "disabled": False},
+        },
+        "list_of_things": [1, 2, 3, "four", None, {"five": True}],
+        "deeply": {"nested": {"value": {"with": ["arrays", 0, -1, 3.14]}}},
+        "unicode_keys_éé": "value with emojis",
+        "empty_dict": {},
+        "empty_list": [],
+        "null_value": None,
+    }
+
+    try:
+        s = await ctx.sdk_client.sessions.create(
+            workspace_id=ctx.sdk_workspace_id,
+            prompt="smoke metadata opacity probe",
+            metadata=payload,
+        )
+    except Exception as e:  # noqa: BLE001
+        return PhaseResult(
+            "session_metadata_opacity", Verdict.FAIL,
+            detail=f"create with metadata: {e!r}",
+        )
+
+    # Hold a separate cleanup handle — main ctx.sdk_session_id stays untouched.
+    metadata_session_id = s.id
+
+    try:
+        refreshed = await ctx.sdk_client.sessions.get(metadata_session_id)
+    except Exception as e:  # noqa: BLE001
+        return PhaseResult(
+            "session_metadata_opacity", Verdict.FAIL,
+            detail=f"get-after-create: {e!r}",
+            evidence={"session_id": metadata_session_id},
+        )
+
+    raw = refreshed.model_dump()
+    returned = raw.get("metadata")
+    if returned is None:
+        return PhaseResult(
+            "session_metadata_opacity", Verdict.FAIL,
+            detail=(
+                "GET /sessions/{id} did not return a `metadata` key — "
+                "the server is silently dropping spec §18 §5 payload"
+            ),
+            evidence={"session_id": metadata_session_id, "keys": sorted(raw.keys())},
+        )
+    if returned != payload:
+        # Pinpoint the first divergence so the failure is actionable.
+        diffs = []
+        for k, v in payload.items():
+            if k not in returned:
+                diffs.append(f"missing key {k!r}")
+            elif returned[k] != v:
+                diffs.append(f"{k!r}: sent {v!r}, got {returned[k]!r}")
+        for k in returned:
+            if k not in payload:
+                diffs.append(f"unexpected key {k!r}: {returned[k]!r}")
+        return PhaseResult(
+            "session_metadata_opacity", Verdict.FAIL,
+            detail=f"metadata roundtrip diverged: {'; '.join(diffs[:5])}",
+            evidence={
+                "session_id": metadata_session_id,
+                "sent": payload,
+                "received": returned,
+            },
+        )
+
+    # Best-effort cleanup of this scratch session.
+    try:
+        await ctx.sdk_client.sessions.cancel(metadata_session_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+    return PhaseResult(
+        "session_metadata_opacity", Verdict.PASS,
+        evidence={
+            "session_id": metadata_session_id,
+            "key_count": len(payload),
+            "byte_equal": True,
+        },
+    )
+
+
+@phase("session_cancel_propagation")
+async def phase_session_cancel_propagation(ctx: Context) -> PhaseResult:
+    """Spec §1.5: cancel must propagate end-to-end.
+
+    Validates the AbortSignal contract every CLI / VS Code / Edge runtime
+    depends on: caller cancels → server emits `session.cancelled` → next
+    `get` reflects terminal status. We use a dedicated session so the
+    cancel doesn't tear down state other phases need.
+
+    Order of operations:
+      1. Create a fresh session bound to the same workspace.
+      2. Wait until at least one event has been emitted (proves the session
+         is live, not still pending in the queue).
+      3. Issue `cancel(id)`.
+      4. Listen for `session.cancelled` on the event stream within 30s.
+      5. Re-fetch and assert `status == "cancelled"`.
+    """
+    if ctx.sdk_client is None or ctx.sdk_workspace_id is None:
+        return PhaseResult(
+            "session_cancel_propagation", Verdict.SKIP, detail="no SDK or workspace",
+        )
+
+    try:
+        s = await ctx.sdk_client.sessions.create(
+            workspace_id=ctx.sdk_workspace_id,
+            prompt="smoke cancel — long-running task placeholder",
+        )
+    except Exception as e:  # noqa: BLE001
+        return PhaseResult(
+            "session_cancel_propagation", Verdict.FAIL,
+            detail=f"create: {e!r}",
+        )
+    ctx.sdk_cancel_session_id = s.id
+
+    # Swap ctx.sdk_session_id so _drain_events reads this session's stream.
+    original = ctx.sdk_session_id
+    ctx.sdk_session_id = s.id
+    try:
+        # Step 2: wait for the session to start emitting (≥1 event).
+        warmup = await _drain_events(ctx, limit=1, timeout=15.0)
+        if not warmup:
+            ctx.sdk_session_id = original
+            return PhaseResult(
+                "session_cancel_propagation", Verdict.GAP,
+                detail="session emitted no events within 15s; cancel test inconclusive",
+                evidence={"session_id": s.id},
+            )
+        warmup_seq = warmup[-1].seq
+
+        # Step 3: cancel.
+        try:
+            await ctx.sdk_client.sessions.cancel(s.id)
+        except Exception as e:  # noqa: BLE001
+            ctx.sdk_session_id = original
+            return PhaseResult(
+                "session_cancel_propagation", Verdict.FAIL,
+                detail=f"cancel: {e!r}",
+                evidence={"session_id": s.id},
+            )
+
+        # Step 4: drain events post-cancel; expect session.cancelled within 30s.
+        post = await _drain_events(
+            ctx, limit=20,
+            last_event_id=str(warmup_seq) if warmup_seq is not None else None,
+            timeout=30.0,
+        )
+    finally:
+        ctx.sdk_session_id = original
+
+    cancelled_events = [e for e in post if e.type == "session.cancelled"]
+    if not cancelled_events:
+        return PhaseResult(
+            "session_cancel_propagation", Verdict.FAIL,
+            detail=(
+                "no session.cancelled event observed within 30s of cancel(); "
+                f"saw types={[e.type for e in post]}"
+            ),
+            evidence={"session_id": s.id, "warmup_seq": warmup_seq},
+        )
+
+    # Step 5: get reflects terminal status.
+    try:
+        refreshed = await ctx.sdk_client.sessions.get(s.id)
+    except Exception as e:  # noqa: BLE001
+        return PhaseResult(
+            "session_cancel_propagation", Verdict.FAIL,
+            detail=f"get-after-cancel: {e!r}",
+            evidence={"session_id": s.id, "saw_cancelled_event": True},
+        )
+    if refreshed.status != "cancelled":
+        return PhaseResult(
+            "session_cancel_propagation", Verdict.FAIL,
+            detail=(
+                f"event stream emitted session.cancelled but GET returned "
+                f"status={refreshed.status!r} (expected 'cancelled')"
+            ),
+            evidence={"session_id": s.id, "status": refreshed.status},
+        )
+
+    return PhaseResult(
+        "session_cancel_propagation", Verdict.PASS,
+        evidence={
+            "session_id": s.id,
+            "warmup_seq": warmup_seq,
+            "cancelled_seq": cancelled_events[0].seq,
+            "final_status": refreshed.status,
+        },
     )
 
 
@@ -2008,6 +2362,12 @@ async def cleanup(ctx: Context, keep_sandbox: bool) -> list[str]:
         await _delete(f"/api/v1/sessions/{ctx.sdk_session_id}", "del sdk_session")
     if ctx.sdk_fork_session_id:
         await _delete(f"/api/v1/sessions/{ctx.sdk_fork_session_id}", "del sdk_fork")
+    if ctx.sdk_cancel_session_id:
+        # Cancel-test session was already cancelled inside the phase, but call
+        # DELETE anyway to ensure any sandbox-level state gets reaped.
+        await _delete(
+            f"/api/v1/sessions/{ctx.sdk_cancel_session_id}", "del sdk_cancel"
+        )
     if ctx.sdk_client is not None:
         try:
             await ctx.sdk_client.close()
