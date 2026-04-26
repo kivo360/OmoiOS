@@ -27,8 +27,10 @@ from cyclopts import App, Parameter
 
 from omoios.cli._ui import CliError, die, err_console
 from omoios.cli.auth import auth_app
+from omoios.cli.config import config_app
 from omoios.cli.providers import providers_app
 from omoios.cli.signup import signup
+from omoios.cli.whoami import whoami
 
 app = App(
     name="omoios",
@@ -43,7 +45,9 @@ app = App(
 
 app.command(providers_app)
 app.command(auth_app)
+app.command(config_app)
 app.command(signup)
+app.command(whoami)
 
 
 # Curated tips — short, actionable, grounded in real usage. Each one
@@ -59,6 +63,9 @@ TIPS: tuple[str, ...] = (
     "Config lives at $XDG_CONFIG_HOME/omoios/config.json (falls back to "
     "~/.config/omoios/config.json).",
     "Quiet these tips with $OMOIOS_NO_TIPS=1 or --no-tips.",
+    "Run `omoios whoami` to verify the local API key is still valid.",
+    "Inspect or wipe local creds with `omoios config show` / "
+    "`omoios config clear`.",
     "GitHub device flow needs the production OAuth App. Override with "
     "$OMOIOS_GITHUB_CLIENT_ID if you have your own.",
 )

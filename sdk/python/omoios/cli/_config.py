@@ -23,8 +23,17 @@ from typing import Optional
 from omoios.cli._ui import CliError
 
 
-CONFIG_DIR_ENV = "XDG_CONFIG_HOME"
-DEFAULT_CONFIG_DIR = Path.home() / ".config"
+from platformdirs import user_config_path
+
+# Precedence for the config directory:
+#   1. $OMOIOS_CONFIG_DIR — explicit per-user override
+#   2. $XDG_CONFIG_HOME/omoios — honors the XDG spec on Linux and is
+#      the convention many devs already rely on cross-platform
+#   3. platformdirs default (macOS: ~/Library/Application Support/omoios;
+#      Windows: %APPDATA%/omoios; Linux: ~/.config/omoios)
+CONFIG_DIR_OVERRIDE_ENV = "OMOIOS_CONFIG_DIR"
+XDG_ENV = "XDG_CONFIG_HOME"
+APP_NAME = "omoios"
 CONFIG_FILENAME = "config.json"
 
 
@@ -37,9 +46,17 @@ class CliConfig:
     github_token: Optional[str] = None
 
 
+def config_dir() -> Path:
+    """Resolve the per-user config directory for omoios."""
+    if override := os.environ.get(CONFIG_DIR_OVERRIDE_ENV):
+        return Path(override)
+    if xdg := os.environ.get(XDG_ENV):
+        return Path(xdg) / APP_NAME
+    return user_config_path(APP_NAME, appauthor=False, ensure_exists=False)
+
+
 def config_path() -> Path:
-    base = Path(os.environ.get(CONFIG_DIR_ENV) or DEFAULT_CONFIG_DIR)
-    return base / "omoios" / CONFIG_FILENAME
+    return config_dir() / CONFIG_FILENAME
 
 
 def _load_file(path: Path) -> dict:

@@ -282,3 +282,98 @@ class TestProvidersAdd:
             "providers", "add", "--workspace", "ws-1", "--name", "fw"
         )
         assert rc == 1
+
+    def test_invalid_kind_is_rejected_by_cyclopts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OMOIOS_API_BASE_URL", "https://api.test")
+        monkeypatch.setenv("OMOIOS_PLATFORM_API_KEY", "test-key")
+        monkeypatch.setenv("OMOIOS_PROVIDER_KEY", "fw-secret")
+        # Cyclopts raises SystemExit on validation failure; invoke() returns
+        # the non-zero code from that.
+        rc = invoke(
+            "providers", "add",
+            "--workspace", "ws-1",
+            "--name", "fw",
+            "--kind", "nope",
+        )
+        assert rc != 0
+
+
+# ─── config + whoami ─────────────────────────────────────────────────────────
+
+
+class TestConfig:
+    def test_path_prints_resolved_location(
+        self,
+        capsys: pytest.CaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path,
+    ) -> None:
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        rc = invoke("config", "path")
+        assert rc == 0
+        out = capsys.readouterr().out.strip()
+        assert out.endswith("omoios/config.json")
+        assert str(tmp_path) in out
+
+    def test_show_masks_secrets_by_default(
+        self,
+        capsys: pytest.CaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path,
+    ) -> None:
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        cfg_dir = tmp_path / "omoios"
+        cfg_dir.mkdir()
+        (cfg_dir / "config.json").write_text(
+            _json.dumps(
+                {"api_base_url": "https://api.test", "api_key": "sk_secret_123"}  # pragma: allowlist secret
+            )
+        )
+        rc = invoke("config", "show")
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "redacted" in out
+        assert "sk_secret_123" not in out  # pragma: allowlist secret
+
+
+class TestWhoami:
+    def test_whoami_prints_user_info(
+        self,
+        capsys: pytest.CaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("OMOIOS_API_BASE_URL", "https://api.test")
+        monkeypatch.setenv("OMOIOS_PLATFORM_API_KEY", "test-key")
+
+        def fake_get(self, url, **kwargs):
+            return SimpleNamespace(
+                status_code=200,
+                text="",
+                json=lambda: {
+                    "id": "u1",
+                    "email": "kevin@example.com",
+                    "full_name": "Kevin",
+                },
+            )
+
+        monkeypatch.setattr("httpx.Client.get", fake_get, raising=True)
+        rc = invoke("whoami")
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "kevin@example.com" in out
+        assert "u1" in out
+
+    def test_whoami_401_includes_signup_hint(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        monkeypatch.setenv("OMOIOS_API_BASE_URL", "https://api.test")
+        monkeypatch.setenv("OMOIOS_PLATFORM_API_KEY", "stale-key")
+
+        def fake_get(self, url, **kwargs):
+            return SimpleNamespace(status_code=401, text="bad", json=lambda: {})
+
+        monkeypatch.setattr("httpx.Client.get", fake_get, raising=True)
+        rc = invoke("whoami")
+        assert rc == 1

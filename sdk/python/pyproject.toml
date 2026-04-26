@@ -26,6 +26,11 @@ dependencies = [
     # Table / Panel / Confirm output we use.
     "cyclopts>=3.0",
     "rich>=13.0",
+    # Cross-platform per-user app dir resolver. Powers `omoios config
+    # path` and the canonical config file location — XDG on Linux,
+    # `~/Library/Application Support/omoios` on macOS,
+    # `%APPDATA%/omoios` on Windows.
+    "platformdirs>=4.0",
 ]
 
 [project.scripts]

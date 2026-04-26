@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import os
-from typing import Annotated, Any, Awaitable, Optional
+from typing import Annotated, Any, Awaitable, Literal, Optional
 
 from cyclopts import App, Parameter
 from rich.prompt import Confirm
@@ -30,12 +30,24 @@ providers_app = App(
 
 def _run_sdk(coro: Awaitable[Any]) -> Any:
     """Run an SDK coroutine, translating SDK exceptions into clean
-    `CliError`s so the user sees a friendly message instead of a
-    Python traceback."""
-    from omoios.exceptions import OmoiOSError
+    `CliError`s with actionable hints so the user sees a friendly
+    message instead of a Python traceback."""
+    from omoios.exceptions import AuthError, NotFoundError, OmoiOSError
 
     try:
         return asyncio.run(coro)
+    except AuthError as exc:
+        raise CliError(
+            f"AuthError: {exc}\n"
+            "  hint: your API key is rejected. Run `omoios signup` to mint a "
+            "fresh one, or check $OMOIOS_PLATFORM_API_KEY."
+        ) from exc
+    except NotFoundError as exc:
+        raise CliError(
+            f"NotFoundError: {exc}\n"
+            "  hint: double-check the workspace / credential ID — "
+            "`omoios providers list --workspace <id>` shows what exists."
+        ) from exc
     except OmoiOSError as exc:
         raise CliError(f"{type(exc).__name__}: {exc}") from exc
 
@@ -124,10 +136,10 @@ def add_cmd(
         ),
     ] = None,
     kind: Annotated[
-        str,
+        Literal["bearer_secret", "oauth", "api_key"],
         Parameter(
             name="--kind",
-            help="BindingKind enum — `bearer_secret` matches Fireworks/Anthropic.",
+            help="BindingKind — `bearer_secret` matches Fireworks/Anthropic.",
         ),
     ] = "bearer_secret",
     api_base_url: Annotated[
@@ -138,11 +150,6 @@ def add_cmd(
     ] = None,
 ) -> None:
     """Create a new credential binding in a workspace."""
-    if kind not in ("bearer_secret", "oauth", "api_key"):
-        raise CliError(
-            f"--kind must be one of bearer_secret/oauth/api_key, got {kind!r}"
-        )
-
     secret = key or os.environ.get("OMOIOS_PROVIDER_KEY")
     if not secret:
         raise CliError(
