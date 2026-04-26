@@ -793,6 +793,9 @@ async def _create_ticketless_session(
                 if session_data.execution_config
                 else None
             ),
+            # Spec §18 §5: persist opaque client metadata so it round-trips
+            # byte-equally on subsequent reads. Empty dict → store nothing.
+            client_metadata=session_data.metadata or None,
         )
         session.add(task)
         await session.flush()
@@ -839,6 +842,9 @@ async def _create_ticketless_session(
             "status": task.status,
             "created_by": str(task.created_by) if task.created_by else None,
             "created_at": task.created_at.isoformat() if task.created_at else None,
+            # Echo client metadata under the spec key name (the model attr is
+            # client_metadata to avoid SQLAlchemy's reserved `metadata`).
+            "metadata": task.client_metadata or {},
         }
 
     # 8. Mint broker session token (outside the DB session — uses its own txn)

@@ -384,6 +384,9 @@ async def get_task(
         "timeout_seconds": task.timeout_seconds,
         "retry_count": task.retry_count,
         "max_retries": task.max_retries,
+        # Spec §18 §5: round-trip opaque client metadata under the spec key
+        # (model attr is `client_metadata` to dodge SQLAlchemy's reserved name).
+        "metadata": task.client_metadata or {},
         "created_at": task.created_at.isoformat(),
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
         "started_at": task.started_at.isoformat() if task.started_at else None,

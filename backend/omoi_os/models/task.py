@@ -179,6 +179,17 @@ class Task(Base):
         comment="Execution config from frontend: skill selection, spawn options",
     )
 
+    # Opaque client-supplied metadata from sessions.create() metadata field
+    # (spec §18 §5 — the ReactGrab pattern). Round-tripped byte-equally; the
+    # platform must never transform, validate, or drop keys here. Internal
+    # name is `client_metadata` because SQLAlchemy reserves `metadata`; the
+    # API surface keeps the spec key name `metadata`.
+    client_metadata: Mapped[Optional[dict]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Opaque client-supplied metadata (spec §18 §5)",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
