@@ -28,6 +28,7 @@ from cyclopts import App, Parameter
 from omoios.cli._ui import CliError, die, err_console
 from omoios.cli.artifacts import artifacts_app
 from omoios.cli.auth import auth_app
+from omoios.cli.completion import completion_app
 from omoios.cli.config import config_app
 from omoios.cli.connections import connections_app
 from omoios.cli.environments import environments_app
@@ -60,6 +61,7 @@ app.command(connections_app)
 app.command(usage_app)
 app.command(auth_app)
 app.command(config_app)
+app.command(completion_app)
 app.command(signup)
 app.command(whoami)
 
