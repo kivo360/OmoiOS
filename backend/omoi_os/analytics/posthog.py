@@ -406,6 +406,23 @@ def track_payment_succeeded(
         groups={"organization": str(organization_id)},
     )
 
+    # Marketing-domain dual-write: revenue lands in PostHog AND a histogram
+    # in BetterStack Telemetry so finance dashboards have both views.
+    try:
+        from omoi_os.observability.telemetry import metric_histogram
+
+        metric_histogram(
+            "revenue_usd",
+            amount_usd,
+            tags={
+                "event": "payment_succeeded",
+                "payment_type": payment_type,
+                "organization_id": str(organization_id),
+            },
+        )
+    except Exception:  # noqa: BLE001 — telemetry must never block billing
+        pass
+
     return track_event(
         user_id=user_id,
         event="payment_succeeded",

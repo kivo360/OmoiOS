@@ -1,35 +1,25 @@
-"""Tracing wrapper layer (Sentry-free shim).
+"""Tracing decorators backed by OpenTelemetry.
 
-Originally this module wrapped Sentry's APM tracing API. As part of the
-Sentry → PostHog migration, the underlying Sentry calls were removed and
-the wrappers became thin no-ops that preserve the existing public surface
-so any future caller continues to compile.
+These decorators create real OTel spans now that
+:mod:`omoi_os.observability.betterstack` wires a TracerProvider with both
+the OTLP exporter (BetterStack Telemetry) and the SentrySpanProcessor
+(BetterStack Errors). When neither is configured, OTel falls back to a
+no-op tracer so the decorators stay zero-cost.
 
-Distributed tracing in this codebase is provided by Pydantic Logfire /
-OpenTelemetry — see :mod:`omoi_os.observability` (``LogfireTracer``,
-``instrument_fastapi``, ``instrument_sqlalchemy``, ``instrument_httpx``,
-``instrument_redis``). Those auto-instrumentations already capture spans
-for HTTP requests, DB queries, outbound calls, and cache operations, so
-manual ``traced_span(...)`` decoration would duplicate work.
-
-PostHog has no native backend Python tracing API. The few breadcrumb-style
-calls route to PostHog as ``breadcrumb.<category>`` events (Phase 6
-strategy A) so the *intent* of breadcrumbs is preserved if anything
-re-wires those calls in the future.
-
-Usage (kept for shape compatibility — these are no-ops for span data):
+Usage:
 
     from omoi_os.observability.tracing import trace_external_api, traced_span
 
     @trace_external_api("stripe")
     async def charge(...): ...
 
-    with traced_span("db", "complex_query"):
+    with traced_span("db", "complex_query", tags={"table": "users"}):
         ...
 """
 
 from __future__ import annotations
 
+import asyncio
 import functools
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, Iterator, Optional, TypeVar
@@ -42,13 +32,47 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def _get_request_id() -> Optional[str]:
-    """Get the current request ID from context, if available."""
     try:
         from omoi_os.logging import get_request_id
 
         return get_request_id()
     except Exception:  # noqa: BLE001
         return None
+
+
+def _tracer():
+    """Lazy-import OTel API. Returns None if OTel isn't installed."""
+    try:
+        from opentelemetry import trace
+
+        return trace.get_tracer("omoi_os")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _apply_attributes(
+    span,
+    *,
+    op: Optional[str],
+    description: Optional[str],
+    tags: Optional[Dict[str, str]],
+    data: Optional[Dict[str, Any]],
+) -> None:
+    if span is None:
+        return
+    if op is not None:
+        span.set_attribute("op", op)
+    if description is not None:
+        span.set_attribute("description", description)
+    rid = _get_request_id()
+    if rid:
+        span.set_attribute("request_id", rid)
+    for key, value in (tags or {}).items():
+        if isinstance(value, (str, bool, int, float)):
+            span.set_attribute(f"tag.{key}", value)
+    for key, value in (data or {}).items():
+        if isinstance(value, (str, bool, int, float)):
+            span.set_attribute(f"data.{key}", value)
 
 
 @contextmanager
@@ -58,84 +82,96 @@ def traced_span(
     tags: Optional[Dict[str, str]] = None,
     data: Optional[Dict[str, Any]] = None,
 ) -> Iterator[None]:
-    """No-op span context manager.
+    """Open an OTel span scoped to the ``with`` block."""
+    tracer = _tracer()
+    if tracer is None:
+        yield None
+        return
+    with tracer.start_as_current_span(f"{op}.{description}") as span:
+        _apply_attributes(span, op=op, description=description, tags=tags, data=data)
+        yield span
 
-    Span tracking is now handled by Logfire's auto-instrumentation. Any
-    tags/data passed here are dropped silently so callers don't crash.
-    """
-    yield None
+
+def _decorate(span_name_fn: Callable[[], str]) -> Callable[[F], F]:
+    def decorator(func: F) -> F:
+        tracer = _tracer()
+
+        if asyncio.iscoroutinefunction(func):
+
+            @functools.wraps(func)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                if tracer is None:
+                    return await func(*args, **kwargs)
+                with tracer.start_as_current_span(span_name_fn()):
+                    return await func(*args, **kwargs)
+
+            return async_wrapper  # type: ignore[return-value]
+
+        @functools.wraps(func)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            if tracer is None:
+                return func(*args, **kwargs)
+            with tracer.start_as_current_span(span_name_fn()):
+                return func(*args, **kwargs)
+
+        return sync_wrapper  # type: ignore[return-value]
+
+    return decorator
 
 
 def trace_external_api(provider: str) -> Callable[[F], F]:
-    """No-op decorator for external API calls (Logfire instruments httpx)."""
+    """Wrap an outbound API call in an OTel span.
 
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            return await func(*args, **kwargs)
-
-        @functools.wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            return func(*args, **kwargs)
-
-        import asyncio
-
-        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper  # type: ignore[return-value]
-
-    return decorator
+    Note: ``opentelemetry-instrumentation-httpx`` already creates spans
+    around HTTPX requests. This decorator is for cases where you want a
+    parent span over a multi-step external interaction (e.g. Stripe
+    customer + subscription creation).
+    """
+    return _decorate(lambda: f"external_api.{provider}")
 
 
 def trace_operation(category: str, name: str) -> Callable[[F], F]:
-    """No-op decorator for application-level operations."""
-
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            return await func(*args, **kwargs)
-
-        @functools.wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            return func(*args, **kwargs)
-
-        import asyncio
-
-        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper  # type: ignore[return-value]
-
-    return decorator
+    return _decorate(lambda: f"{category}.{name}")
 
 
 def trace_db_operation(query_type: str, table: str) -> Callable[[F], F]:
-    """No-op decorator for DB operations (Logfire instruments SQLAlchemy)."""
-
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            return await func(*args, **kwargs)
-
-        @functools.wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            return func(*args, **kwargs)
-
-        import asyncio
-
-        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper  # type: ignore[return-value]
-
-    return decorator
+    """Wrap a DB operation in a span. SQLAlchemy auto-instrumentation already
+    creates spans for raw queries; use this when you want a logical-operation
+    name (e.g. ``find_active_users``)."""
+    return _decorate(lambda: f"db.{query_type}.{table}")
 
 
 def set_transaction_name(name: str) -> None:
-    """No-op (transactions are owned by Logfire)."""
-    return None
+    """Update the current span's name. No-op outside an active span."""
+    tracer = _tracer()
+    if tracer is None:
+        return
+    try:
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            span.update_name(name)
+    except Exception:  # noqa: BLE001
+        return
 
 
 def set_span_tag(key: str, value: Any) -> None:
-    """No-op (Logfire auto-spans don't accept post-hoc tags from here)."""
-    return None
+    tracer = _tracer()
+    if tracer is None or not isinstance(value, (str, int, float, bool)):
+        return
+    try:
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            span.set_attribute(key, value)
+    except Exception:  # noqa: BLE001
+        return
 
 
 def set_span_data(key: str, value: Any) -> None:
-    """No-op (Logfire auto-spans don't accept post-hoc data from here)."""
-    return None
+    set_span_tag(f"data.{key}", value)
 
 
 def add_breadcrumb(
@@ -144,13 +180,30 @@ def add_breadcrumb(
     data: Optional[Dict[str, Any]] = None,
     level: str = "info",
 ) -> None:
-    """Convert Sentry-style breadcrumb to a PostHog ``breadcrumb.<category>`` event.
+    """Add an OTel span event (the OTel equivalent of a Sentry breadcrumb).
 
-    PostHog has no native breadcrumb concept. Per the migration plan
-    (Phase 6, strategy A) we ship the breadcrumb as a regular event so
-    its intent is preserved. Falls through to a no-op if PostHog
-    observability isn't initialized.
+    Falls back to a PostHog ``breadcrumb.<category>`` event if no active
+    OTel span is present, preserving the legacy behaviour.
     """
+    tracer = _tracer()
+    span = None
+    if tracer is not None:
+        try:
+            from opentelemetry import trace
+
+            span = trace.get_current_span()
+            if span and span.is_recording():
+                attrs: Dict[str, Any] = {"message": message, "level": level}
+                if data:
+                    for k, v in data.items():
+                        if isinstance(v, (str, int, float, bool)):
+                            attrs[k] = v
+                span.add_event(f"breadcrumb.{category}", attributes=attrs)
+                return
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Fallback: legacy PostHog breadcrumb event
     try:
         from omoi_os.observability import posthog as _ph_obs
     except Exception:  # noqa: BLE001
@@ -160,10 +213,7 @@ def add_breadcrumb(
         return
 
     try:
-        properties: Dict[str, Any] = {
-            "message": message,
-            "level": level,
-        }
+        properties: Dict[str, Any] = {"message": message, "level": level}
         if data:
             properties.update(data)
         _ph_obs._posthog_module.capture(f"breadcrumb.{category}", properties=properties)
@@ -172,20 +222,27 @@ def add_breadcrumb(
 
 
 def get_trace_headers() -> Dict[str, str]:
-    """Return W3C ``traceparent``/``tracestate`` headers if available.
+    """Return W3C ``traceparent``/``tracestate`` headers for the active span."""
+    try:
+        from opentelemetry import propagate
 
-    Logfire/OpenTelemetry handles distributed trace propagation natively
-    on instrumented httpx clients. This helper used to return Sentry's
-    ``sentry-trace`` + ``baggage`` headers for the Sentry distributed
-    tracing protocol; we don't need that anymore. Returns an empty dict
-    so any caller still calling this gets a safe fallback.
-    """
-    return {}
+        carrier: Dict[str, str] = {}
+        propagate.inject(carrier)
+        return carrier
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def extract_trace_context(headers: Dict[str, str]) -> None:
-    """No-op extraction (Logfire's OTel handles upstream-context propagation)."""
-    return None
+    """Extract upstream W3C trace context. Result is auto-attached as the
+    parent of the next span created on this thread/task."""
+    try:
+        from opentelemetry import context, propagate
+
+        ctx = propagate.extract(headers)
+        context.attach(ctx)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 __all__ = [

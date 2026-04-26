@@ -16,8 +16,7 @@ from fastapi.exceptions import RequestValidationError
 
 from omoi_os.config import get_app_settings
 from omoi_os.logging import configure_logging, get_logger, bind_context, clear_context
-from omoi_os.observability.posthog import init_posthog_observability
-from omoi_os.observability.posthog_logs import init_posthog_logs
+from omoi_os.observability.telemetry import init_telemetry
 from omoi_os.analytics.posthog import init_posthog
 
 # Configure structured logging at module load time
@@ -25,12 +24,9 @@ from omoi_os.analytics.posthog import init_posthog
 _env = os.environ.get("OMOIOS_ENV", "development")
 configure_logging(env=_env)  # type: ignore[arg-type]
 
-# Initialize PostHog *error tracking* (v7 module-level context API). Required
-# before the posthog_request_context middleware can do anything useful.
-init_posthog_observability()
-
-# Wire stdlib logging → PostHog Logs via OTLP (off unless POSTHOG_LOGS_ENABLED).
-init_posthog_logs()
+# Initialize the unified observability pipeline (PostHog error tracking +
+# PostHog Logs + BetterStack Sentry/OTel/Uptime). Idempotent.
+init_telemetry()
 
 # Initialize PostHog *product analytics* (legacy v3 client-instance API used
 # by billing / workflow / user events).

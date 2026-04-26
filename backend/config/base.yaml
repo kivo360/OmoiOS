@@ -137,6 +137,26 @@ embedding:
 observability:
   enable_tracing: false
   logfire_token: null
+  service_name: omoi-os-backend
+  deployment_environment: null  # falls back to APP_ENV at runtime
+  release: null
+
+betterstack:
+  # All four secrets come from env vars in production. Leaving null here means
+  # the BetterStack integration is inert until creds are provided.
+  errors_dsn: null            # BETTERSTACK_ERRORS_DSN
+  source_token: null          # BETTERSTACK_SOURCE_TOKEN
+  ingesting_host: null        # BETTERSTACK_INGESTING_HOST
+  uptime_api_token: null      # BETTERSTACK_UPTIME_API_TOKEN
+  heartbeat_token: null       # BETTERSTACK_HEARTBEAT_TOKEN
+  enable_errors: true
+  enable_traces: true
+  enable_metrics: true
+  enable_logs: true
+  traces_sample_rate: 0.1
+  profiles_sample_rate: 0.0
+  metrics_export_interval_ms: 60000
+  heartbeat_period_seconds: 60
 
 title_generation:
   # Model for generating task titles (lightweight, cheap model)

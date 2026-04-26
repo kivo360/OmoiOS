@@ -78,6 +78,31 @@ async def register(
                 user_name=user.full_name,
             )
 
+        # Users domain: identify the new user in PostHog and tag the
+        # current Sentry/OTel scope with their id.
+        try:
+            from omoi_os.observability.telemetry import (
+                EVENT_USER_SIGNUP,
+                identify_user,
+                track_event,
+            )
+
+            identify_user(
+                str(user.id),
+                email=user.email,
+                properties={"full_name": user.full_name, "department": user.department},
+            )
+            track_event(
+                EVENT_USER_SIGNUP,
+                distinct_id=str(user.id),
+                properties={
+                    "referral_source": (waitlist_metadata or {}).get("referral_source"),
+                    "department": user.department,
+                },
+            )
+        except Exception:  # noqa: BLE001 — telemetry must not block signup
+            pass
+
         return UserResponse.model_validate(user)
 
     except ValueError as e:
@@ -193,6 +218,19 @@ async def login(
             email=body.email,
             ip_address=client_ip,
         )
+
+    # Users domain: track login + tag the active observability scope.
+    try:
+        from omoi_os.observability.telemetry import (
+            EVENT_USER_LOGIN,
+            identify_user,
+            track_event,
+        )
+
+        identify_user(str(user_id), email=user.email)
+        track_event(EVENT_USER_LOGIN, distinct_id=str(user_id))
+    except Exception:  # noqa: BLE001
+        pass
 
     # Create tokens (tuple unpacking: token, jti)
     access_token, _access_jti = auth_service.create_access_token(user_id)

@@ -732,6 +732,75 @@ class ObservabilitySettings(OmoiBaseSettings):
 
     enable_tracing: bool = False
     logfire_token: Optional[str] = None
+    # Service identifier used as resource attribute on OTel exports.
+    service_name: str = "omoi-os-backend"
+    # Defaults to APP_ENV (`local`/`staging`/`production`); overridable via
+    # OBSERVABILITY_DEPLOYMENT_ENVIRONMENT.
+    deployment_environment: Optional[str] = None
+    # Source identifier (typically the git SHA or "<package>@<version>").
+    release: Optional[str] = None
+
+
+class BetterStackSettings(OmoiBaseSettings):
+    """
+    BetterStack observability configuration covering Errors (Sentry-compatible
+    DSN), Telemetry (OTLP traces/metrics/logs into a single source), and Uptime
+    (heartbeats + monitor management).
+
+    Environment variables:
+      - BETTERSTACK_ERRORS_DSN: Sentry-compatible DSN, e.g.
+        https://<application-token>@<ingesting-host>/1
+      - BETTERSTACK_SOURCE_TOKEN: source token from a Telemetry source
+      - BETTERSTACK_INGESTING_HOST: source-specific host, e.g.
+        s2397698.eu-nbg-2.betterstackdata.com (NOT in-otel.logs.betterstack.com
+        — per-source tokens get 401 there)
+      - BETTERSTACK_UPTIME_API_TOKEN: token for the Uptime REST API
+      - BETTERSTACK_HEARTBEAT_TOKEN: a heartbeat token for the API process
+      - BETTERSTACK_TRACES_SAMPLE_RATE: 0.0..1.0, default 0.1 (start low; OTLP
+        path captures full fidelity)
+    """
+
+    yaml_section = "betterstack"
+    model_config = SettingsConfigDict(
+        env_prefix="BETTERSTACK_",
+        extra="ignore",
+    )
+
+    # Errors product (Sentry envelope)
+    errors_dsn: Optional[str] = None
+    enable_errors: bool = True
+    traces_sample_rate: float = 0.1
+    profiles_sample_rate: float = 0.0
+
+    # Telemetry product (OTLP)
+    source_token: Optional[str] = None
+    ingesting_host: Optional[str] = None
+    enable_traces: bool = True
+    enable_metrics: bool = True
+    enable_logs: bool = True
+    metrics_export_interval_ms: int = 60_000
+
+    # Uptime product
+    uptime_api_token: Optional[str] = None
+    heartbeat_token: Optional[str] = None
+    heartbeat_period_seconds: int = 60
+
+    @property
+    def is_errors_configured(self) -> bool:
+        return bool(self.errors_dsn) and self.enable_errors
+
+    @property
+    def is_otlp_configured(self) -> bool:
+        return bool(self.source_token and self.ingesting_host)
+
+    def otlp_endpoint(self, signal: str) -> Optional[str]:
+        """Return the source-specific OTLP HTTP endpoint for a signal.
+
+        signal must be one of: "traces", "metrics", "logs".
+        """
+        if not self.is_otlp_configured:
+            return None
+        return f"https://{self.ingesting_host}/v1/{signal}"
 
 
 class PostHogSettings(OmoiBaseSettings):
@@ -910,9 +979,11 @@ class AppSettings:
         self.integrations = IntegrationSettings()
         self.embedding = EmbeddingSettings()
         self.observability = ObservabilitySettings()
+        self.betterstack = BetterStackSettings()
         # NOTE: SentrySettings was removed when Sentry was retired in favor of
         # PostHog Error Tracking. SENTRY_* env vars are now ignored. See
-        # omoi_os.observability.posthog for the replacement.
+        # omoi_os.observability.posthog for the replacement and
+        # omoi_os.observability.betterstack for the new primary sink.
         self.posthog = PostHogSettings()
         self.title_generation = TitleGenerationSettings()
         self.demo = DemoSettings()

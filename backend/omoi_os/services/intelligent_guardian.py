@@ -42,6 +42,29 @@ from omoi_os.utils.datetime import utc_now
 logger = get_logger(__name__)
 
 
+def _track_intervention(
+    intervention: "SteeringIntervention", *, executed: bool
+) -> None:
+    """Product-domain telemetry for guardian interventions. Best-effort."""
+    try:
+        from omoi_os.observability.telemetry import (
+            EVENT_AGENT_INTERVENTION,
+            track_event,
+        )
+
+        track_event(
+            EVENT_AGENT_INTERVENTION,
+            distinct_id=str(getattr(intervention, "agent_id", None) or "unknown"),
+            properties={
+                "intervention_type": getattr(intervention, "intervention_type", None),
+                "executed": executed,
+                "severity": getattr(intervention, "severity", None),
+            },
+        )
+    except Exception:  # noqa: BLE001 — telemetry must not block interventions
+        pass
+
+
 class TrajectoryAnalysis:
     """Container for trajectory analysis results."""
 
@@ -364,12 +387,14 @@ class IntelligentGuardian:
                     success = self._execute_intervention_action(intervention)
                     if success:
                         session.commit()
+                        _track_intervention(intervention, executed=True)
                         return True
                     else:
                         session.rollback()
                         return False
                 else:
                     session.commit()
+                    _track_intervention(intervention, executed=False)
                     return True
 
         except Exception as e:

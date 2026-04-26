@@ -534,6 +534,26 @@ class PhaseProgressionService:
                 tasks_count=tasks_spawned,
             )
 
+            # Product domain: surface spec phase transitions to PostHog +
+            # BetterStack so dashboards can chart funnel progression.
+            try:
+                from omoi_os.observability.telemetry import (
+                    EVENT_SPEC_PHASE_ADVANCED,
+                    track_event,
+                )
+
+                track_event(
+                    EVENT_SPEC_PHASE_ADVANCED,
+                    distinct_id=str(ticket_id),
+                    properties={
+                        "from_phase": from_phase,
+                        "to_phase": to_phase,
+                        "tasks_spawned": tasks_spawned,
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
         except Exception as e:
             logger.error(
                 "Error in Hook 2 (phase transitioned handler)",

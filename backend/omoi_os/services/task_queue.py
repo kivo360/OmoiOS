@@ -435,7 +435,10 @@ class TaskQueueService:
             persistence_dir: Optional OpenHands conversation persistence directory
         """
         from omoi_os.utils.datetime import utc_now
-        from omoi_os.observability.sentry import track_task_completed, track_task_failed
+        from omoi_os.observability.telemetry import (
+            track_task_completed,
+            track_task_failed,
+        )
 
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
@@ -790,7 +793,7 @@ class TaskQueueService:
         Returns:
             True if retry was scheduled, False if max retries exceeded
         """
-        from omoi_os.observability.sentry import track_task_retried
+        from omoi_os.observability.telemetry import track_task_retried
 
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
@@ -1014,7 +1017,7 @@ class TaskQueueService:
             True if task was marked as timed out, False if task not found
         """
         from omoi_os.utils.datetime import utc_now
-        from omoi_os.observability.sentry import track_task_failed
+        from omoi_os.observability.telemetry import track_task_failed
 
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
