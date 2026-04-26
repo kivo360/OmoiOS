@@ -139,6 +139,62 @@ class CredentialBrokerService:
             session.add(log_entry)
             session.commit()
 
+    async def resolve_aliases_for_spawn(
+        self,
+        environment_version_id: UUID,
+        workspace_id: UUID,
+    ) -> dict[str, dict]:
+        """Resolve every alias on an env_version for inline sandbox injection.
+
+        Variant of ``resolve_alias`` that doesn't require a SandboxSession
+        — used by sandbox spawners (Modal/Daytona) that need to render
+        ``auth.json`` directly into the sandbox filesystem at create time
+        because bootstrap.sh never executes there.
+
+        Returns ``{alias: payload}`` shaped exactly like ``resolve_alias``
+        — drops aliases whose binding can't be resolved (missing,
+        wrong workspace) so a single broken alias doesn't kill spawn.
+        """
+        env_version = self._load_env_version(environment_version_id)
+        out: dict[str, dict] = {}
+        for alias, mapping in (env_version.credentials or {}).items():
+            if not isinstance(mapping, dict):
+                continue
+            kind = mapping.get("kind")
+            try:
+                if kind == "bearer_secret":
+                    binding_id = self._required_mapping_uuid(mapping, "binding_id")
+                    binding = self._load_workspace_binding(
+                        binding_id=binding_id,
+                        workspace_id=workspace_id,
+                        expected_kind="bearer_secret",
+                    )
+                    out[alias] = {
+                        "kind": "bearer_secret",
+                        "value": self._decrypt_secret_value(binding.encrypted_value),
+                    }
+                elif kind == "github_app":
+                    out[alias] = await self._resolve_github_app(mapping)
+                elif kind == "user_oauth":
+                    # OAuth refresh requires a SandboxSession for refresh
+                    # flows; skip in spawn-time path. Spawner will rely on
+                    # bootstrap broker fetch for this kind (or on the
+                    # bearer_secret variant).
+                    logger.info(
+                        "Skipping user_oauth alias in spawn-time auth.json render",
+                        extra={"alias": alias},
+                    )
+                    continue
+                else:
+                    continue
+            except CredentialBrokerError as exc:
+                logger.warning(
+                    "Spawn-time alias resolution failed",
+                    extra={"alias": alias, "kind": kind, "error": str(exc)},
+                )
+                continue
+        return out
+
     async def resolve_alias(self, session: SandboxSession, alias: str) -> dict:
         """Resolve a credential alias from the session's environment version.
 

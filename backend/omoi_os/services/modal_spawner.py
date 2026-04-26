@@ -354,6 +354,55 @@ class ModalSpawnerService:
                     extra={"sandbox_id": sandbox_id, "error": str(exc)},
                 )
 
+        # auth.json — Modal never runs bootstrap.sh, so the broker→
+        # auth.json render path is dead. Resolve aliases inline against
+        # the broker service and write the file directly. This is the
+        # secret-delivery analog of the opencode.json write above.
+        ws_id_label = (labels or {}).get("workspace_id")
+        if env_version and env_version.credentials and ws_id_label:
+            try:
+                from uuid import UUID as _UUID
+
+                from omoi_os.services.credential_broker import (
+                    get_credential_broker_service,
+                )
+                from omoi_os.services.opencode_config_renderer import (
+                    render_auth_json,
+                )
+
+                broker = get_credential_broker_service()
+                resolved = await broker.resolve_aliases_for_spawn(
+                    environment_version_id=env_version.id,
+                    workspace_id=_UUID(ws_id_label)
+                    if isinstance(ws_id_label, str)
+                    else ws_id_label,
+                )
+                if resolved:
+                    auth_body = render_auth_json(resolved)
+                    await _run_sync(
+                        lambda: sandbox.exec(
+                            "mkdir", "-p", "/root/.local/share/opencode"
+                        )
+                    )
+                    await _run_sync(
+                        lambda: sandbox.filesystem.write_bytes(
+                            auth_body.encode("utf-8"),
+                            "/root/.local/share/opencode/auth.json",
+                        )
+                    )
+                    logger.info(
+                        "[MODAL_SPAWNER] auth.json written",
+                        extra={
+                            "sandbox_id": sandbox_id,
+                            "alias_count": len(resolved),
+                        },
+                    )
+            except Exception as exc:  # noqa: BLE001 — best-effort
+                logger.warning(
+                    "[MODAL_SPAWNER] auth.json write failed",
+                    extra={"sandbox_id": sandbox_id, "error": str(exc)},
+                )
+
         # Tunnel URLs for any exposed_ports. Modal returns these
         # synchronously after `create` completes.
         if exposed_ports:

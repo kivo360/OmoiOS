@@ -130,6 +130,73 @@ def render_opencode_config(
     return json.dumps(config, indent=2)
 
 
+def render_auth_json(resolved_aliases: dict[str, dict]) -> str:
+    """Build OpenCode's auth.json from already-resolved credential payloads.
+
+    Mirrors `sandbox/bootstrap.sh::render_auth_entry`, but runs in the
+    spawner so Modal sandboxes (which start with `sleep infinity` and
+    never execute bootstrap.sh) get the file written for them.
+
+    Args:
+        resolved_aliases: ``{alias: {kind, ...}}`` where each entry is
+            already-decrypted broker output. Supported kinds:
+
+            - ``bearer_secret``  → ``{"value": "fw_..."}``
+            - ``user_oauth``     → ``{"access_token", "refresh_token?",
+              "expires_at"}`` (expires_at as ISO string or epoch seconds)
+            - ``github_app``     → ``{"token", "expires_at"}``
+
+    Returns:
+        JSON string ready to write to
+        ``~/.local/share/opencode/auth.json``.
+    """
+    auth: dict[str, dict] = {}
+    for alias, payload in resolved_aliases.items():
+        kind = payload.get("kind")
+        if kind == "bearer_secret":
+            auth[alias] = {"type": "api", "key": payload["value"]}
+        elif kind == "user_oauth":
+            entry: dict = {
+                "type": "oauth",
+                "access": payload.get("access_token") or payload.get("access"),
+            }
+            refresh = payload.get("refresh_token") or payload.get("refresh")
+            if refresh:
+                entry["refresh"] = refresh
+            expires = payload.get("expires_at") or payload.get("expires")
+            if expires is not None:
+                entry["expires"] = _coerce_expires(expires)
+            auth[alias] = entry
+        elif kind == "github_app":
+            entry = {
+                "type": "oauth",
+                "access": payload.get("token") or payload.get("access"),
+            }
+            expires = payload.get("expires_at") or payload.get("expires")
+            if expires is not None:
+                entry["expires"] = _coerce_expires(expires)
+            auth[alias] = entry
+        else:
+            # Skip unknown kinds rather than crashing — bootstrap does
+            # the same and logs the miss; here we silently omit.
+            continue
+    return json.dumps(auth, indent=2)
+
+
+def _coerce_expires(value: Any) -> int:
+    """Best-effort ISO/epoch → unix-seconds-int (auth.json shape)."""
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        from datetime import datetime
+
+        try:
+            return int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
+        except ValueError:
+            return 0
+    return 0
+
+
 def render_omo_config(
     credential_aliases: list[str],
     *,
