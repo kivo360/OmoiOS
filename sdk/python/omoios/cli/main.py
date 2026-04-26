@@ -26,12 +26,18 @@ from typing import Annotated
 from cyclopts import App, Parameter
 
 from omoios.cli._ui import CliError, die, err_console
+from omoios.cli.artifacts import artifacts_app
 from omoios.cli.auth import auth_app
 from omoios.cli.config import config_app
+from omoios.cli.connections import connections_app
+from omoios.cli.environments import environments_app
 from omoios.cli.providers import providers_app
 from omoios.cli.sessions import sessions_app
 from omoios.cli.signup import signup
+from omoios.cli.usage import usage_app
+from omoios.cli.webhooks import webhooks_app
 from omoios.cli.whoami import whoami
+from omoios.cli.workspaces import workspaces_app
 
 app = App(
     name="omoios",
@@ -44,8 +50,14 @@ app = App(
     ),
 )
 
+app.command(workspaces_app)
+app.command(environments_app)
 app.command(providers_app)
 app.command(sessions_app)
+app.command(webhooks_app)
+app.command(artifacts_app)
+app.command(connections_app)
+app.command(usage_app)
 app.command(auth_app)
 app.command(config_app)
 app.command(signup)
