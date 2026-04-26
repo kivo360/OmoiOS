@@ -3,8 +3,49 @@
 > **Active working memory.** This is the WAL target — write here FIRST, respond SECOND.
 > Read this at session start to recover context.
 
-**Last Updated:** 2026-04-26 (evening, post-correction)
-**Status:** ACTIVE — Phase 1 plan revised after user correction; awaiting go on Task #1
+**Last Updated:** 2026-04-26 (late evening, paused for PR review)
+**Status:** PAUSED — 5/7 active tasks complete; two PRs awaiting review; Tasks #7 + #8 next session
+
+## Next-Session Resume Point
+
+**Two PRs ready for review:**
+
+1. `kivo360/sandbox-agent-python` branch `feat/persistence-driver-injection`
+   - `234de41` Protocol + persistence injection point
+   - `0e731ca` widen websockets range to <16
+   - `bcdbcbe` rewrite modal provider against real modal SDK
+   - https://github.com/kivo360/sandbox-agent-python/pull/new/feat/persistence-driver-injection
+   - **Action**: review, merge, publish 0.2.0 to PyPI
+
+2. `kivo360/OmoiOS` branch `feat/sandbox-agent-sdk-adoption`
+   - `926806e2` SessionPersistDriver adapter + 33 unit tests
+   - `8ae62776` OmoiOsModalProvider + 17 unit tests
+   - https://github.com/kivo360/OmoiOS/pull/new/feat/sandbox-agent-sdk-adoption
+   - **Action**: review, merge after SDK 0.2.0 is on PyPI (then swap pyproject from local-path to PyPI version)
+
+**After publish, swap omoi_os pyproject** from `path = "/Users/kevinhill/..."` to plain PyPI constraint.
+
+## Tasks remaining
+
+- **Task #7**: Replace `_dispatch_to_sandboxed_agent` in `backend/omoi_os/services/chat_responder.py:268-299` with one SDK call. Build env_vars (BROKER_URL, SESSION_TOKEN, OMOIOS_OPENCODE_CONFIG, OMOIOS_OMO_CONFIG, FIREWORKS_API_KEY), construct `OmoiOsModalProvider(env_vars=...)`, call `SandboxAgent.start(provider=…, workspace_files={"auth.json": WorkspaceConfig.auth_json({"fireworks-ai": {"type":"api","key": settings.llm_api_key}})}, persistence=OmoiOsSessionPersistDriver(db))`, then `agent.resume_or_create_session(session_id, agent="opencode")` and `session.prompt(user_text)`. Emit single `session.message` event from response. Delete `modal_sandboxed_agent.py` + `_extract_opencode_reply` regex stripping.
+- **Task #8**: `scripts/poof/probe_modal_chat_via_sdk.sh` end-to-end probe + DB-backed integration tests for `OmoiOsSessionPersistDriver` (idempotent insert, monotonic event_index, cursor pagination).
+
+## Tasks completed this session
+
+- ✅ #1: SDK Protocol + persistence injection (sandbox-agent-python)
+- ✅ #2: omoi_os pin sandbox-agent-sdk 0.2.0 via local editable path
+- ❌ #3: DELETED — no migration needed (existing tasks + events tables suffice)
+- ✅ #4: `OmoiOsSessionPersistDriver` adapter over existing tables
+- ✅ #5: `OmoiOsModalProvider` thin subclass of SDK ModalProvider
+- ✅ #6: ROLLED INTO #5 — `build_omoi_modal_image()` bakes opencode at image-build time
+
+**Test totals**: 6 new SDK tests + 33 omoi_os adapter tests + 17 provider tests = **56 new tests, all green**. SDK's 219 existing tests pass on the new branch.
+
+## Key learnings
+
+1. **SDK's modal provider was broken** — imported `modal.ModalClient` and `modal.SandboxCreateParams` which don't exist in any released modal version. Rewritten in `bcdbcbe`.
+2. **websockets cap was too tight** — `<14` blocked omoi_os daytona dep; widened to `<16`.
+3. **No new tables needed** — existing schema fully covers SDK's persistence needs (caught by user correction).
 
 ---
 
