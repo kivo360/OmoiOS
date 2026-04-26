@@ -60,7 +60,7 @@ def build_omoi_modal_image(*, base: str | None = None) -> Any:
         # Force install verification at image-build time so broken installs
         # surface in Modal build logs rather than at first sandbox.exec.
         "/root/.opencode/bin/opencode --version",
-    )
+    ).env({"PATH": "/root/.opencode/bin:/usr/local/bin:/usr/bin:/bin"})
 
 
 class OmoiOsModalProvider(ModalProvider):
