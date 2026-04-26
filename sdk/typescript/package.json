@@ -1,20 +1,44 @@
 {
   "name": "@omoios/sdk",
-  "version": "0.1.0",
-  "description": "OmoiOS SDK for agent workspace platform",
+  "version": "0.2.0",
+  "description": "OmoiOS SDK for agent workspace platform — sessions, events, multiplayer (spec §18)",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "private": true,
+  "files": ["dist", "README.md", "LICENSE"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "test": "vitest run",
     "build": "tsc",
     "type-check": "tsc --noEmit",
-    "dev": "vitest"
+    "dev": "vitest",
+    "prepublishOnly": "tsc"
   },
-  "keywords": ["omoi", "agent", "workspace", "sdk"],
+  "keywords": [
+    "omoios",
+    "agent",
+    "workspace",
+    "sdk",
+    "sse",
+    "websocket",
+    "multiplayer"
+  ],
   "author": "OmoiOS Team <team@omoios.dev>",
   "license": "Apache-2.0",
+  "homepage": "https://omoios.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kivo360/OmoiOS.git",
+    "directory": "sdk/typescript"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
