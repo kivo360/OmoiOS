@@ -626,6 +626,32 @@ async def _allocate_via_modal(ctx: Context) -> PhaseResult:
                            detail=f"exec failed: {e}")
 
 
+def _is_modal_provider() -> bool:
+    """True when smoke is running in Modal mode."""
+    return os.environ.get(
+        "OMOIOS_SMOKE_SANDBOX_PROVIDER",
+        os.environ.get("SANDBOX_PROVIDER", "daytona"),
+    ).lower() == "modal"
+
+
+def _modal_skip(name: str) -> PhaseResult:
+    """SKIP verdict for phases whose body still hits the Daytona SDK.
+
+    These phases verify behavior of `daytona_spawner.py`'s injection (egress
+    env vars, opencode auth.json, etc.). When the provider is Modal, the
+    Daytona spawner doesn't run at all, so there's nothing to verify with
+    those tests in their current form. The Modal equivalent lives in
+    `modal_spawner.py` and is covered by `scripts/modal_smoke.py`.
+    """
+    return PhaseResult(
+        name, Verdict.SKIP,
+        detail=(
+            "modal provider: phase still uses Daytona-SDK probes; "
+            "modal-mode equivalents are covered by scripts/modal_smoke.py"
+        ),
+    )
+
+
 @phase("egress_proxy_wiring")
 async def phase_egress_proxy_wiring(ctx: Context) -> PhaseResult:
     """Verify the Daytona spawner injects HTTPS_PROXY when egress is configured.
@@ -644,6 +670,8 @@ async def phase_egress_proxy_wiring(ctx: Context) -> PhaseResult:
     if not ctx.daytona_sandbox_id:
         return PhaseResult("egress_proxy_wiring", Verdict.SKIP,
                            detail="no sandbox allocated")
+    if _is_modal_provider():
+        return _modal_skip("egress_proxy_wiring")
     try:
         from daytona import Daytona, DaytonaConfig
         cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
@@ -675,6 +703,8 @@ async def phase_egress_allow_deny(ctx: Context) -> PhaseResult:
     """
     if not ctx.daytona_sandbox_id:
         return PhaseResult("egress_allow_deny", Verdict.SKIP, detail="no sandbox")
+    if _is_modal_provider():
+        return _modal_skip("egress_allow_deny")
 
     try:
         from daytona import Daytona, DaytonaConfig
@@ -728,6 +758,8 @@ async def phase_opencode_auth_json(ctx: Context) -> PhaseResult:
     """
     if not ctx.daytona_sandbox_id:
         return PhaseResult("opencode_auth_json", Verdict.SKIP, detail="no sandbox")
+    if _is_modal_provider():
+        return _modal_skip("opencode_auth_json")
     try:
         from daytona import Daytona, DaytonaConfig
         cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
@@ -825,6 +857,8 @@ async def phase_opencode_config(ctx: Context) -> PhaseResult:
     """
     if not ctx.daytona_sandbox_id:
         return PhaseResult("opencode_config", Verdict.SKIP, detail="no sandbox")
+    if _is_modal_provider():
+        return _modal_skip("opencode_config")
     try:
         from daytona import Daytona, DaytonaConfig
         cfg = DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL, target="us")
@@ -1776,6 +1810,8 @@ async def phase_egress_denied_envelope(ctx: Context) -> PhaseResult:
     """Blocked egress from sandbox returns 451 + `code=egress_denied` envelope."""
     if not ctx.daytona_sandbox_id:
         return PhaseResult("egress_denied_envelope", Verdict.SKIP, detail="no sandbox")
+    if _is_modal_provider():
+        return _modal_skip("egress_denied_envelope")
     try:
         from daytona import Daytona, DaytonaConfig
     except ImportError as e:
