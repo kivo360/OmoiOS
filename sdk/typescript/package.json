@@ -1,5 +1,5 @@
 {
-  "name": "@omoios/sdk",
+  "name": "omoios-sdk",
   "version": "0.2.0",
   "description": "OmoiOS SDK for agent workspace platform — sessions, events, multiplayer (spec §18)",
   "type": "module",
