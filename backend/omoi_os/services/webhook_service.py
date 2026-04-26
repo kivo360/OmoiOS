@@ -149,12 +149,16 @@ class WebhookService:
         self,
         org_id: UUID,
         active_only: bool = True,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[WebhookSubscription]:
         """List webhook subscriptions for an organization.
 
         Args:
             org_id: Organization ID
             active_only: If True, only return active subscriptions
+            limit: Maximum results to return (1..1000)
+            offset: Number of results to skip
 
         Returns:
             List of subscriptions
@@ -167,7 +171,12 @@ class WebhookService:
             if active_only:
                 query = query.filter(WebhookSubscription.active.is_(True))
 
-            subs = query.all()
+            subs = (
+                query.order_by(WebhookSubscription.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
             for sub in subs:
                 session.expunge(sub)
             return subs
@@ -291,9 +300,7 @@ class WebhookService:
         if not parsed.scheme or not parsed.netloc:
             raise WebhookSubscriptionError(f"Invalid webhook URL: {url}")
         if parsed.scheme not in ("http", "https"):
-            raise WebhookSubscriptionError(
-                f"Webhook URL must use http or https: {url}"
-            )
+            raise WebhookSubscriptionError(f"Webhook URL must use http or https: {url}")
 
     def _validate_events(self, events: list[str]) -> None:
         """Validate event types.

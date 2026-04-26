@@ -248,7 +248,19 @@ def reply_cmd(
     _run(_reply(cfg.api_base_url, cfg.api_key, session_id, text))
     ok(f"sent reply to [bold]{session_id}[/bold]")
     if watch:
-        _run(_watch_loop(cfg.api_base_url, cfg.api_key, session_id))
+        # Skip the historical replay (which includes the previous turn's
+        # terminal `session.succeeded`) by waiting for our own message
+        # to land before rendering. Once we see `actor=user:* + text=ours`,
+        # we know we've caught up to "now" and can render the agent's
+        # response.
+        _run(
+            _watch_loop(
+                cfg.api_base_url,
+                cfg.api_key,
+                session_id,
+                wait_for_our_text=text,
+            )
+        )
 
 
 # ─── omoios sessions cancel ──────────────────────────────────────────────────
@@ -393,19 +405,47 @@ async def _cancel(api_base_url, api_key, session_id):
         await client.sessions.cancel(session_id)
 
 
-async def _watch_loop(api_base_url, api_key, session_id):
+async def _watch_loop(
+    api_base_url,
+    api_key,
+    session_id,
+    *,
+    wait_for_our_text: Optional[str] = None,
+):
     """Stream events until a terminal session.* event arrives.
 
     Spec wire: events are full envelopes (no deltas / partials). Each
     event maps to a single console line or chat bubble.
+
+    `wait_for_our_text` enables multi-turn `reply --watch`: we silently
+    skip the historical replay (which includes the previous turn's
+    terminal `session.succeeded`) until we see our own user-message
+    land in the stream. From there we render normally and exit on the
+    next terminal event.
     """
     from omoios import AsyncOmoiOSClient
+
+    started = False if wait_for_our_text else True
 
     async with AsyncOmoiOSClient(
         base_url=api_base_url, api_key=api_key, timeout=None
     ) as client:
         try:
             async for evt in client.sessions.events(session_id):
+                if not started:
+                    etype = getattr(evt, "type", None) or evt.event_type
+                    actor = getattr(evt, "actor", "") or ""
+                    text = (evt.data or {}).get("text")
+                    if (
+                        etype == "session.message"
+                        and actor.startswith("user:")
+                        and text == wait_for_our_text
+                    ):
+                        started = True
+                        # Render our own message so the user sees it land,
+                        # then continue rendering the agent's reply.
+                        _render_event(evt)
+                    continue
                 if _render_event(evt):
                     return
         except KeyboardInterrupt:

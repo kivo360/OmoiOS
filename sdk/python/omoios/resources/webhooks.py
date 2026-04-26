@@ -15,21 +15,22 @@ class WebhooksResource(BaseResource):
         >>> print(webhooks[0].url)
     """
 
-    async def list(self) -> List[WebhookSubscription]:
-        """List webhook subscriptions.
+    async def list(self, org_id: str) -> List[WebhookSubscription]:
+        """List webhook subscriptions for an organization.
 
-        Returns:
-            List of webhook subscriptions
-
-        Example:
-            >>> webhooks = await client.webhooks.list()
+        Args:
+            org_id: Organization ID to filter by (backend requires it).
         """
         response = await self._client._request(
-            "GET", "/api/v1/webhooks/subscriptions"
+            "GET",
+            "/api/v1/webhooks/subscriptions",
+            params={"org_id": org_id},
         )
         return [WebhookSubscription.model_validate(item) for item in response.json()]
 
-    async def create(self, request: CreateWebhookRequest) -> WebhookSubscription:
+    async def create(
+        self, org_id: str, request: CreateWebhookRequest
+    ) -> WebhookSubscription:
         """Create a webhook subscription.
 
         Args:
@@ -49,6 +50,7 @@ class WebhooksResource(BaseResource):
         response = await self._client._request(
             "POST",
             "/api/v1/webhooks/subscriptions",
+            params={"org_id": org_id},
             json=request.model_dump(mode="json"),
         )
         return WebhookSubscription.model_validate(response.json())

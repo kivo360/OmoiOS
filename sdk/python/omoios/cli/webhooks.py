@@ -27,6 +27,14 @@ webhooks_app = App(
 
 @webhooks_app.command(name="list")
 def list_cmd(
+    org: Annotated[
+        Optional[str],
+        Parameter(
+            name=["--org", "--org-id"],
+            env_var="OMOIOS_TEST_ORG_ID",
+            help="Organization ID (env: OMOIOS_TEST_ORG_ID).",
+        ),
+    ] = None,
     json_output: Annotated[bool, Parameter(name="--json")] = False,
     api_base_url: Annotated[
         Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
@@ -35,9 +43,11 @@ def list_cmd(
         Optional[str], Parameter(name="--api-key", env_var="OMOIOS_PLATFORM_API_KEY")
     ] = None,
 ) -> None:
-    """List webhook subscriptions for the current org."""
+    """List webhook subscriptions for an org."""
+    if not org:
+        raise CliError("Pass --org <id> or set $OMOIOS_TEST_ORG_ID.")
     cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
-    items = run_sdk(_list(cfg.api_base_url, cfg.api_key))
+    items = run_sdk(_list(cfg.api_base_url, cfg.api_key, org))
     if json_output:
         console.print_json(_json.dumps([_to_dict(w) for w in items]))
         return
@@ -71,6 +81,14 @@ def create_cmd(
         ),
     ],
     description: Annotated[str, Parameter(name="--description")] = "",
+    org: Annotated[
+        Optional[str],
+        Parameter(
+            name=["--org", "--org-id"],
+            env_var="OMOIOS_TEST_ORG_ID",
+            help="Organization ID (env: OMOIOS_TEST_ORG_ID).",
+        ),
+    ] = None,
     api_base_url: Annotated[
         Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
     ] = None,
@@ -81,9 +99,11 @@ def create_cmd(
     """Register a new webhook subscription."""
     if not events:
         raise CliError("Pass at least one --event TYPE.")
+    if not org:
+        raise CliError("Pass --org <id> or set $OMOIOS_TEST_ORG_ID.")
     cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
     sub = run_sdk(
-        _create(cfg.api_base_url, cfg.api_key, url, events, description)
+        _create(cfg.api_base_url, cfg.api_key, org, url, events, description)
     )
     ok(f"created webhook [bold]{sub.id}[/bold] → {url}")
 
@@ -148,16 +168,16 @@ def deliveries_cmd(
 # ─── async impls ─────────────────────────────────────────────────────────────
 
 
-async def _list(api_base_url, api_key):
+async def _list(api_base_url, api_key, org_id):
     from omoios import AsyncOmoiOSClient
 
     async with AsyncOmoiOSClient(
         base_url=api_base_url, api_key=api_key, timeout=30.0
     ) as client:
-        return await client.webhooks.list()
+        return await client.webhooks.list(org_id)
 
 
-async def _create(api_base_url, api_key, url, events, description):
+async def _create(api_base_url, api_key, org_id, url, events, description):
     from omoios import AsyncOmoiOSClient
     from omoios.types import CreateWebhookRequest, WebhookEvent
 
@@ -165,11 +185,12 @@ async def _create(api_base_url, api_key, url, events, description):
         base_url=api_base_url, api_key=api_key, timeout=30.0
     ) as client:
         return await client.webhooks.create(
+            org_id,
             CreateWebhookRequest(
                 url=url,
                 events=[WebhookEvent(e) for e in events],
                 description=description or None,
-            )
+            ),
         )
 
 
