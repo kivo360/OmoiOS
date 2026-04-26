@@ -1,0 +1,8 @@
+{
+  "session_id": "66b1c477-e7c3-4fe1-afdd-44dc021ff169",
+  "agent_message_seq": 2,
+  "event_types_seen": [
+    "session.created",
+    "session.message"
+  ]
+}

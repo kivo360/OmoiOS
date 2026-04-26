@@ -237,6 +237,7 @@ def connect_cmd(
         api_key=cfg.api_key,
         session_id=session_id,
         my_user_id=cfg.user_id,
+        user_jwt=cfg.user_jwt,
     )
 
 

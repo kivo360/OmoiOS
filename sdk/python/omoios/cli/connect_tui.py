@@ -126,10 +126,12 @@ class ConnectApp(App):
         api_key: str,
         session_id: str,
         my_user_id: Optional[str],
+        user_jwt: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.api_base_url = api_base_url
         self.api_key = api_key
+        self.user_jwt = user_jwt
         self.session_id = session_id
         self.my_user_id = my_user_id or ""
         self._client = None
@@ -173,12 +175,18 @@ class ConnectApp(App):
         # WebSocket channel for presence + outbound sends. Best-effort: if
         # the backend hasn't wired the WS yet we keep the SSE-only mode.
         try:
-            ch = self._client.sessions.connect(self.session_id)
+            # session_channel.py requires a User JWT — platform key won't auth.
+            ch = self._client.sessions.connect(self.session_id, user_token=self.user_jwt)
             ch.on("*", self._on_ws_event)
             self._channel = await ch.open()
             self._log_event("ws.connected")
         except Exception as exc:  # noqa: BLE001
-            self._log_event(f"ws.failed · {exc}")
+            if not self.user_jwt:
+                self._log_event(
+                    "ws.failed · no user JWT (run `omoios signup` to mint one)"
+                )
+            else:
+                self._log_event(f"ws.failed · {exc}")
             self._channel = None
 
         self.sub_title = "connected"
@@ -361,6 +369,7 @@ def run_connect_tui(
     api_key: str,
     session_id: str,
     my_user_id: Optional[str] = None,
+    user_jwt: Optional[str] = None,
 ) -> None:
     """Launch the Textual app. Blocks until the user quits."""
     app = ConnectApp(
@@ -368,5 +377,6 @@ def run_connect_tui(
         api_key=api_key,
         session_id=session_id,
         my_user_id=my_user_id,
+        user_jwt=user_jwt,
     )
     app.run()

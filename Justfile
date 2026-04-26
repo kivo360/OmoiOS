@@ -351,6 +351,31 @@ db-history:
 db-current:
     cd {{backend_dir}} && uv run alembic current
 
+# Start a local Postgres (pg0, no Docker) on the test port; creates app_db
+[group('database')]
+pg0-up:
+    bash scripts/pg0_up.sh
+
+# Apply migrations to the local pg0 instance (app_db)
+[group('database')]
+pg0-migrate: pg0-up
+    cd {{backend_dir}} && DATABASE_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:15432/app_db" uv run alembic upgrade head
+
+# Stop the local pg0 instance (data persists at ~/.pg0/instances/omoi-os/)
+[group('database')]
+pg0-down:
+    ${HOME}/.local/bin/pg0 stop --name omoi-os || true
+
+# Drop the local pg0 instance entirely (deletes data; irreversible)
+[group('database')]
+pg0-nuke:
+    ${HOME}/.local/bin/pg0 drop --name omoi-os
+
+# Status of the local pg0 instance
+[group('database')]
+pg0-info:
+    ${HOME}/.local/bin/pg0 info --name omoi-os
+
 # ============================================================================
 # Docker Operations
 # ============================================================================
