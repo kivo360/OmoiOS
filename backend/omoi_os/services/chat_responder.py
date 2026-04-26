@@ -152,18 +152,19 @@ async def respond_to_session(
         last_user_turn = rendered["latest_user_turn"]
 
         # 3. Route to the active agent runtime. With the sandboxed-agent
-        #    feature flag on, we dispatch the turn to an opencode server
-        #    running inside a Daytona sandbox that's bound to this
-        #    OmoiOS session; the direct chat completion is kept as the
-        #    fallback for when the flag is off or the sandboxed path
-        #    fails to come up.
+        #    feature flag on, we dispatch the turn to opencode running
+        #    inside a sandbox bound to this OmoiOS session. The provider
+        #    (Modal vs Daytona) is selected by `sandbox.provider` config:
+        #      - "modal"   → modal_sandboxed_agent (single-shot exec)
+        #      - "daytona" → sandboxed_agent (long-lived opencode serve)
+        #      - else      → direct LLM fallback below.
+        #    Direct chat completion is kept as the fallback for when the
+        #    flag is off or the sandboxed path fails to come up.
         response_text: str = ""
         try:
-            from omoi_os.services import sandboxed_agent as _sandboxed
-
-            if _sandboxed.is_enabled():
-                agent = await _sandboxed.get_or_spawn(session_id)
-                response_text = await agent.prompt(last_user_turn)
+            response_text = await _dispatch_to_sandboxed_agent(
+                session_id, last_user_turn
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "sandboxed agent path failed — falling back to direct LLM",
@@ -262,6 +263,40 @@ def _render_history(messages: list[dict[str, str]]) -> dict[str, str]:
         "system_suffix": "\n".join(lines),
         "latest_user_turn": latest["content"],
     }
+
+
+async def _dispatch_to_sandboxed_agent(session_id: str, user_text: str) -> str:
+    """Route to the active sandboxed-agent runtime, or return "" when none.
+
+    Selection order (mirrors `services.sandbox_factory`):
+      1. Modal — `sandbox.provider == "modal"` AND feature flag on
+      2. Daytona — `sandbox.provider == "daytona"` AND feature flag on
+      3. Off — return "" so the caller falls back to direct LLM.
+
+    A returned empty string is the signal for "no sandboxed reply" — the
+    chat responder treats it as a fall-through, NOT as a failure.
+    """
+    try:
+        from omoi_os.config import get_app_settings
+
+        settings = get_app_settings()
+        if not bool(settings.feature_flags.sandboxed_agent_enabled):
+            return ""
+        provider = (settings.sandbox.provider or "").lower()
+    except Exception:  # noqa: BLE001
+        return ""
+
+    if provider == "modal":
+        from omoi_os.services import modal_sandboxed_agent as _modal
+
+        agent = await _modal.get_or_spawn(session_id)
+        return await agent.prompt(user_text)
+    if provider == "daytona":
+        from omoi_os.services import sandboxed_agent as _daytona
+
+        agent = await _daytona.get_or_spawn(session_id)
+        return await agent.prompt(user_text)
+    return ""
 
 
 async def _call_chat_completion(
