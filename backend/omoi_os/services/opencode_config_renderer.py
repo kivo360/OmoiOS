@@ -65,6 +65,14 @@ _KNOWN_PROVIDERS: dict[str, dict[str, Any]] = {
         "name": "xAI",
         "options": {"apiKey": "{env:XAI_API_KEY}"},
     },
+    "fireworks": {
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "Fireworks AI",
+        "options": {
+            "baseURL": "https://api.fireworks.ai/inference/v1",
+            "apiKey": "{env:FIREWORKS_API_KEY}",
+        },
+    },
 }
 
 # Default model per provider — used when picking the top-level `model`
@@ -76,10 +84,21 @@ _DEFAULT_MODELS: dict[str, str] = {
     "google": "google/gemini-2-pro",
     "groq": "groq/llama-3.3-70b-versatile",
     "xai": "xai/grok-4",
+    "fireworks": "fireworks/accounts/fireworks/routers/kimi-k2p5-turbo",
 }
 
 # Preference order when no alias is "anthropic" but multiple are set.
-_PREFERENCE_ORDER = ["anthropic", "openrouter", "openai", "google", "groq", "xai"]
+# `fireworks` first: when an env_version binds it, prefer Kimi K2.5 Turbo —
+# this is how proof-of-life targets the right LLM without tenant override.
+_PREFERENCE_ORDER = [
+    "fireworks",
+    "anthropic",
+    "openrouter",
+    "openai",
+    "google",
+    "groq",
+    "xai",
+]
 
 
 def render_opencode_config(
