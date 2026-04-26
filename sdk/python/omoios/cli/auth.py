@@ -28,10 +28,12 @@ import httpx
 
 from omoios.cli._config import update_config
 
-# Same Ov23* OAuth App used by the web redirect path. Device flow must
-# be enabled on the GitHub app for this to work; if it isn't, GitHub
-# returns 404 with `device_flow_disabled`.
-DEFAULT_CLIENT_ID = "Ov23lin1294IImhbsPHk"
+# The OmoiOS production GitHub OAuth App. Device Flow is enabled on
+# this app (verified 2026-04-26 — request returns a device_code);
+# the local-dev app `Ov23lin1294IImhbsPHk` has Device Flow disabled,
+# so we use the production client_id by default and let users override
+# via `OMOIOS_GITHUB_CLIENT_ID`.
+DEFAULT_CLIENT_ID = "Ov23lix7wDPhUskntl4c"
 
 DEVICE_CODE_URL = "https://github.com/login/device/code"
 TOKEN_URL = "https://github.com/login/oauth/access_token"

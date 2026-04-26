@@ -8,11 +8,23 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
-from typing import Optional
+from typing import Any, Awaitable, Optional
 
 import click
 
 from omoios.cli._config import resolve_config
+
+
+def _run_sdk(coro: Awaitable[Any]) -> Any:
+    """Run an SDK coroutine, translating SDK exceptions into clean
+    `click.ClickException` errors so the user sees a friendly message
+    instead of a Python traceback."""
+    from omoios.exceptions import OmoiOSError
+
+    try:
+        return asyncio.run(coro)
+    except OmoiOSError as exc:
+        raise click.ClickException(f"{type(exc).__name__}: {exc}") from exc
 
 
 @click.group()
@@ -48,7 +60,7 @@ def list_cmd(
         api_base_url=ctx.obj.get("api_base_url"),
         api_key=ctx.obj.get("api_key"),
     )
-    items = asyncio.run(_list(cfg.api_base_url, cfg.api_key, workspace_id))
+    items = _run_sdk(_list(cfg.api_base_url, cfg.api_key, workspace_id))
 
     if as_json:
         click.echo(_json.dumps([_credential_to_dict(c) for c in items], indent=2))
@@ -116,7 +128,7 @@ def add_cmd(
         api_base_url=ctx.obj.get("api_base_url"),
         api_key=ctx.obj.get("api_key"),
     )
-    created = asyncio.run(
+    created = _run_sdk(
         _add(
             cfg.api_base_url,
             cfg.api_key,
@@ -150,7 +162,7 @@ def delete_cmd(ctx: click.Context, credential_id: str, yes: bool) -> None:
         api_base_url=ctx.obj.get("api_base_url"),
         api_key=ctx.obj.get("api_key"),
     )
-    asyncio.run(_delete(cfg.api_base_url, cfg.api_key, credential_id))
+    _run_sdk(_delete(cfg.api_base_url, cfg.api_key, credential_id))
     click.echo(f"deleted {credential_id}")
 
 

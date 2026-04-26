@@ -19,7 +19,7 @@ from omoios.cli import signup as _signup
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(package_name="omoios-sdk", prog_name="omoios")
+@click.version_option(version="0.2.0", prog_name="omoios")
 @click.option(
     "--api-base-url",
     envvar="OMOIOS_API_BASE_URL",
