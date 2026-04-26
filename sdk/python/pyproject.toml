@@ -31,6 +31,13 @@ dependencies = [
     # `~/Library/Application Support/omoios` on macOS,
     # `%APPDATA%/omoios` on Windows.
     "platformdirs>=4.0",
+    # Textual TUI — backs the `omoios sessions connect` three-zone
+    # multiplayer interface (spec §18 Pattern D).
+    "textual>=0.74",
+    # WebSocket transport for `client.sessions.connect()` —
+    # required by the connect TUI; install eagerly so the experience
+    # works out of the box.
+    "httpx-ws>=0.6",
 ]
 
 [project.scripts]

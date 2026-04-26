@@ -204,6 +204,42 @@ def create_cmd(
     _run(_watch_loop(cfg.api_base_url, cfg.api_key, str(session.id)))
 
 
+# ─── omoios sessions connect (Textual three-zone TUI) ───────────────────────
+
+
+@sessions_app.command(name="connect")
+def connect_cmd(
+    session_id: Annotated[str, Parameter(help="Session ID to connect to.")],
+    api_base_url: Annotated[
+        Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
+    ] = None,
+    api_key: Annotated[
+        Optional[str], Parameter(name="--api-key", env_var="OMOIOS_PLATFORM_API_KEY")
+    ] = None,
+) -> None:
+    """Open the multiplayer Textual TUI (spec §18 Pattern D).
+
+    Three-zone layout: header / chat + presence sidebar / input.
+    Slash commands inside: /share, /fork, /upload, /quit.
+    Ctrl+C or Ctrl+Q to exit.
+    """
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
+    try:
+        from omoios.cli.connect_tui import run_connect_tui
+    except ImportError as exc:
+        raise CliError(
+            "Multiplayer connect requires `textual` and `httpx-ws`. "
+            "Reinstall the SDK to pull them in."
+        ) from exc
+
+    run_connect_tui(
+        api_base_url=cfg.api_base_url,
+        api_key=cfg.api_key,
+        session_id=session_id,
+        my_user_id=cfg.user_id,
+    )
+
+
 # ─── omoios sessions watch ───────────────────────────────────────────────────
 
 
