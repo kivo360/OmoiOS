@@ -72,6 +72,14 @@ _KNOWN_PROVIDERS: dict[str, dict[str, Any]] = {
             "baseURL": "https://api.fireworks.ai/inference/v1",
             "apiKey": "{env:FIREWORKS_API_KEY}",
         },
+        # Custom providers (npm-loaded) need an explicit `models` map —
+        # OpenCode can't auto-discover them and otherwise rejects the
+        # model lookup with ProviderModelNotFoundError.
+        "models": {
+            "accounts/fireworks/routers/kimi-k2p5-turbo": {
+                "name": "Kimi K2.5 Turbo",
+            },
+        },
     },
 }
 
