@@ -12,15 +12,20 @@ auto-derives a usable agent runtime — no per-tenant config templates.
 
 Design choices:
 
-- Provider npm package names mirror OpenCode's conventions (`@ai-sdk/...`).
-- API keys reference `{env:UPPERCASE_ALIAS_API_KEY}`. The bootstrap also
-  writes `auth.json` from the broker; OpenCode prefers `auth.json`
-  when both are set, so the env-var indirection is just a polite
-  fallback for callers running OpenCode directly.
-- Default model: prefer `anthropic` (best Claude 4 family for codegen),
-  then fall back to whatever else the environment has.
-- oh-my-openagent.jsonc gets a single `default` route; tenants who want
-  multiple categories can override at the env-version level.
+- Built-in providers (the OpenCode catalog: anthropic, openai, google,
+  fireworks-ai, github-copilot, opencode, opencode-go, zai-coding-plan,
+  …) need NO provider block in opencode.json — OpenCode resolves them
+  from its built-in catalog and reads the key from auth.json. Custom
+  providers (npm-loaded openai-compatible adapters etc.) need an
+  explicit provider entry plus a `models` map.
+- API keys live in auth.json (rendered by bootstrap.sh from broker
+  data). The `{env:VAR}` apiKey template is harmless decoration but
+  is NOT substituted for npm-loaded providers — auth.json is the
+  source of truth.
+- Aliases match OpenCode's actual provider ids (e.g. `fireworks-ai`,
+  not `fireworks`) so the same name flows through credentials,
+  auth.json, opencode.json `model`, and the OmO `agents`/`categories`
+  routing tree.
 """
 
 from __future__ import annotations
@@ -29,62 +34,27 @@ import json
 from typing import Any, Optional
 
 
-# Mapping: credential alias → OpenCode provider definition fragment.
-# When an alias is recognised here, we plug in the canonical npm
-# package + key reference. Unknown aliases get a passthrough entry so
-# the agent can still see the credential exists; OpenCode's provider
-# resolver tolerates extra keys.
-_KNOWN_PROVIDERS: dict[str, dict[str, Any]] = {
-    "anthropic": {
-        "npm": "@ai-sdk/anthropic",
-        "name": "Anthropic",
-        "options": {"apiKey": "{env:ANTHROPIC_API_KEY}"},
-    },
-    "openai": {
-        "npm": "@ai-sdk/openai",
-        "name": "OpenAI",
-        "options": {"apiKey": "{env:OPENAI_API_KEY}"},
-    },
-    "openrouter": {
-        "npm": "@openrouter/ai-sdk-provider",
-        "name": "OpenRouter",
-        "options": {"apiKey": "{env:OPENROUTER_API_KEY}"},
-    },
-    "google": {
-        "npm": "@ai-sdk/google",
-        "name": "Google",
-        "options": {"apiKey": "{env:GOOGLE_API_KEY}"},
-    },
-    "groq": {
-        "npm": "@ai-sdk/groq",
-        "name": "Groq",
-        "options": {"apiKey": "{env:GROQ_API_KEY}"},
-    },
-    "xai": {
-        "npm": "@ai-sdk/xai",
-        "name": "xAI",
-        "options": {"apiKey": "{env:XAI_API_KEY}"},
-    },
-    "fireworks": {
-        "npm": "@ai-sdk/openai-compatible",
-        "name": "Fireworks AI",
-        "options": {
-            "baseURL": "https://api.fireworks.ai/inference/v1",
-            "apiKey": "{env:FIREWORKS_API_KEY}",
-        },
-        # Custom providers (npm-loaded) need an explicit `models` map —
-        # OpenCode can't auto-discover them and otherwise rejects the
-        # model lookup with ProviderModelNotFoundError.
-        "models": {
-            "accounts/fireworks/routers/kimi-k2p5-turbo": {
-                "name": "Kimi K2.5 Turbo",
-            },
-        },
-    },
+# Built-in OpenCode providers — listed in the catalog OpenCode ships
+# with. For these, we never emit a `provider.<id>` block in
+# opencode.json: OpenCode auto-resolves them and pulls the key from
+# auth.json. The renderer only needs to know their default models.
+_BUILTIN_PROVIDERS: set[str] = {
+    "anthropic",
+    "openai",
+    "openrouter",
+    "google",
+    "groq",
+    "xai",
+    "fireworks-ai",
+    "github-copilot",
+    "opencode",
+    "opencode-go",
+    "zai-coding-plan",
+    "minimax-coding-plan",
 }
 
-# Default model per provider — used when picking the top-level `model`
-# field. Tenants can override by editing the environment version.
+# Default model per credential alias — used when picking the top-level
+# `model` field. Aliases must match OpenCode's actual provider ids.
 _DEFAULT_MODELS: dict[str, str] = {
     "anthropic": "anthropic/claude-sonnet-4-5",
     "openai": "openai/gpt-5",
@@ -92,14 +62,13 @@ _DEFAULT_MODELS: dict[str, str] = {
     "google": "google/gemini-2-pro",
     "groq": "groq/llama-3.3-70b-versatile",
     "xai": "xai/grok-4",
-    "fireworks": "fireworks/accounts/fireworks/routers/kimi-k2p5-turbo",
+    "fireworks-ai": "fireworks-ai/accounts/fireworks/routers/kimi-k2p5-turbo",
 }
 
-# Preference order when no alias is "anthropic" but multiple are set.
-# `fireworks` first: when an env_version binds it, prefer Kimi K2.5 Turbo —
-# this is how proof-of-life targets the right LLM without tenant override.
+# Preference order when an env_version binds multiple providers.
+# `fireworks-ai` first: when present it's our default Kimi lane.
 _PREFERENCE_ORDER = [
-    "fireworks",
+    "fireworks-ai",
     "anthropic",
     "openrouter",
     "openai",
@@ -126,22 +95,20 @@ def render_opencode_config(
         JSON string ready to be written to `~/.config/opencode/opencode.json`
         by `sandbox/bootstrap.sh` when `OMOIOS_OPENCODE_CONFIG` is set.
     """
-    # Build the provider block. Known aliases get the canonical
-    # definition; unknown aliases get a stub so the agent at least sees
-    # the alias exists — OpenCode treats extra providers as opt-in.
+    # Provider block: only emit entries for non-built-in aliases.
+    # Built-ins (fireworks-ai, anthropic, openai, …) are resolved from
+    # OpenCode's catalog + auth.json; an explicit override is unneeded.
     providers: dict[str, dict[str, Any]] = {}
     for alias in credential_aliases:
-        if alias in _KNOWN_PROVIDERS:
-            providers[alias] = _KNOWN_PROVIDERS[alias]
-        else:
-            providers[alias] = {
-                "name": alias,
-                "options": {
-                    "apiKey": f"{{env:{alias.upper()}_API_KEY}}",
-                },
-            }
+        if alias in _BUILTIN_PROVIDERS:
+            continue
+        providers[alias] = {
+            "name": alias,
+            "options": {
+                "apiKey": f"{{env:{alias.upper()}_API_KEY}}",
+            },
+        }
 
-    # Pick a default model. Caller override > anthropic > preference order.
     chosen_model = default_model
     if chosen_model is None:
         for pref in _PREFERENCE_ORDER:
@@ -149,10 +116,8 @@ def render_opencode_config(
                 chosen_model = _DEFAULT_MODELS[pref]
                 break
         if chosen_model is None and credential_aliases:
-            # Fallback: take the first alias and assume it follows
-            # `provider/model` form. Better than no model at all.
             first = credential_aliases[0]
-            chosen_model = f"{first}/default"
+            chosen_model = _DEFAULT_MODELS.get(first) or f"{first}/default"
 
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
@@ -172,9 +137,9 @@ def render_omo_config(
 ) -> str:
     """Build a minimal oh-my-openagent.jsonc body.
 
-    Just defines a single `default` route. Tenants who want
-    category-aware routing should override the environment version's
-    config templates rather than relying on the auto-generated default.
+    Mirrors the real OmO shape (top-level `agents` and `categories`
+    maps, each entry shaped `{model, fallback_models?}`). Tenants who
+    want richer routing override at the env-version level.
     """
     chosen_model = default_model
     if chosen_model is None:
@@ -184,17 +149,20 @@ def render_omo_config(
                 break
 
     if chosen_model is None:
-        # Absent any creds we still emit a valid (if useless) doc — the
-        # smoke phase tolerates this; OmO will pick the first available
-        # provider at runtime.
         chosen_model = "anthropic/claude-sonnet-4-5"
 
     body = {
-        "$schema": "https://oh-my-openagent.dev/config.json",
-        "default": {"model": chosen_model},
+        "$schema": (
+            "https://github.com/code-yeongyu/oh-my-openagent/raw/refs/"
+            "heads/dev/assets/oh-my-opencode.schema.json"
+        ),
+        "agents": {
+            "default": {"model": chosen_model},
+        },
+        "categories": {
+            "default": {"model": chosen_model},
+        },
     }
-    # Wrap in JSONC-friendly preamble so editors highlight the file
-    # correctly. JSON parsers tolerate the leading comment block.
     return (
         "// oh-my-openagent.jsonc — auto-generated from environment "
         "credentials\n" + json.dumps(body, indent=2)
