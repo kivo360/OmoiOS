@@ -143,16 +143,30 @@ async def orchestrator_loop():
     settings = get_app_settings()
     sandbox_execution = settings.daytona.sandbox_execution
 
-    # Initialize Daytona spawner if sandbox mode enabled
+    # Initialize sandbox spawner if sandbox mode enabled. Picks Daytona or
+    # Modal based on `settings.sandbox.provider` (env var SANDBOX_PROVIDER).
+    # Variable name is kept as `daytona_spawner` for downstream call sites,
+    # but the object honors whichever backend the factory selects.
     daytona_spawner = None
     if sandbox_execution:
         try:
-            from omoi_os.services.daytona_spawner import get_daytona_spawner
+            provider_name = (settings.sandbox.provider or "daytona").lower()
+            if provider_name == "modal":
+                from omoi_os.services.modal_spawner import get_modal_spawner
 
-            daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
-            logger.info("Sandbox execution mode ENABLED - will spawn Daytona sandboxes")
+                daytona_spawner = get_modal_spawner(db=db, event_bus=event_bus)
+                logger.info(
+                    "Sandbox execution mode ENABLED - will spawn Modal sandboxes"
+                )
+            else:
+                from omoi_os.services.daytona_spawner import get_daytona_spawner
+
+                daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
+                logger.info(
+                    "Sandbox execution mode ENABLED - will spawn Daytona sandboxes"
+                )
         except Exception as e:
-            logger.error("Failed to initialize Daytona spawner", error=str(e))
+            logger.error("Failed to initialize sandbox spawner", error=str(e))
             logger.warning("Falling back to legacy mode")
             sandbox_execution = False
     else:
