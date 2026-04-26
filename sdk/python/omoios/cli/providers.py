@@ -1,172 +1,205 @@
 """`omoios providers` — manage credential bindings (list/add/delete).
 
-Wraps the existing SDK `client.credentials` resource so the CLI is a
-thin terminal surface over the same API surface dashboards consume.
+Wraps the SDK `client.credentials` resource so the CLI is a thin
+terminal surface over the same API surface dashboards consume.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json as _json
-from typing import Any, Awaitable, Optional
+import os
+from typing import Annotated, Any, Awaitable, Optional
 
-import click
+from cyclopts import App, Parameter
+from rich.prompt import Confirm
+from rich.table import Table
 
 from omoios.cli._config import resolve_config
+from omoios.cli._ui import CliError, console, ok
+
+
+providers_app = App(
+    name="providers",
+    help="Manage provider credentials bound to a workspace.",
+)
+
+
+# ─── shared plumbing ─────────────────────────────────────────────────────────
 
 
 def _run_sdk(coro: Awaitable[Any]) -> Any:
     """Run an SDK coroutine, translating SDK exceptions into clean
-    `click.ClickException` errors so the user sees a friendly message
-    instead of a Python traceback."""
+    `CliError`s so the user sees a friendly message instead of a
+    Python traceback."""
     from omoios.exceptions import OmoiOSError
 
     try:
         return asyncio.run(coro)
     except OmoiOSError as exc:
-        raise click.ClickException(f"{type(exc).__name__}: {exc}") from exc
-
-
-@click.group()
-def providers() -> None:
-    """Manage provider credentials bound to a workspace."""
+        raise CliError(f"{type(exc).__name__}: {exc}") from exc
 
 
 # ─── omoios providers list ───────────────────────────────────────────────────
 
 
-@providers.command("list")
-@click.option(
-    "--workspace",
-    "workspace_id",
-    required=True,
-    metavar="<workspace_id>",
-    help="Workspace ID to list credentials for.",
-)
-@click.option(
-    "--json",
-    "as_json",
-    is_flag=True,
-    help="Emit raw JSON instead of the human-friendly table.",
-)
-@click.pass_context
+@providers_app.command(name="list")
 def list_cmd(
-    ctx: click.Context,
-    workspace_id: str,
-    as_json: bool,
+    workspace: Annotated[
+        str,
+        Parameter(
+            name=["--workspace", "-w"],
+            help="Workspace ID to list credentials for.",
+        ),
+    ],
+    json_output: Annotated[
+        bool,
+        Parameter(
+            name="--json",
+            help="Emit raw JSON instead of the rich table.",
+        ),
+    ] = False,
+    api_base_url: Annotated[
+        Optional[str],
+        Parameter(
+            name="--api-base-url",
+            env_var="OMOIOS_API_BASE_URL",
+            show_env_var=True,
+        ),
+    ] = None,
+    api_key: Annotated[
+        Optional[str],
+        Parameter(
+            name="--api-key",
+            env_var="OMOIOS_PLATFORM_API_KEY",
+            show_env_var=True,
+        ),
+    ] = None,
 ) -> None:
     """List credentials in a workspace."""
-    cfg = resolve_config(
-        api_base_url=ctx.obj.get("api_base_url"),
-        api_key=ctx.obj.get("api_key"),
-    )
-    items = _run_sdk(_list(cfg.api_base_url, cfg.api_key, workspace_id))
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
+    items = _run_sdk(_list(cfg.api_base_url, cfg.api_key, workspace))
 
-    if as_json:
-        click.echo(_json.dumps([_credential_to_dict(c) for c in items], indent=2))
+    if json_output:
+        console.print_json(_json.dumps([_credential_to_dict(c) for c in items]))
         return
 
     if not items:
-        click.echo(f"No credentials in workspace {workspace_id}.")
+        console.print(f"No credentials in workspace {workspace}.")
         return
 
-    click.echo(f"{'ID':<38} {'NAME':<32} KIND")
+    table = Table(title=f"credentials · workspace {workspace}", show_lines=False)
+    table.add_column("ID", style="dim", no_wrap=True)
+    table.add_column("NAME", style="cyan")
+    table.add_column("KIND", style="green")
     for c in items:
-        click.echo(f"{str(c.id):<38} {c.name:<32} {_kind_label(c)}")
+        table.add_row(str(c.id), c.name, _kind_label(c))
+    console.print(table)
 
 
 # ─── omoios providers add ────────────────────────────────────────────────────
 
 
-@providers.command("add")
-@click.option(
-    "--workspace",
-    "workspace_id",
-    required=True,
-    metavar="<workspace_id>",
-    help="Workspace ID to bind the credential into.",
-)
-@click.option(
-    "--name",
-    required=True,
-    help="Human-readable name (e.g. 'fireworks-prod').",
-)
-@click.option(
-    "--key",
-    "value",
-    metavar="<value>",
-    help=(
-        "Credential value. If omitted, read from $OMOIOS_PROVIDER_KEY "
-        "(safer than passing on the CLI)."
-    ),
-)
-@click.option(
-    "--kind",
-    type=click.Choice(["bearer_secret", "oauth", "api_key"], case_sensitive=False),
-    default="bearer_secret",
-    show_default=True,
-    help="BindingKind enum value — `bearer_secret` matches Fireworks/Anthropic.",
-)
-@click.pass_context
+@providers_app.command(name="add")
 def add_cmd(
-    ctx: click.Context,
-    workspace_id: str,
-    name: str,
-    value: Optional[str],
-    kind: str,
+    workspace: Annotated[
+        str,
+        Parameter(
+            name=["--workspace", "-w"],
+            help="Workspace ID to bind the credential into.",
+        ),
+    ],
+    name: Annotated[
+        str,
+        Parameter(name="--name", help="Human-readable name (e.g. 'fireworks-prod')."),
+    ],
+    key: Annotated[
+        Optional[str],
+        Parameter(
+            name="--key",
+            help=(
+                "Credential value. If omitted, read from $OMOIOS_PROVIDER_KEY "
+                "(safer than passing on the CLI)."
+            ),
+        ),
+    ] = None,
+    kind: Annotated[
+        str,
+        Parameter(
+            name="--kind",
+            help="BindingKind enum — `bearer_secret` matches Fireworks/Anthropic.",
+        ),
+    ] = "bearer_secret",
+    api_base_url: Annotated[
+        Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
+    ] = None,
+    api_key: Annotated[
+        Optional[str], Parameter(name="--api-key", env_var="OMOIOS_PLATFORM_API_KEY")
+    ] = None,
 ) -> None:
     """Create a new credential binding in a workspace."""
-    import os
+    if kind not in ("bearer_secret", "oauth", "api_key"):
+        raise CliError(
+            f"--kind must be one of bearer_secret/oauth/api_key, got {kind!r}"
+        )
 
-    secret = value or os.environ.get("OMOIOS_PROVIDER_KEY")
+    secret = key or os.environ.get("OMOIOS_PROVIDER_KEY")
     if not secret:
-        raise click.ClickException(
+        raise CliError(
             "Pass --key <value> or set OMOIOS_PROVIDER_KEY in the environment."
         )
 
-    cfg = resolve_config(
-        api_base_url=ctx.obj.get("api_base_url"),
-        api_key=ctx.obj.get("api_key"),
-    )
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
     created = _run_sdk(
         _add(
             cfg.api_base_url,
             cfg.api_key,
-            workspace_id=workspace_id,
+            workspace_id=workspace,
             name=name,
             kind=kind,
             value=secret,
         )
     )
-    click.echo(
-        f"created binding {created.id} ({created.name}, kind={_kind_label(created)})"
+    ok(
+        f"created binding [bold]{created.id}[/bold] "
+        f"({created.name}, kind={_kind_label(created)})"
     )
 
 
 # ─── omoios providers delete ─────────────────────────────────────────────────
 
 
-@providers.command("delete")
-@click.argument("credential_id")
-@click.option(
-    "--yes", is_flag=True, help="Skip the confirmation prompt."
-)
-@click.pass_context
-def delete_cmd(ctx: click.Context, credential_id: str, yes: bool) -> None:
+@providers_app.command(name="delete")
+def delete_cmd(
+    credential_id: Annotated[
+        str, Parameter(help="UUID of the credential binding to delete.")
+    ],
+    yes: Annotated[
+        bool,
+        Parameter(name=["--yes", "-y"], help="Skip the confirmation prompt."),
+    ] = False,
+    api_base_url: Annotated[
+        Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
+    ] = None,
+    api_key: Annotated[
+        Optional[str], Parameter(name="--api-key", env_var="OMOIOS_PLATFORM_API_KEY")
+    ] = None,
+) -> None:
     """Delete a credential binding by ID."""
     if not yes:
-        click.confirm(
-            f"Delete credential {credential_id}?", abort=True
+        confirmed = Confirm.ask(
+            f"Delete credential [bold]{credential_id}[/bold]?", default=False
         )
-    cfg = resolve_config(
-        api_base_url=ctx.obj.get("api_base_url"),
-        api_key=ctx.obj.get("api_key"),
-    )
+        if not confirmed:
+            console.print("[yellow]Aborted.[/yellow]")
+            raise CliError("aborted by user", code=1)
+
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
     _run_sdk(_delete(cfg.api_base_url, cfg.api_key, credential_id))
-    click.echo(f"deleted {credential_id}")
+    ok(f"deleted [bold]{credential_id}[/bold]")
 
 
-# ─── async impls (kept thin so the Click handlers are testable) ──────────────
+# ─── async impls (kept thin so the command bodies stay readable) ─────────────
 
 
 async def _list(api_base_url: str, api_key: str, workspace_id: str):

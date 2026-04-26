@@ -20,10 +20,12 @@ classifiers = [
 dependencies = [
     "httpx>=0.27",
     "pydantic>=2.5",
-    # CLI surface — `omoios` entry point uses Click for nested
-    # subcommands. Tiny, ubiquitous, much better UX than argparse for
-    # the providers/auth/signup subcommand tree.
-    "click>=8.1",
+    # CLI surface — `omoios` entry point uses Cyclopts for the nested
+    # `providers / auth / signup` subcommand tree. Type-hint-driven
+    # parameters with rich help generation; pulls in `rich` for the
+    # Table / Panel / Confirm output we use.
+    "cyclopts>=3.0",
+    "rich>=13.0",
 ]
 
 [project.scripts]

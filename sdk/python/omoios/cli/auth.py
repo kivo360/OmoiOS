@@ -5,34 +5,32 @@ redirect, no client secret, just a user_code the user types into a
 browser while we poll the token endpoint. See
 https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow.
 
-The OAuth App used for the existing web redirect (`AUTH_GITHUB_CLIENT_ID`
-in backend/.env) must have "Device Flow" enabled in its GitHub app
-settings. Override the client_id at the CLI seam via
-`OMOIOS_GITHUB_CLIENT_ID` if you want to use a separate CLI app.
-
-Resulting token is written to the XDG config file as `github_token` so
-future commands can use it without re-prompting. The token is local-only
-for now — there's no backend route that registers a device-flow token
-against an OmoiOS user yet (the web redirect path covers account
-linking).
+Resulting token is written to the XDG config file as `github_token`
+so future commands can use it without re-prompting. The token is
+local-only for now — there's no backend route that registers a
+device-flow token against an OmoiOS user yet (the web redirect path
+covers account linking).
 """
 
 from __future__ import annotations
 
 import time
 import webbrowser
-from typing import Any
+from typing import Annotated, Any
 
-import click
 import httpx
+from cyclopts import App, Parameter
+from rich.panel import Panel
 
 from omoios.cli._config import update_config
+from omoios.cli._ui import CliError, console, ok
 
-# The OmoiOS production GitHub OAuth App. Device Flow is enabled on
-# this app (verified 2026-04-26 — request returns a device_code);
-# the local-dev app `Ov23lin1294IImhbsPHk` has Device Flow disabled,
-# so we use the production client_id by default and let users override
-# via `OMOIOS_GITHUB_CLIENT_ID`.
+
+# OmoiOS production GitHub OAuth App. Device Flow is enabled on this
+# app (verified 2026-04-26 — request returns a device_code); the local
+# dev app `Ov23lin1294IImhbsPHk` has Device Flow disabled, so we use
+# the production client_id by default and let users override via
+# `OMOIOS_GITHUB_CLIENT_ID`.
 DEFAULT_CLIENT_ID = "Ov23lix7wDPhUskntl4c"
 
 DEVICE_CODE_URL = "https://github.com/login/device/code"
@@ -40,31 +38,34 @@ TOKEN_URL = "https://github.com/login/oauth/access_token"
 DEFAULT_SCOPES = "read:user user:email repo read:org"
 
 
-@click.group()
-def auth() -> None:
-    """Authenticate against external providers (GitHub, etc.)."""
+auth_app = App(
+    name="auth",
+    help="Authenticate against external providers (GitHub, etc.).",
+)
 
 
-@auth.command("github")
-@click.option(
-    "--client-id",
-    envvar="OMOIOS_GITHUB_CLIENT_ID",
-    default=DEFAULT_CLIENT_ID,
-    show_default=True,
-    help="GitHub OAuth App client_id with Device Flow enabled.",
-)
-@click.option(
-    "--scopes",
-    default=DEFAULT_SCOPES,
-    show_default=True,
-    help="Space-separated GitHub OAuth scopes to request.",
-)
-@click.option(
-    "--no-browser",
-    is_flag=True,
-    help="Skip auto-opening the verification URL in a browser.",
-)
-def github_cmd(client_id: str, scopes: str, no_browser: bool) -> None:
+@auth_app.command(name="github")
+def github_cmd(
+    client_id: Annotated[
+        str,
+        Parameter(
+            name="--client-id",
+            env_var="OMOIOS_GITHUB_CLIENT_ID",
+            help="GitHub OAuth App client_id with Device Flow enabled.",
+        ),
+    ] = DEFAULT_CLIENT_ID,
+    scopes: Annotated[
+        str,
+        Parameter(name="--scopes", help="Space-separated GitHub OAuth scopes."),
+    ] = DEFAULT_SCOPES,
+    no_browser: Annotated[
+        bool,
+        Parameter(
+            name="--no-browser",
+            help="Skip auto-opening the verification URL in a browser.",
+        ),
+    ] = False,
+) -> None:
     """Authenticate to GitHub via the device-code flow.
 
     Prints a short user_code, opens GitHub's verification page, polls
@@ -75,8 +76,14 @@ def github_cmd(client_id: str, scopes: str, no_browser: bool) -> None:
 
     user_code = device["user_code"]
     verification_uri = device["verification_uri"]
-    click.echo(f"\nGo to: {verification_uri}")
-    click.echo(f"Enter code: \033[1m{user_code}\033[0m\n")
+    console.print(
+        Panel.fit(
+            f"Visit [link={verification_uri}]{verification_uri}[/link]\n"
+            f"Enter code: [bold yellow]{user_code}[/bold yellow]",
+            title="GitHub Device Authorization",
+            border_style="cyan",
+        )
+    )
 
     if not no_browser:
         try:
@@ -94,9 +101,9 @@ def github_cmd(client_id: str, scopes: str, no_browser: bool) -> None:
     access_token = token_payload["access_token"]
     granted = token_payload.get("scope", "")
     path = update_config(github_token=access_token)
-    click.echo(f"✓ GitHub token saved to {path}")
+    ok(f"GitHub token saved to [dim]{path}[/dim]")
     if granted:
-        click.echo(f"  scopes: {granted}")
+        console.print(f"  scopes: [dim]{granted}[/dim]")
 
 
 def _request_device_code(client_id: str, scopes: str) -> dict[str, Any]:
@@ -107,13 +114,13 @@ def _request_device_code(client_id: str, scopes: str) -> dict[str, Any]:
             headers={"Accept": "application/json"},
         )
     if resp.status_code != 200:
-        raise click.ClickException(
+        raise CliError(
             f"GitHub device-code request failed: {resp.status_code} "
             f"{resp.text[:200]}"
         )
     data = resp.json()
     if "device_code" not in data:
-        raise click.ClickException(
+        raise CliError(
             "GitHub did not return a device_code. The OAuth App may not "
             "have Device Flow enabled. Set OMOIOS_GITHUB_CLIENT_ID to a "
             f"client_id with Device Flow turned on. Response: {data}"
@@ -155,19 +162,17 @@ def _poll_for_token(
                 poll += 5
                 continue
             if err in ("expired_token", "access_denied"):
-                raise click.ClickException(
+                raise CliError(
                     f"GitHub device-code authorization failed: {err}"
                 )
             if err:
-                raise click.ClickException(f"GitHub error: {err}")
+                raise CliError(f"GitHub error: {err}")
 
-    raise click.ClickException(
+    raise CliError(
         "Timed out waiting for GitHub authorization (the user_code expired)."
     )
 
 
-# Re-export for `omoios signup` to chain into without circular imports
-# at the click-decorator level.
 def run_github_device_flow(
     *,
     client_id: str = DEFAULT_CLIENT_ID,
@@ -178,8 +183,14 @@ def run_github_device_flow(
     auth after writing the platform config. Returns the access token
     and writes it to the XDG config."""
     device = _request_device_code(client_id, scopes)
-    click.echo(f"\nGo to: {device['verification_uri']}")
-    click.echo(f"Enter code: \033[1m{device['user_code']}\033[0m\n")
+    console.print(
+        Panel.fit(
+            f"Visit [link={device['verification_uri']}]{device['verification_uri']}[/link]\n"
+            f"Enter code: [bold yellow]{device['user_code']}[/bold yellow]",
+            title="GitHub Device Authorization",
+            border_style="cyan",
+        )
+    )
     if open_browser:
         try:
             webbrowser.open(device["verification_uri"])

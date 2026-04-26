@@ -1,56 +1,54 @@
-"""`omoios` command — Click root + global options.
+"""`omoios` command — Cyclopts root + nested subcommand apps.
 
-Subcommand groups:
+Subcommand apps:
   - `omoios providers` — credential bindings (list/add/delete)
-  - `omoios auth`      — GitHub device-code flow (placeholder; lands next)
-  - `omoios signup`    — tenant onboarding (placeholder; lands next)
+  - `omoios auth`      — GitHub device-code flow
+  - `omoios signup`    — interactive tenant onboarding
 
-Each subcommand resolves its CliConfig via `_config.resolve_config()` so
-the auth precedence is uniform: CLI flag > env var > XDG config file.
+Each subcommand resolves its CliConfig via `_config.resolve_config()`
+so the auth precedence is uniform: CLI flag > env var > XDG config file.
 """
 
 from __future__ import annotations
 
-import click
+import sys
 
-from omoios.cli import auth as _auth
-from omoios.cli import providers as _providers
-from omoios.cli import signup as _signup
+from cyclopts import App
 
+from omoios.cli._ui import CliError, die
+from omoios.cli.auth import auth_app
+from omoios.cli.providers import providers_app
+from omoios.cli.signup import signup
 
-@click.group(context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(version="0.2.0", prog_name="omoios")
-@click.option(
-    "--api-base-url",
-    envvar="OMOIOS_API_BASE_URL",
-    help="Override the API base URL (precedence: flag > env > config).",
+app = App(
+    name="omoios",
+    version="0.2.0",
+    help=(
+        "Terminal-first OmoiOS CLI.\n\n"
+        "Standing rule: every product capability lands here before any UI "
+        "exists for it. Provider management, GitHub auth, tenant onboarding — "
+        "all driven from `omoios <subcommand>`."
+    ),
 )
-@click.option(
-    "--api-key",
-    envvar="OMOIOS_PLATFORM_API_KEY",
-    help="Override the platform API key (precedence: flag > env > config).",
-)
-@click.pass_context
-def cli(ctx: click.Context, api_base_url: str | None, api_key: str | None) -> None:
-    """Terminal-first OmoiOS CLI.
 
-    Standing rule: every product capability lands here before any UI
-    exists for it. Provider management, GitHub auth, tenant onboarding —
-    all driven from `omoios <subcommand>`.
-    """
-    ctx.ensure_object(dict)
-    ctx.obj["api_base_url"] = api_base_url
-    ctx.obj["api_key"] = api_key
-
-
-cli.add_command(_providers.providers)
-cli.add_command(_auth.auth)
-cli.add_command(_signup.signup)
+app.command(providers_app)
+app.command(auth_app)
+app.command(signup)
 
 
 def main() -> None:
-    """Console-script entry point declared in pyproject.toml."""
-    cli(obj={})
+    """Console-script entry point declared in pyproject.toml.
+
+    We catch :class:`CliError` so helpers can raise without each command
+    site reaching for `sys.exit`. Cyclopts handles its own
+    parse/argument errors before this layer.
+    """
+    try:
+        app()
+    except CliError as exc:
+        die(exc.message, code=exc.code)
+    except KeyboardInterrupt:
+        sys.exit(130)
 
 
 if __name__ == "__main__":
