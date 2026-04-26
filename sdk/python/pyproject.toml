@@ -20,7 +20,17 @@ classifiers = [
 dependencies = [
     "httpx>=0.27",
     "pydantic>=2.5",
+    # CLI surface — `omoios` entry point uses Click for nested
+    # subcommands. Tiny, ubiquitous, much better UX than argparse for
+    # the providers/auth/signup subcommand tree.
+    "click>=8.1",
 ]
+
+[project.scripts]
+# Terminal-first CLI surface. See omoios/cli/main.py for the command tree.
+# Standing rule (memory:feedback_terminal_first): every product capability
+# must work 100% from this CLI before any UI exists for it.
+omoios = "omoios.cli.main:main"
 
 [project.optional-dependencies]
 # SSE streaming: `httpx-sse` backs `client.sessions.events(...)`. Not required
