@@ -341,15 +341,26 @@ class DaytonaSpawnerService:
         if env_version and env_version.credentials:
             env_vars["SESSION_TOKEN"] = sandbox_session_token
             env_vars["BROKER_URL"] = f"{base_url}/broker"
-            env_vars["OMOIOS_CREDENTIAL_ALIASES"] = ",".join(
-                env_version.credentials.keys()
+            aliases = list(env_version.credentials.keys())
+            env_vars["OMOIOS_CREDENTIAL_ALIASES"] = ",".join(aliases)
+
+            # Render opencode.json + oh-my-openagent.jsonc so the agent
+            # has a provider surface (spec §14). Bootstrap reads these
+            # env vars and writes the files into ~/.config/opencode/.
+            from omoi_os.services.opencode_config_renderer import (
+                render_omo_config,
+                render_opencode_config,
             )
+
+            env_vars["OMOIOS_OPENCODE_CONFIG"] = render_opencode_config(aliases)
+            env_vars["OMOIOS_OMO_CONFIG"] = render_omo_config(aliases)
+
             logger.info(
                 "[SPAWNER] Broker env vars injected",
                 extra={
                     "task_id": task_id,
                     "broker_url": f"{base_url}/broker",
-                    "credential_aliases": list(env_version.credentials.keys()),
+                    "credential_aliases": aliases,
                 },
             )
 

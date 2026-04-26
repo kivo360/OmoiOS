@@ -594,11 +594,24 @@ async def _allocate_via_modal(ctx: Context) -> PhaseResult:
             return PhaseResult(
                 "daytona_allocation", Verdict.FAIL,
                 detail=f"factory returned {type(provider).__name__}; expected ModalProvider")
+        # Render a sample opencode.json + oh-my-openagent.jsonc so the
+        # spawner's file-write step fires and `opencode_config` can
+        # verify the wiring without needing a real env_version (which
+        # the smoke can't easily synthesize against prod).
+        from omoi_os.services.opencode_config_renderer import (
+            render_omo_config,
+            render_opencode_config,
+        )
+        smoke_aliases = ["anthropic"]
         result = await provider.spawn_for_task(
             task_id=f"smoke-{uuid.uuid4().hex[:8]}",
             agent_id="smoke-agent",
             phase_id="PHASE_SMOKE",
-            env_vars={"SMOKE_TEST": "1"},
+            env_vars={
+                "SMOKE_TEST": "1",
+                "OMOIOS_OPENCODE_CONFIG": render_opencode_config(smoke_aliases),
+                "OMOIOS_OMO_CONFIG": render_omo_config(smoke_aliases),
+            },
             runtime="claude",
             execution_mode="implementation",
         )

@@ -181,7 +181,18 @@ class ModalSpawnerService:
             if sandbox_session_token:
                 env["SESSION_TOKEN"] = sandbox_session_token
             env["BROKER_URL"] = f"{base_url}/broker"
-            env["OMOIOS_CREDENTIAL_ALIASES"] = ",".join(env_version.credentials.keys())
+            aliases = list(env_version.credentials.keys())
+            env["OMOIOS_CREDENTIAL_ALIASES"] = ",".join(aliases)
+            # Render opencode.json + oh-my-openagent.jsonc — bootstrap
+            # writes them into ~/.config/opencode/ so the agent has a
+            # provider surface (spec §14, smoke phase opencode_config).
+            from omoi_os.services.opencode_config_renderer import (
+                render_omo_config,
+                render_opencode_config,
+            )
+
+            env["OMOIOS_OPENCODE_CONFIG"] = render_opencode_config(aliases)
+            env["OMOIOS_OMO_CONFIG"] = render_omo_config(aliases)
         if extra_env:
             env.update(extra_env)
         return env
@@ -298,6 +309,50 @@ class ModalSpawnerService:
         info.extra_data["modal_object_id"] = sandbox.object_id
         info.status = "running"
         info.started_at = utc_now()
+
+        # Render opencode.json + oh-my-openagent.jsonc directly to the
+        # sandbox filesystem. Modal's container starts with `sleep
+        # infinity` and never executes our bootstrap.sh, so we can't rely
+        # on the env-var contract bootstrap reads — write the files now
+        # while we have the sandbox handle. Skipped silently when no
+        # provider config was rendered (e.g. bare smoke sandboxes).
+        opencode_body = env.get("OMOIOS_OPENCODE_CONFIG")
+        omo_body = env.get("OMOIOS_OMO_CONFIG")
+        if opencode_body or omo_body:
+            try:
+                # Ensure the config dir exists. Modal `Image.run_commands`
+                # bakes /root/.config/opencode at image-build time, but
+                # mkdir -p is idempotent and cheap.
+                await _run_sync(
+                    lambda: sandbox.exec("mkdir", "-p", "/root/.config/opencode")
+                )
+                if opencode_body:
+                    await _run_sync(
+                        lambda: sandbox.filesystem.write_bytes(
+                            opencode_body.encode("utf-8"),
+                            "/root/.config/opencode/opencode.json",
+                        )
+                    )
+                if omo_body:
+                    await _run_sync(
+                        lambda: sandbox.filesystem.write_bytes(
+                            omo_body.encode("utf-8"),
+                            "/root/.config/opencode/oh-my-openagent.jsonc",
+                        )
+                    )
+                logger.info(
+                    "[MODAL_SPAWNER] opencode config files written",
+                    extra={
+                        "sandbox_id": sandbox_id,
+                        "wrote_opencode_json": bool(opencode_body),
+                        "wrote_omo_jsonc": bool(omo_body),
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001 — best-effort
+                logger.warning(
+                    "[MODAL_SPAWNER] opencode config write failed",
+                    extra={"sandbox_id": sandbox_id, "error": str(exc)},
+                )
 
         # Tunnel URLs for any exposed_ports. Modal returns these
         # synchronously after `create` completes.
