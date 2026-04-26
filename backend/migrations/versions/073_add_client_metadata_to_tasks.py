@@ -16,8 +16,13 @@ The API surface (request body and response key) keeps the spec name
 `metadata`; the rename is internal only.
 
 Revision ID: 073_add_client_metadata_to_tasks
-Revises: 072_environment_version_ports_and_volume
+Revises: a531fd3140dc
 Create Date: 2026-04-26
+
+Note: chains off the `a531fd3140dc` merge (heads 069+072+egress) rather
+than 072 directly, because 072 was already absorbed into that merge —
+chaining off 072 would re-introduce a sibling head and break
+`alembic upgrade head` on Railway.
 """
 
 from typing import Sequence, Union
@@ -28,7 +33,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = "073_add_client_metadata_to_tasks"
-down_revision: Union[str, None] = "072_environment_version_ports_and_volume"
+down_revision: Union[str, None] = "a531fd3140dc"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
