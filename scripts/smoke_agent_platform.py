@@ -920,6 +920,116 @@ async def phase_spec_broker_flow(ctx: Context) -> PhaseResult:
     )
 
 
+@phase("session_token_bounded_scope")
+async def phase_session_token_bounded_scope(ctx: Context) -> PhaseResult:
+    """Spec §06 last row: a `sess_tok_…` may ONLY authenticate against the
+    broker. Every other authenticated route must reject it with 401, not
+    coerce it into a platform-key code path that could expose data.
+
+    A leaked sandbox session token must be useless beyond `/broker/*`. We
+    use a fake `sess_tok_` here — the route classifier should send it to
+    the session verifier (which rejects fake tokens) regardless of which
+    endpoint it lands on. The interesting failure is a 200/201/403 on a
+    blocked path, which would mean the prefix wasn't honored.
+    """
+    fake = f"sess_tok_{secrets.token_hex(16)}"
+    headers = {"Authorization": f"Bearer {fake}"}
+
+    blocked_paths = [
+        "/api/v1/sessions",
+        "/api/v1/credentials",
+        "/api/v1/workspaces",
+        "/api/v1/environments",
+        "/api/v1/artifacts",
+        "/api/v1/connections",
+        "/api/v1/usage",
+    ]
+
+    leaks: list[str] = []
+    statuses: dict[str, int] = {}
+    for path in blocked_paths:
+        try:
+            r = await ctx.client.get(
+                f"{API_BASE_URL}{path}", headers=headers,
+                params={"workspace_id": ctx.workspace_a_id} if ctx.workspace_a_id else None,
+            )
+            statuses[path] = r.status_code
+            if r.status_code in (200, 201):
+                leaks.append(f"{path}={r.status_code}")
+        except Exception as e:
+            statuses[path] = -1
+            leaks.append(f"{path} raised {type(e).__name__}")
+
+    if leaks:
+        return PhaseResult(
+            "session_token_bounded_scope", Verdict.FAIL,
+            detail=f"sess_tok_ accepted on platform endpoints: {'; '.join(leaks)}",
+            evidence={"statuses": statuses},
+        )
+    return PhaseResult(
+        "session_token_bounded_scope", Verdict.PASS,
+        evidence={"statuses": statuses,
+                  "note": "all platform endpoints rejected fake sess_tok_"},
+    )
+
+
+@phase("api_shape_gate")
+async def phase_api_shape_gate(ctx: Context) -> PhaseResult:
+    """Spec §1.4: SDK types must match the server schema. Production has
+    /openapi.json disabled for security, so we instead probe known
+    response shapes — failure here means the SDK will silently break.
+
+    Required field set per spec §02 + sdk/python/omoios/types.py::Session.
+    Allows additive fields (extra='allow' on the model) but flags any
+    REMOVAL of a previously-documented key.
+    """
+    if not ctx.sdk_session_id:
+        return PhaseResult("api_shape_gate", Verdict.SKIP,
+                           detail="needs sdk_session_id; depends on session_create")
+
+    r = await ctx.client.get(
+        f"{API_BASE_URL}/api/v1/sessions/{ctx.sdk_session_id}",
+        headers=auth_headers(),
+    )
+    if r.status_code != 200:
+        return PhaseResult("api_shape_gate", Verdict.FAIL,
+                           detail=f"GET session: {r.status_code} {r.text[:200]}")
+    try:
+        body = r.json()
+    except Exception as e:
+        return PhaseResult("api_shape_gate", Verdict.FAIL,
+                           detail=f"non-JSON response: {e}")
+
+    required = {"id", "status", "created_at"}
+    expected = {
+        "id", "status", "created_at",
+        # nullable but present:
+        "ticket_id", "workspace_id", "environment_id",
+        "github_repo", "created_by", "ended_at",
+    }
+    missing_required = required - set(body.keys())
+    if missing_required:
+        return PhaseResult(
+            "api_shape_gate", Verdict.FAIL,
+            detail=f"required fields missing: {sorted(missing_required)}",
+            evidence={"keys_present": sorted(body.keys())},
+        )
+
+    # Soft signal: documented optional fields gone (the SDK declares them).
+    soft_missing = expected - set(body.keys()) - missing_required
+    return PhaseResult(
+        "api_shape_gate", Verdict.PASS,
+        evidence={
+            "keys_present": sorted(body.keys()),
+            "soft_missing": sorted(soft_missing),
+            "note": (
+                "all required fields present; SDK Session model expects "
+                f"{len(expected)} fields, server returned {len(body)}"
+            ),
+        },
+    )
+
+
 @phase("spec_event_envelope")
 async def phase_spec_event_envelope(ctx: Context) -> PhaseResult:
     """Spec §03: events carry {id, seq, type, session_id, actor, timestamp, data}.

@@ -17,11 +17,13 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Body,
+    Depends,
     HTTPException,
     Query,
     status,
 )
 
+from omoi_os.api.dependencies import get_auth_context_full, AuthContext
 from omoi_os.config import is_feature_enabled
 from omoi_os.logging import get_logger
 from omoi_os.models.credential_binding import CredentialBinding
@@ -32,6 +34,22 @@ from omoi_os.services.credential_broker import (
     InvalidBindingKindError,
     get_credential_broker_service,
 )
+
+
+def _require_platform_or_user(auth: AuthContext) -> None:
+    """Reject sandbox session tokens; only platform keys / user JWTs allowed.
+
+    `sess_tok_…` bearers are issued for in-sandbox broker calls and must
+    never authenticate platform endpoints. The token classifier already
+    routes them to the session verifier, but defense-in-depth requires
+    every authenticated platform route to also explicitly reject them.
+    """
+    if auth.token_kind == "session":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="session tokens are not valid on platform endpoints",
+        )
+
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -113,6 +131,7 @@ class CredentialResponse(BaseModel):
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_credential(
     request: CreateCredentialRequest = Body(...),
+    auth: AuthContext = Depends(get_auth_context_full),
 ) -> CredentialResponse:
     """Create a new credential binding.
 
@@ -127,6 +146,7 @@ async def create_credential(
                       500 if encryption fails
     """
     check_feature_flag()
+    _require_platform_or_user(auth)
 
     try:
         service = get_service()
@@ -172,6 +192,7 @@ async def create_credential(
 @router.get("")
 async def list_credentials(
     workspace_id: UUID = Query(..., description="Workspace ID to filter by"),
+    auth: AuthContext = Depends(get_auth_context_full),
 ) -> list[CredentialResponse]:
     """List credentials in a workspace.
 
@@ -185,6 +206,7 @@ async def list_credentials(
         HTTPException: 404 if feature disabled
     """
     check_feature_flag()
+    _require_platform_or_user(auth)
 
     try:
         service = get_service()
@@ -205,6 +227,7 @@ async def list_credentials(
 @router.get("/{binding_id}")
 async def get_credential(
     binding_id: UUID,
+    auth: AuthContext = Depends(get_auth_context_full),
 ) -> CredentialResponse:
     """Get a credential binding by ID.
 
@@ -218,6 +241,7 @@ async def get_credential(
         HTTPException: 404 if feature disabled or credential not found
     """
     check_feature_flag()
+    _require_platform_or_user(auth)
 
     try:
         service = get_service()
@@ -243,6 +267,7 @@ async def get_credential(
 @router.delete("/{binding_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_credential(
     binding_id: UUID,
+    auth: AuthContext = Depends(get_auth_context_full),
 ) -> None:
     """Delete a credential binding.
 
@@ -256,6 +281,7 @@ async def delete_credential(
         HTTPException: 404 if feature disabled or credential not found
     """
     check_feature_flag()
+    _require_platform_or_user(auth)
 
     try:
         service = get_service()

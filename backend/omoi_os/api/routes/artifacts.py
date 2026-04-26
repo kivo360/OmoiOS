@@ -18,6 +18,7 @@ from uuid import UUID
 
 from fastapi import (
     APIRouter,
+    Depends,
     File,
     Form,
     HTTPException,
@@ -27,6 +28,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 
+from omoi_os.api.dependencies import get_auth_context_full, AuthContext
 from omoi_os.config import is_feature_enabled
 from omoi_os.logging import get_logger
 from omoi_os.models.artifact import Artifact
@@ -34,6 +36,16 @@ from omoi_os.services.artifact_service import (
     ArtifactService,
     get_artifact_service,
 )
+
+
+def _require_platform_or_user(auth: AuthContext) -> None:
+    """Sandbox session tokens must not authenticate platform endpoints."""
+    if auth.token_kind == "session":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="session tokens are not valid on platform endpoints",
+        )
+
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -60,6 +72,7 @@ def get_service() -> ArtifactService:
 # ============================================================================
 # Request/Response Models
 # ============================================================================
+
 
 class ArtifactResponse:
     """Response model for artifact metadata."""
@@ -95,12 +108,14 @@ class ArtifactResponse:
 # API Endpoints
 # ============================================================================
 
+
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_artifact(
     workspace_id: UUID = Form(..., description="Workspace ID to store artifact in"),
     file: UploadFile = File(..., description="File to upload"),
     content_type: Optional[str] = Form(None, description="MIME type (optional)"),
     metadata: Optional[str] = Form(None, description="JSON metadata string (optional)"),
+    auth: AuthContext = Depends(get_auth_context_full),
 ) -> dict:
     """Upload a new artifact.
 
@@ -117,6 +132,7 @@ async def upload_artifact(
         HTTPException: 404 if feature disabled, 400 if upload fails
     """
     check_feature_flag()
+    _require_platform_or_user(auth)
 
     try:
         service = get_service()
@@ -212,6 +228,7 @@ async def list_artifacts(
     workspace_id: UUID = Query(..., description="Workspace ID to filter by"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results to skip"),
+    auth: AuthContext = Depends(get_auth_context_full),
 ) -> list[dict]:
     """List artifacts in a workspace.
 
@@ -227,6 +244,7 @@ async def list_artifacts(
         HTTPException: 404 if feature disabled
     """
     check_feature_flag()
+    _require_platform_or_user(auth)
 
     try:
         service = get_service()
@@ -249,7 +267,10 @@ async def list_artifacts(
 
 
 @router.get("/{artifact_id}")
-async def get_artifact(artifact_id: UUID) -> dict:
+async def get_artifact(
+    artifact_id: UUID,
+    auth: AuthContext = Depends(get_auth_context_full),
+) -> dict:
     """Get artifact metadata by ID.
 
     Args:
@@ -262,6 +283,7 @@ async def get_artifact(artifact_id: UUID) -> dict:
         HTTPException: 404 if feature disabled or artifact not found
     """
     check_feature_flag()
+    _require_platform_or_user(auth)
 
     try:
         service = get_service()
@@ -286,7 +308,10 @@ async def get_artifact(artifact_id: UUID) -> dict:
 
 
 @router.get("/{artifact_id}/download")
-async def download_artifact(artifact_id: UUID) -> StreamingResponse:
+async def download_artifact(
+    artifact_id: UUID,
+    auth: AuthContext = Depends(get_auth_context_full),
+) -> StreamingResponse:
     """Download artifact content.
 
     Args:
@@ -299,6 +324,7 @@ async def download_artifact(artifact_id: UUID) -> StreamingResponse:
         HTTPException: 404 if feature disabled or artifact not found
     """
     check_feature_flag()
+    _require_platform_or_user(auth)
 
     try:
         service = get_service()
@@ -345,7 +371,10 @@ async def download_artifact(artifact_id: UUID) -> StreamingResponse:
 
 
 @router.delete("/{artifact_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_artifact(artifact_id: UUID) -> None:
+async def delete_artifact(
+    artifact_id: UUID,
+    auth: AuthContext = Depends(get_auth_context_full),
+) -> None:
     """Delete an artifact.
 
     Args:
@@ -358,6 +387,7 @@ async def delete_artifact(artifact_id: UUID) -> None:
         HTTPException: 404 if feature disabled or artifact not found
     """
     check_feature_flag()
+    _require_platform_or_user(auth)
 
     try:
         service = get_service()

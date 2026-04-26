@@ -1,155 +1,78 @@
 {
-  "api_base_url": "http://localhost:18000",
-  "run_at": "2026-04-24T04:47:11Z",
+  "api_base_url": "https://api.omoios.dev",
+  "run_at": "2026-04-26T03:04:24Z",
   "summary": {
-    "PASS": 10,
-    "FAIL": 0,
-    "GAP": 3,
-    "SKIP": 2
+    "PASS": 4,
+    "FAIL": 1,
+    "GAP": 0,
+    "SKIP": 1
   },
   "phases": [
     {
       "name": "prereqs",
       "verdict": "PASS",
-      "duration_sec": 4.94,
+      "duration_sec": 0.4,
       "detail": "env + API reachable",
       "evidence": {}
     },
     {
       "name": "org_setup",
       "verdict": "PASS",
-      "duration_sec": 0.3,
+      "duration_sec": 0.36,
       "detail": "",
       "evidence": {
-        "ws_a": "f7ab3bd3-0e82-4789-b5ce-07cf72f0ada1",
-        "ws_b": "5195c7d2-9e3b-4b07-916f-91d21d9aaaf4"
+        "ws_a": "c75b19b9-e943-4fca-a602-bbc0e66be024",
+        "ws_b": "a3dae491-7982-42c7-ba06-c91f2094cf0e"
       }
     },
     {
-      "name": "credentials_crud",
-      "verdict": "PASS",
-      "duration_sec": 0.07,
-      "detail": "",
+      "name": "session_token_bounded_scope",
+      "verdict": "FAIL",
+      "duration_sec": 2.54,
+      "detail": "sess_tok_ accepted on platform endpoints: /api/v1/credentials=200; /api/v1/artifacts=200",
       "evidence": {
-        "binding_id": "474e5971-2a3e-4953-bcaf-2f081e27fe95"
+        "statuses": {
+          "/api/v1/sessions": 401,
+          "/api/v1/credentials": 200,
+          "/api/v1/workspaces": 401,
+          "/api/v1/environments": 422,
+          "/api/v1/artifacts": 200,
+          "/api/v1/connections": 401,
+          "/api/v1/usage": 401
+        }
       }
     },
     {
-      "name": "environments_crud",
-      "verdict": "PASS",
-      "duration_sec": 0.08,
-      "detail": "",
-      "evidence": {
-        "env_id": "6216ff2e-4263-450d-9d15-90ed429c5ed0",
-        "v1": 1,
-        "v2": 2
-      }
-    },
-    {
-      "name": "artifacts_roundtrip",
-      "verdict": "PASS",
-      "duration_sec": 0.18,
-      "detail": "",
-      "evidence": {
-        "artifact_id": "b411cf27-81c9-4159-b0a1-da37538e3c20",
-        "sha256": "42196c439feba13f0ca4a24066aecd018ad69425aeb53dc2f028690aa04a6b0f"
-      }
-    },
-    {
-      "name": "webhooks_hmac",
-      "verdict": "PASS",
-      "duration_sec": 0.64,
-      "detail": "",
-      "evidence": {
-        "sub_id": "ffdc54b0-a690-490e-acee-ec9e5bb6d8c0",
-        "signature_header": "t=1777006015,v1=e1925b13b07e7841f46e2582dc688bc5b7b04f1977157598534c8d77b70cedf7"
-      }
-    },
-    {
-      "name": "workspace_isolation",
-      "verdict": "PASS",
-      "duration_sec": 0.03,
-      "detail": "",
-      "evidence": {
-        "binding_a_in_a": true,
-        "binding_b_leaked_to_a": false
-      }
-    },
-    {
-      "name": "sessions_alias",
-      "verdict": "PASS",
-      "duration_sec": 0.62,
-      "detail": "",
-      "evidence": {
-        "deprecation_header": "Use /api/v1/tasks instead. Removed in v2.0."
-      }
-    },
-    {
-      "name": "daytona_allocation",
-      "verdict": "PASS",
-      "duration_sec": 8.96,
-      "detail": "",
-      "evidence": {
-        "sandbox_id": "2fc47847-4fd5-44cd-aec7-9462f26397a2",
-        "exec_output": "hello-from-daytona\n200"
-      }
-    },
-    {
-      "name": "egress_proxy_wiring",
-      "verdict": "GAP",
-      "duration_sec": 1.27,
-      "detail": "HTTPS_PROXY/NO_PROXY not injected into sandbox env \u2014 daytona_spawner.py needs to set these. Proxy binary exists standalone but is not in the sandbox data path.",
-      "evidence": {
-        "env_check": "NOT_SET"
-      }
-    },
-    {
-      "name": "egress_allow_deny",
+      "name": "api_shape_gate",
       "verdict": "SKIP",
-      "duration_sec": 1.25,
-      "detail": "HTTPS_PROXY unset in sandbox; cannot verify allow/deny behavior",
+      "duration_sec": 0.0,
+      "detail": "needs sdk_session_id; depends on session_create",
       "evidence": {}
     },
     {
-      "name": "opencode_auth_json",
-      "verdict": "GAP",
-      "duration_sec": 1.31,
-      "detail": "auth.json not written at sandbox boot. Need: bootstrap script that calls /broker/creds/<alias> for each declared alias and writes the result as auth.json (mode 0600). Required for GitHub Copilot OAuth; recommended for all providers.",
-      "evidence": {}
-    },
-    {
-      "name": "opencode_config",
+      "name": "sdk_prereqs",
       "verdict": "PASS",
-      "duration_sec": 1.27,
+      "duration_sec": 0.59,
       "detail": "",
       "evidence": {
-        "files": [
-          "/home/daytona/.config/opencode/opencode.json"
-        ]
+        "workspace_id": "c75b19b9-e943-4fca-a602-bbc0e66be024",
+        "ticket_id": null
       }
     },
     {
-      "name": "spec_broker_flow",
-      "verdict": "GAP",
-      "duration_sec": 0.01,
-      "detail": "GET /broker/creds/{alias} not implemented. Need: (1) sess_tok_... issuance on session create, (2) /broker/creds/{alias} endpoint that verifies session token and dispatches by env.credentials[alias].kind, (3) environment.credentials alias map (currently only env.variables)",
+      "name": "session_create",
+      "verdict": "PASS",
+      "duration_sec": 1.04,
+      "detail": "",
       "evidence": {
-        "http_code": 404
+        "session_id": "77f3ab0b-afa2-4f55-9d90-7c7d6a6984f9",
+        "idem_key": "smoke-56d8a8d7-6b52-4730-b1cf-e183226af6cb",
+        "ticket_id": null
       }
-    },
-    {
-      "name": "spec_event_envelope",
-      "verdict": "SKIP",
-      "duration_sec": 0.02,
-      "detail": "no tasks to inspect",
-      "evidence": {}
     }
   ],
   "cleanup": [
-    "del binding_a: 204",
-    "del binding_b: 204",
-    "del webhook_sub: 404",
-    "del artifact: 204",
-    "sandbox 2fc47847-4fd5-44cd-aec7-9462f26397a2: deleted"
+    "del sdk_session: 404",
+    "sdk_client: closed"
   ]
 }
