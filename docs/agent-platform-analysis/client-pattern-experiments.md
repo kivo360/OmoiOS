@@ -595,22 +595,49 @@ server twice. The SDK isn't memoizing.
 ## Running the experiments
 
 Most can be added as new phases in `scripts/smoke_agent_platform.py`.
-The smoke already covers experiments 2, 3, 4, 5, 9, 11 (partially), 13,
-17, 22 (implicitly).
+The smoke covers experiments 2, 3, 4, 5, 8 (partial via fork), 9, 11
+(partial), **12** (NEW), 13, 17, **21** (NEW via api_shape_gate), 22
+(implicit). Latest modal-mode prod smoke: **PASS 26 / FAIL 0 / GAP 1 /
+SKIP 5**.
 
-**Gaps to close in the smoke** (in priority order):
+### Gap-closure history
+- **2026-04-26**: Added `session_token_bounded_scope` (Exp 12) and
+  `api_shape_gate` (Exp 21). The first run **caught a real critical
+  security bug** — `/api/v1/credentials` and `/api/v1/artifacts` were
+  registered with no auth dependency at all. Anonymous callers with a
+  valid `workspace_id` could list, upload, and delete. Fix landed in
+  commit `8633bc05`.
+
+### Gaps still open (priority order)
 1. Experiment 6 — cancellation + sandbox cleanup verification
-2. Experiment 8 — fork from arbitrary seq
-3. Experiment 10 — share + multi-user WS
-4. Experiment 12 — session token bounded scope (security-critical)
-5. Experiment 16 — metadata opacity (the ReactGrab claim)
-6. Experiment 21 — OpenAPI drift detection (CI gate)
+2. Experiment 8 — fork from arbitrary seq (smoke does fork-from-latest;
+   needs an explicit `from_seq=N` test with assertion that earlier
+   events are NOT replayed in the fork's stream)
+3. Experiment 10 — share + multi-user WS (need a second user account)
+4. Experiment 16 — metadata opacity (the ReactGrab claim — round-trip
+   nested arbitrary JSON, assert exact equality on `get`)
 
-**Standalone** (don't fit in the smoke harness):
-- Experiment 14 — needs a tunneled webhook receiver
+### Standalone (don't fit in the smoke harness)
+- Experiment 14 — needs a tunneled webhook receiver (ngrok / RequestBin)
 - Experiment 18 — Cloudflare Worker harness
 - Experiment 19 — interactive CLI in a TTY
 - Experiment 23 — Edge Function deploy
+
+### Next-session checklist (post-compact pickup)
+
+If the smoke goes red, the most likely culprits in priority order:
+1. **JWT expiry** — refresh `backend/.env.smoke-test` via
+   `setup_prod_smoke_account.py`
+2. **Modal credits** — check `~/.modal.toml` profile is active and
+   has free-tier capacity
+3. **API shape drift** — `api_shape_gate` will FAIL with the missing
+   field listed; add it to the SDK's Session model with `Optional[…]`
+4. **Auth contract drift** — `session_token_bounded_scope` will list
+   leaked endpoints; add `Depends(get_auth_context_full)` +
+   `_require_platform_or_user(auth)` to each
+
+To extend the matrix: pick one of the 4 open in-smoke gaps and add a
+new `@phase(...)` modeled on the section "Spec mapping" above.
 
 ---
 

@@ -973,63 +973,6 @@ async def phase_session_token_bounded_scope(ctx: Context) -> PhaseResult:
     )
 
 
-@phase("api_shape_gate")
-async def phase_api_shape_gate(ctx: Context) -> PhaseResult:
-    """Spec §1.4: SDK types must match the server schema. Production has
-    /openapi.json disabled for security, so we instead probe known
-    response shapes — failure here means the SDK will silently break.
-
-    Required field set per spec §02 + sdk/python/omoios/types.py::Session.
-    Allows additive fields (extra='allow' on the model) but flags any
-    REMOVAL of a previously-documented key.
-    """
-    if not ctx.sdk_session_id:
-        return PhaseResult("api_shape_gate", Verdict.SKIP,
-                           detail="needs sdk_session_id; depends on session_create")
-
-    r = await ctx.client.get(
-        f"{API_BASE_URL}/api/v1/sessions/{ctx.sdk_session_id}",
-        headers=auth_headers(),
-    )
-    if r.status_code != 200:
-        return PhaseResult("api_shape_gate", Verdict.FAIL,
-                           detail=f"GET session: {r.status_code} {r.text[:200]}")
-    try:
-        body = r.json()
-    except Exception as e:
-        return PhaseResult("api_shape_gate", Verdict.FAIL,
-                           detail=f"non-JSON response: {e}")
-
-    required = {"id", "status", "created_at"}
-    expected = {
-        "id", "status", "created_at",
-        # nullable but present:
-        "ticket_id", "workspace_id", "environment_id",
-        "github_repo", "created_by", "ended_at",
-    }
-    missing_required = required - set(body.keys())
-    if missing_required:
-        return PhaseResult(
-            "api_shape_gate", Verdict.FAIL,
-            detail=f"required fields missing: {sorted(missing_required)}",
-            evidence={"keys_present": sorted(body.keys())},
-        )
-
-    # Soft signal: documented optional fields gone (the SDK declares them).
-    soft_missing = expected - set(body.keys()) - missing_required
-    return PhaseResult(
-        "api_shape_gate", Verdict.PASS,
-        evidence={
-            "keys_present": sorted(body.keys()),
-            "soft_missing": sorted(soft_missing),
-            "note": (
-                "all required fields present; SDK Session model expects "
-                f"{len(expected)} fields, server returned {len(body)}"
-            ),
-        },
-    )
-
-
 @phase("spec_event_envelope")
 async def phase_spec_event_envelope(ctx: Context) -> PhaseResult:
     """Spec §03: events carry {id, seq, type, session_id, actor, timestamp, data}.
@@ -1357,6 +1300,67 @@ async def _drain_events(
         # Most commonly the stream closes when replay is exhausted.
         pass
     return collected
+
+
+@phase("api_shape_gate")
+async def phase_api_shape_gate(ctx: Context) -> PhaseResult:
+    """Spec §1.4: SDK types must match the server schema. Production has
+    /openapi.json disabled for security, so we instead probe known
+    response shapes — failure here means the SDK will silently break.
+
+    Required field set per spec §02 + sdk/python/omoios/types.py::Session.
+    Allows additive fields (extra='allow' on the model) but flags any
+    REMOVAL of a previously-documented key.
+    """
+    if not ctx.sdk_session_id:
+        return PhaseResult(
+            "api_shape_gate", Verdict.SKIP,
+            detail="needs sdk_session_id; depends on session_create / session_get",
+        )
+
+    r = await ctx.client.get(
+        f"{API_BASE_URL}/api/v1/sessions/{ctx.sdk_session_id}",
+        headers=auth_headers(),
+    )
+    if r.status_code != 200:
+        return PhaseResult(
+            "api_shape_gate", Verdict.FAIL,
+            detail=f"GET session: {r.status_code} {r.text[:200]}",
+        )
+    try:
+        body = r.json()
+    except Exception as e:
+        return PhaseResult(
+            "api_shape_gate", Verdict.FAIL,
+            detail=f"non-JSON response: {e}",
+        )
+
+    required = {"id", "status", "created_at"}
+    expected = {
+        "id", "status", "created_at",
+        "ticket_id", "workspace_id", "environment_id",
+        "github_repo", "created_by", "ended_at",
+    }
+    missing_required = required - set(body.keys())
+    if missing_required:
+        return PhaseResult(
+            "api_shape_gate", Verdict.FAIL,
+            detail=f"required fields missing: {sorted(missing_required)}",
+            evidence={"keys_present": sorted(body.keys())},
+        )
+
+    soft_missing = expected - set(body.keys()) - missing_required
+    return PhaseResult(
+        "api_shape_gate", Verdict.PASS,
+        evidence={
+            "keys_present": sorted(body.keys()),
+            "soft_missing": sorted(soft_missing),
+            "note": (
+                f"all required fields present; SDK Session model expects "
+                f"{len(expected)} fields, server returned {len(body)}"
+            ),
+        },
+    )
 
 
 @phase("session_events_sse")
