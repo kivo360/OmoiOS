@@ -767,6 +767,10 @@ class PostHogSettings(OmoiBaseSettings):
     capture_code_variables: bool = False  # POSTHOG_CAPTURE_CODE_VARIABLES
     sync_mode: bool = False  # POSTHOG_SYNC_MODE (forced True in Modal/test/sandbox)
 
+    # OTLP logs ingest (off by default — POSTHOG_LOGS_ENABLED=true to opt in)
+    logs_enabled: bool = False  # POSTHOG_LOGS_ENABLED
+    logs_level: str = "WARNING"  # POSTHOG_LOGS_LEVEL — DEBUG/INFO/WARNING/ERROR
+
     @property
     def is_configured(self) -> bool:
         """Check if PostHog is configured with a valid API key."""
