@@ -7,6 +7,7 @@ runners that hand the artifact URL to the next step).
 from __future__ import annotations
 
 import json as _json
+import mimetypes
 import sys
 from pathlib import Path
 from typing import Annotated, Optional
@@ -102,6 +103,118 @@ def get_cmd(
             console.print(f"  [dim]{k}:[/dim] {v}")
 
 
+@artifacts_app.command(name="upload")
+def upload_cmd(
+    path: Annotated[
+        Optional[str],
+        Parameter(help="File path to upload. Omit when using --stdin."),
+    ] = None,
+    workspace: Annotated[
+        Optional[str],
+        Parameter(
+            name=["--workspace", "-w"],
+            env_var="OMOIOS_WORKSPACE_ID",
+            help="Workspace to upload into.",
+        ),
+    ] = None,
+    stdin: Annotated[
+        bool,
+        Parameter(
+            name="--stdin",
+            help="Read bytes from stdin instead of a file path.",
+        ),
+    ] = False,
+    name: Annotated[
+        Optional[str],
+        Parameter(
+            name="--name",
+            help="Filename to record. Defaults to basename(path) or 'stdin.bin'.",
+        ),
+    ] = None,
+    content_type: Annotated[
+        Optional[str],
+        Parameter(
+            name="--content-type",
+            help="MIME type override. Auto-detected from extension when omitted.",
+        ),
+    ] = None,
+    session: Annotated[
+        Optional[str],
+        Parameter(
+            name=["--session", "-s"],
+            help="Optional session ID to record in metadata.",
+        ),
+    ] = None,
+    metadata_pairs: Annotated[
+        Optional[list[str]],
+        Parameter(
+            name="--metadata",
+            help="Extra KEY=VALUE metadata pairs (repeatable).",
+        ),
+    ] = None,
+    api_base_url: Annotated[
+        Optional[str], Parameter(name="--api-base-url", env_var="OMOIOS_API_BASE_URL")
+    ] = None,
+    api_key: Annotated[
+        Optional[str], Parameter(name="--api-key", env_var="OMOIOS_PLATFORM_API_KEY")
+    ] = None,
+) -> None:
+    """Upload a file as an artifact in a workspace.
+
+    Reads the entire file into memory (the underlying SDK takes bytes,
+    not a stream). For very large files, prefer chunked uploads when
+    the SDK grows that surface. Use `--stdin` to pipe bytes in.
+    """
+    if not workspace:
+        raise CliError("--workspace <id> (or $OMOIOS_WORKSPACE_ID) is required.")
+    if stdin:
+        blob = sys.stdin.buffer.read()
+        resolved_name = name or "stdin.bin"
+    else:
+        if not path:
+            raise CliError(
+                "Pass a file path, or use --stdin to pipe bytes in."
+            )
+        p = Path(path)
+        if not p.exists():
+            raise CliError(f"file not found: {path}")
+        blob = p.read_bytes()
+        resolved_name = name or p.name
+
+    mime = content_type or _guess_mime(resolved_name)
+
+    metadata: dict[str, str] = {}
+    if session:
+        metadata["session_id"] = session
+    for pair in metadata_pairs or []:
+        if "=" not in pair:
+            raise CliError(f"--metadata expected KEY=VALUE, got {pair!r}")
+        k, v = pair.split("=", 1)
+        metadata[k] = v
+
+    cfg = resolve_config(api_base_url=api_base_url, api_key=api_key)
+    console.print(
+        f"[dim]uploading {_human_size(len(blob))} as "
+        f"[cyan]{resolved_name}[/cyan]…[/dim]"
+    )
+    artifact = run_sdk(
+        _upload(
+            cfg.api_base_url,
+            cfg.api_key,
+            blob,
+            workspace,
+            resolved_name,
+            mime,
+            metadata or None,
+        )
+    )
+    ok(
+        f"uploaded [bold]{artifact.id}[/bold] · "
+        f"{getattr(artifact, 'name', resolved_name)} "
+        f"({_human_size(len(blob))})"
+    )
+
+
 @artifacts_app.command(name="download")
 def download_cmd(
     artifact_id: Annotated[str, Parameter(help="Artifact ID.")],
@@ -151,6 +264,34 @@ async def _get(api_base_url, api_key, artifact_id):
         base_url=api_base_url, api_key=api_key, timeout=30.0
     ) as client:
         return await client.artifacts.get(artifact_id)
+
+
+async def _upload(
+    api_base_url,
+    api_key,
+    blob,
+    workspace_id,
+    filename,
+    content_type,
+    metadata,
+):
+    from omoios import AsyncOmoiOSClient
+
+    async with AsyncOmoiOSClient(
+        base_url=api_base_url, api_key=api_key, timeout=None
+    ) as client:
+        return await client.artifacts.upload(
+            file_content=blob,
+            workspace_id=workspace_id,
+            filename=filename,
+            content_type=content_type,
+            metadata=metadata,
+        )
+
+
+def _guess_mime(filename: str) -> Optional[str]:
+    mime, _ = mimetypes.guess_type(filename)
+    return mime
 
 
 async def _download(api_base_url, api_key, artifact_id):
