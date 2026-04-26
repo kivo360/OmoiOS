@@ -18,7 +18,7 @@ from sandboxagent.providers.modal import (
     ModalProvider,
     ModalProviderOptions,
 )
-from sandboxagent.providers.shared import DEFAULT_SANDBOX_AGENT_IMAGE
+from sandboxagent.providers.shared import SANDBOX_AGENT_INSTALL_SCRIPT
 
 
 OMOI_APP_NAME = "omoi-os-agents"
@@ -26,27 +26,39 @@ OMOI_DEFAULT_MEMORY_MIB = 4096
 OMOI_DEFAULT_TIMEOUT_SECONDS = 60 * 60
 
 
-def build_omoi_modal_image(base: str = DEFAULT_SANDBOX_AGENT_IMAGE) -> Any:
-    """Build the Modal image with sandbox-agent + opencode pre-baked.
+def build_omoi_modal_image(*, base: str | None = None) -> Any:
+    """Build the Modal image with sandbox-agent + opencode installed.
 
-    The base image already includes sandbox-agent (rivetdev/sandbox-agent
-    ``-full`` variant). This adds opencode + its workspace dirs so SDK
-    sessions can route through opencode without paying install latency
-    on cold spawn.
+    Uses ``debian_slim`` as the base by default. The published
+    ``rivetdev/sandbox-agent:0.5.0-rc.2-full`` registry image cannot be
+    used directly — its ENTRYPOINT conflicts with Modal's
+    ``Sandbox.create("sleep", "infinity", ...)`` arg pattern, killing
+    the sandbox immediately on spawn (verified empirically in
+    scripts/poof/probe_sdk_modal_*.py on 2026-04-26).
 
-    Modal hashes the spec and caches the built image, so this is a one-time
-    cost per (base, commands) tuple — every subsequent spawn skips the
-    install entirely.
+    Modal hashes the spec and caches the built image, so this is a
+    one-time cost per (base, commands) tuple — every subsequent spawn
+    skips the install entirely.
     """
     import modal
 
-    return modal.Image.from_registry(base).run_commands(
+    if base is not None:
+        img = modal.Image.from_registry(base)
+    else:
+        img = modal.Image.debian_slim().apt_install("curl", "ca-certificates", "git")
+
+    return img.run_commands(
+        # Install the SDK transport binary; the install script lives at
+        # the same URL the SDK references via SANDBOX_AGENT_INSTALL_SCRIPT.
+        f"curl -fsSL {SANDBOX_AGENT_INSTALL_SCRIPT} | sh",
+        "sandbox-agent --version",
+        # Install opencode + its workspace dirs so chat sessions can route
+        # through opencode without paying install latency on cold spawn.
         "mkdir -p /root/.local/share/opencode /root/.config/opencode",
         "chmod 700 /root/.local/share/opencode",
         "curl -fsSL https://opencode.ai/install | bash",
-        # Force install verification at image-build time so a broken
-        # install surfaces in Modal build logs rather than at first
-        # sandbox.exec.
+        # Force install verification at image-build time so broken installs
+        # surface in Modal build logs rather than at first sandbox.exec.
         "/root/.opencode/bin/opencode --version",
     )
 

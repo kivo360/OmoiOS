@@ -27,8 +27,36 @@
 
 ## Tasks remaining
 
-- **Task #7**: Replace `_dispatch_to_sandboxed_agent` in `backend/omoi_os/services/chat_responder.py:268-299` with one SDK call. Build env_vars (BROKER_URL, SESSION_TOKEN, OMOIOS_OPENCODE_CONFIG, OMOIOS_OMO_CONFIG, FIREWORKS_API_KEY), construct `OmoiOsModalProvider(env_vars=...)`, call `SandboxAgent.start(provider=…, workspace_files={"auth.json": WorkspaceConfig.auth_json({"fireworks-ai": {"type":"api","key": settings.llm_api_key}})}, persistence=OmoiOsSessionPersistDriver(db))`, then `agent.resume_or_create_session(session_id, agent="opencode")` and `session.prompt(user_text)`. Emit single `session.message` event from response. Delete `modal_sandboxed_agent.py` + `_extract_opencode_reply` regex stripping.
+- **Task #7**: BLOCKED on agent-strategy decision. Replace `_dispatch_to_sandboxed_agent` in `backend/omoi_os/services/chat_responder.py:268-299` with one SDK call — but **sandbox-agent server doesn't natively register opencode as an agent**. The SDK's `create_session(agent="opencode")` returns `Invalid Request` because sandbox-agent only knows `claude` and `codex` by default (`SDK providers/shared.py:7`). Options to unblock: (a) use `claude` agent with Fireworks via openai-compat shim, (b) use `codex` agent with Fireworks via OpenAI key, (c) upstream opencode support in sandbox-agent, (d) hybrid — SDK for sandbox lifecycle + persist driver, opencode invoked via `sandbox.exec` directly (preserves the proven Daytona/Modal approach).
 - **Task #8**: `scripts/poof/probe_modal_chat_via_sdk.sh` end-to-end probe + DB-backed integration tests for `OmoiOsSessionPersistDriver` (idempotent insert, monotonic event_index, cursor pagination).
+
+## Live Validation (2026-04-26 evening)
+
+**What works end-to-end against real Modal:**
+- ✅ `OmoiOsModalProvider` spawns Modal sandbox (verified `sb-UEiTWjEQP1Kwk4C7Ef6sot`, `sb-s7ZIneuI54CeDFz7iQT63Z`)
+- ✅ Image build: `debian_slim` + `apt_install(curl, ca-certs, git)` + sandbox-agent install (`SANDBOX_AGENT_INSTALL_SCRIPT`) + opencode install
+- ✅ Tunnel URL resolves to public Modal endpoint
+- ✅ `GET /v1/health` returns `{"status":"ok"}`
+- ✅ `GET /v1/agents` returns the agent registry
+- ✅ `SandboxAgent.start()` connects, `agent.health()` returns ok
+- ✅ Provider teardown clean
+
+**What broke during live test (fixed inline):**
+- `rivetdev/sandbox-agent:0.5.0-rc.2-full` registry image has an ENTRYPOINT that conflicts with Modal's `Sandbox.create("sleep","infinity",...)` arg pattern, killing the sandbox immediately. Fix: build our own image from `debian_slim` (commit pending in omoi_os).
+- SDK modal provider used `memory_mib=` kwarg; real Modal API uses `memory=` (int MiB). Fixed in SDK commit `0d1dbf1`.
+- SDK modal provider didn't track `self.sandbox_id`, breaking `agent.sandbox_id` property. Fixed in SDK commit `0d1dbf1`.
+- SDK used `asyncio.to_thread` wrappers that triggered Modal's AsyncUsageWarning. Replaced with native `.aio()` variants in commit `0d1dbf1`.
+
+**What's still blocked:**
+- `agent.create_session(agent="opencode")` returns `AcpHttpError: Invalid Request` because the sandbox-agent server only ships claude/codex agent registrations — opencode is not a recognized ACP agent in the server's default registry. See Task #7 options above.
+
+## Probe scripts shipped (scripts/poof/)
+
+- `probe_sdk_modal_spawn.py` — happy-path spawn + /v1/health + /v1/agents + teardown (PASSES)
+- `probe_sdk_modal_simple.py` — control: plain debian_slim spawn + exec (PASSES)
+- `probe_sdk_install.py` — verify sandbox-agent install script in clean sandbox (PASSES)
+- `probe_sdk_modal_diagnose.py` — diagnose rivetdev image entrypoint conflict (FAILS as expected)
+- `probe_sdk_modal_session.py` — full session create+prompt (FAILS at create_session — opencode not registered)
 
 ## Tasks completed this session
 
