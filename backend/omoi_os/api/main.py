@@ -17,6 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from omoi_os.config import get_app_settings
 from omoi_os.logging import configure_logging, get_logger, bind_context, clear_context
 from omoi_os.observability.sentry import init_sentry
+from omoi_os.observability.posthog import init_posthog_observability
 from omoi_os.analytics.posthog import init_posthog
 
 # Configure structured logging at module load time
@@ -24,11 +25,17 @@ from omoi_os.analytics.posthog import init_posthog
 _env = os.environ.get("OMOIOS_ENV", "development")
 configure_logging(env=_env)  # type: ignore[arg-type]
 
-# Initialize Sentry for error tracking and performance monitoring
-# Must be done early, before any other operations that might raise exceptions
+# Initialize Sentry for error tracking and performance monitoring.
+# Sentry stays during the PostHog migration window — both error pipelines fire
+# in parallel until the cleanup commit drops Sentry.
 init_sentry()
 
-# Initialize PostHog for server-side analytics
+# Initialize PostHog *error tracking* (v7 module-level context API). Required
+# before the posthog_request_context middleware can do anything useful.
+init_posthog_observability()
+
+# Initialize PostHog *product analytics* (legacy v3 client-instance API used
+# by billing / workflow / user events).
 init_posthog()
 from omoi_os.mcp.fastmcp_server import mcp_app
 from omoi_os.api.routes import (
@@ -1203,19 +1210,26 @@ async def general_exception_handler(request: Request, exc: Exception):
         f"Unhandled exception on {request.method} {request.url.path}: {exc}",
         exc_info=True,
     )
-    # Capture to Sentry with request context
+    # Dual-write capture: Sentry stays during the migration window, PostHog
+    # is the future home. Both wrappers are no-ops when their respective
+    # SDK isn't configured.
     import sentry_sdk
+    from omoi_os.observability.posthog import (
+        capture_exception as posthog_capture_exception,
+    )
 
+    request_context = {
+        "method": request.method,
+        "path": request.url.path,
+        "query": str(request.query_params),
+    }
     with sentry_sdk.push_scope() as scope:
-        scope.set_context(
-            "request",
-            {
-                "method": request.method,
-                "path": request.url.path,
-                "query": str(request.query_params),
-            },
-        )
+        scope.set_context("request", request_context)
         sentry_sdk.capture_exception(exc)
+    posthog_capture_exception(
+        exc,
+        **{f"request.{k}": v for k, v in request_context.items()},
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=_error_envelope(
@@ -1289,6 +1303,47 @@ async def security_headers_middleware(request: Request, call_next):
             "max-age=31536000; includeSubDomains"
         )
     return response
+
+
+# PostHog request context middleware — opens a fresh PostHog context per
+# request so tags, identification, and autocaptured exceptions stay scoped to
+# that request. Registered last so it is the outermost middleware (FastAPI
+# runs middleware in reverse-registration order, outer-first).
+@app.middleware("http")
+async def posthog_request_context_middleware(request: Request, call_next):
+    """Wrap each request in a posthog.new_context() scope.
+
+    Falls through to a no-op when PostHog isn't configured.
+    """
+    try:
+        import posthog as _posthog
+    except ImportError:
+        return await call_next(request)
+
+    if not _posthog.api_key:
+        return await call_next(request)
+
+    # capture_exceptions=True so unhandled exceptions inside the context
+    # auto-capture without us needing to call capture_exception manually.
+    with _posthog.new_context(capture_exceptions=True):
+        try:
+            _posthog.tag("http.method", request.method)
+            _posthog.tag("http.path", request.url.path)
+            _posthog.tag("service.name", "omoios-api")
+            _posthog.tag("service.environment", _env)
+            request_id = request.headers.get("X-Request-ID")
+            if request_id:
+                _posthog.tag("request_id", request_id)
+        except Exception:  # noqa: BLE001 — never block the request on tagging
+            pass
+
+        response = await call_next(request)
+
+        try:
+            _posthog.tag("http.status_code", response.status_code)
+        except Exception:  # noqa: BLE001
+            pass
+        return response
 
 
 # Include routers

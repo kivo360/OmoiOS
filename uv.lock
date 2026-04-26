@@ -3065,7 +3065,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.27.0" },
     { name = "orjson", specifier = ">=3.11.4" },
     { name = "pgvector", specifier = ">=0.3.3,<1" },
-    { name = "posthog", specifier = ">=3.0.0" },
+    { name = "posthog", specifier = ">=7.0.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2.0,<4" },
     { name = "pydantic", specifier = ">=2.7.0,<3" },
     { name = "pydantic-ai", specifier = ">=1.39.0" },

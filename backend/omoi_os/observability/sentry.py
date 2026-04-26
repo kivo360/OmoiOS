@@ -377,29 +377,58 @@ def _traces_sampler(sampling_context: Dict[str, Any]) -> float:
     return settings.traces_sample_rate
 
 
+# =============================================================================
+# Migration helper — fan-out to PostHog
+# =============================================================================
+# During the Sentry → PostHog migration window, every wrapper in this module
+# also dispatches to omoi_os.observability.posthog so both error pipelines see
+# the same event. Lazy-imported to avoid a module-level cycle (posthog.py
+# imports the PII helpers from this module).
+
+
+def _posthog_observability():
+    """Lazy import; returns the posthog observability module or None."""
+    try:
+        from omoi_os.observability import posthog as _ph_obs
+    except Exception:  # noqa: BLE001 — never block the Sentry path
+        return None
+    # _posthog_module is set only after init_posthog_observability() succeeded.
+    if getattr(_ph_obs, "_posthog_module", None) is None:
+        return None
+    return _ph_obs
+
+
 def capture_exception(exception: Exception, **context: Any) -> Optional[str]:
-    """Capture an exception to Sentry with additional context.
+    """Capture an exception to Sentry AND PostHog with additional context.
 
     Args:
         exception: The exception to capture
         **context: Additional context to attach to the event
 
     Returns:
-        Event ID if captured, None otherwise
+        Sentry event ID if captured, None otherwise. (PostHog event ID is
+        not surfaced — Sentry remains the canonical event-id source until
+        the Phase 7 cleanup commit.)
     """
-    if not _sentry_initialized:
-        return None
+    sentry_event_id: Optional[str] = None
 
-    import sentry_sdk
+    if _sentry_initialized:
+        import sentry_sdk
 
-    with sentry_sdk.push_scope() as scope:
-        for key, value in context.items():
-            scope.set_extra(key, value)
-        return sentry_sdk.capture_exception(exception)
+        with sentry_sdk.push_scope() as scope:
+            for key, value in context.items():
+                scope.set_extra(key, value)
+            sentry_event_id = sentry_sdk.capture_exception(exception)
+
+    ph = _posthog_observability()
+    if ph is not None:
+        ph.capture_exception(exception, **context)
+
+    return sentry_event_id
 
 
 def capture_message(message: str, level: str = "info", **context: Any) -> Optional[str]:
-    """Capture a message to Sentry with additional context.
+    """Capture a message to Sentry AND PostHog with additional context.
 
     Args:
         message: The message to capture
@@ -407,73 +436,86 @@ def capture_message(message: str, level: str = "info", **context: Any) -> Option
         **context: Additional context to attach to the event
 
     Returns:
-        Event ID if captured, None otherwise
+        Sentry event ID if captured, None otherwise.
     """
-    if not _sentry_initialized:
-        return None
+    sentry_event_id: Optional[str] = None
 
-    import sentry_sdk
+    if _sentry_initialized:
+        import sentry_sdk
 
-    with sentry_sdk.push_scope() as scope:
-        for key, value in context.items():
-            scope.set_extra(key, value)
-        return sentry_sdk.capture_message(message, level=level)
+        with sentry_sdk.push_scope() as scope:
+            for key, value in context.items():
+                scope.set_extra(key, value)
+            sentry_event_id = sentry_sdk.capture_message(message, level=level)
+
+    ph = _posthog_observability()
+    if ph is not None:
+        ph.capture_message(message, level=level, **context)
+
+    return sentry_event_id
 
 
 def set_user(
     user_id: str, email: Optional[str] = None, username: Optional[str] = None
 ) -> None:
-    """Set the current user context for Sentry.
+    """Set the current user context for Sentry AND PostHog.
 
     Args:
         user_id: Unique user identifier
         email: User's email (will be redacted by PII filter)
         username: User's username (will be redacted by PII filter)
     """
-    if not _sentry_initialized:
-        return
+    if _sentry_initialized:
+        import sentry_sdk
 
-    import sentry_sdk
+        sentry_sdk.set_user(
+            {
+                "id": user_id,
+                "email": email,
+                "username": username,
+            }
+        )
 
-    sentry_sdk.set_user(
-        {
-            "id": user_id,
-            "email": email,
-            "username": username,
-        }
-    )
+    ph = _posthog_observability()
+    if ph is not None:
+        ph.set_user(user_id, email=email, username=username)
 
 
 def set_tag(key: str, value: str) -> None:
-    """Set a tag on the current scope.
+    """Set a tag on the current scope (Sentry AND PostHog).
 
-    Tags are searchable in Sentry and can be used for filtering.
+    Tags are searchable in both Sentry and PostHog and can be used for
+    filtering.
 
     Args:
         key: Tag name
         value: Tag value
     """
-    if not _sentry_initialized:
-        return
+    if _sentry_initialized:
+        import sentry_sdk
 
-    import sentry_sdk
+        sentry_sdk.set_tag(key, value)
 
-    sentry_sdk.set_tag(key, value)
+    ph = _posthog_observability()
+    if ph is not None:
+        ph.set_tag(key, value)
 
 
 def set_context(name: str, data: Dict[str, Any]) -> None:
-    """Set additional context data on the current scope.
+    """Set additional context data on the current scope (Sentry AND PostHog).
 
     Args:
         name: Context name
         data: Context data dictionary
     """
-    if not _sentry_initialized:
-        return
+    if _sentry_initialized:
+        import sentry_sdk
 
-    import sentry_sdk
+        sentry_sdk.set_context(name, data)
 
-    sentry_sdk.set_context(name, data)
+    ph = _posthog_observability()
+    if ph is not None:
+        ph.set_context(name, data)
 
 
 # =============================================================================
@@ -486,7 +528,7 @@ def set_context(name: str, data: Dict[str, Any]) -> None:
 def metric_increment(
     name: str, value: int = 1, tags: Optional[Dict[str, str]] = None
 ) -> None:
-    """Increment a counter metric.
+    """Increment a counter metric (Sentry, if available, AND PostHog).
 
     Use for counting events like task completions, failures, retries.
 
@@ -494,87 +536,78 @@ def metric_increment(
         name: Metric name (e.g., "task.completed", "task.failed")
         value: Amount to increment (default 1)
         tags: Optional tags for filtering (e.g., {"task_type": "workflow"})
-
-    Example:
-        metric_increment("task.completed", tags={"phase": "implementation"})
-        metric_increment("task.failed", tags={"error_type": "timeout"})
     """
-    if not _sentry_initialized:
-        return
+    if _sentry_initialized:
+        # `sentry_sdk.metrics` was removed in Sentry SDK v2.x. Best-effort:
+        # skip silently if the API isn't there so callers (task_queue,
+        # chat_responder, etc.) don't crash when metrics are deprecated.
+        try:
+            from sentry_sdk import metrics
 
-    from sentry_sdk import metrics
+            incr = getattr(metrics, "incr", None)
+            if incr is not None:
+                incr(name, value, tags=tags or {})
+        except Exception:  # noqa: BLE001 — metrics are best-effort
+            pass
 
-    metrics.incr(name, value, tags=tags or {})
+    ph = _posthog_observability()
+    if ph is not None:
+        ph.metric_increment(name, value, tags=tags)
 
 
 def metric_gauge(
     name: str, value: float, tags: Optional[Dict[str, str]] = None
 ) -> None:
-    """Set a gauge metric (point-in-time value).
+    """Set a gauge metric (point-in-time value) on Sentry AND PostHog."""
+    if _sentry_initialized:
+        try:
+            from sentry_sdk import metrics
 
-    Use for tracking current state like queue depth, active workers.
+            gauge = getattr(metrics, "gauge", None)
+            if gauge is not None:
+                gauge(name, value, tags=tags or {})
+        except Exception:  # noqa: BLE001
+            pass
 
-    Args:
-        name: Metric name (e.g., "queue.depth", "workers.active")
-        value: Current value
-        tags: Optional tags for filtering
-
-    Example:
-        metric_gauge("queue.depth", 42, tags={"priority": "high"})
-        metric_gauge("workers.active", 3)
-    """
-    if not _sentry_initialized:
-        return
-
-    from sentry_sdk import metrics
-
-    metrics.gauge(name, value, tags=tags or {})
+    ph = _posthog_observability()
+    if ph is not None:
+        ph.metric_gauge(name, value, tags=tags)
 
 
 def metric_distribution(
     name: str, value: float, tags: Optional[Dict[str, str]] = None
 ) -> None:
-    """Record a distribution metric (for percentiles, histograms).
+    """Record a distribution metric on Sentry AND PostHog."""
+    if _sentry_initialized:
+        try:
+            from sentry_sdk import metrics
 
-    Use for tracking values that vary like task duration, payload sizes.
+            distribution = getattr(metrics, "distribution", None)
+            if distribution is not None:
+                distribution(name, value, tags=tags or {})
+        except Exception:  # noqa: BLE001
+            pass
 
-    Args:
-        name: Metric name (e.g., "task.duration_ms", "payload.size_bytes")
-        value: Value to record
-        tags: Optional tags for filtering
-
-    Example:
-        metric_distribution("task.duration_ms", 1523.5, tags={"task_type": "build"})
-        metric_distribution("llm.tokens_used", 4500, tags={"model": "claude"})
-    """
-    if not _sentry_initialized:
-        return
-
-    from sentry_sdk import metrics
-
-    metrics.distribution(name, value, tags=tags or {})
+    ph = _posthog_observability()
+    if ph is not None:
+        ph.metric_distribution(name, value, tags=tags)
 
 
 def metric_set(name: str, value: str, tags: Optional[Dict[str, str]] = None) -> None:
-    """Add a value to a set metric (for counting unique values).
+    """Add a value to a set metric on Sentry AND PostHog."""
+    if _sentry_initialized:
+        try:
+            from sentry_sdk import metrics
 
-    Use for tracking unique users, unique errors, etc.
+            set_fn = getattr(metrics, "set", None)
+            if set_fn is not None:
+                set_fn(name, value, tags=tags or {})
+        except Exception:  # noqa: BLE001
+            pass
 
-    Args:
-        name: Metric name (e.g., "users.unique", "errors.unique")
-        value: Value to add to the set
-        tags: Optional tags for filtering
-
-    Example:
-        metric_set("users.active", user_id)
-        metric_set("tasks.unique_types", task_type)
-    """
-    if not _sentry_initialized:
-        return
-
-    from sentry_sdk import metrics
-
-    metrics.set(name, value, tags=tags or {})
+    ph = _posthog_observability()
+    if ph is not None:
+        ph.metric_set(name, value, tags=tags)
 
 
 # =============================================================================

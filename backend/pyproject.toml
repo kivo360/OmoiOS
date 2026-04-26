@@ -54,7 +54,7 @@ dependencies = [
     "taskiq-redis>=0.5.0",
     "taskiq>=0.12.0",
     "sentry-sdk[fastapi,sqlalchemy]>=2.0.0",
-    "posthog>=3.0.0",
+    "posthog>=7.0.0",
     "slowapi>=0.1.9",
     "spec-sandbox",
     "httpx-ws>=0.9.0",

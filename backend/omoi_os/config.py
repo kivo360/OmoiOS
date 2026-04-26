@@ -779,12 +779,19 @@ class SentrySettings(OmoiBaseSettings):
 
 class PostHogSettings(OmoiBaseSettings):
     """
-    PostHog analytics configuration for server-side event tracking.
+    PostHog configuration for server-side analytics AND error tracking.
 
     Environment variables:
-      - POSTHOG_API_KEY: PostHog project API key
-      - POSTHOG_HOST: PostHog host URL (default: https://app.posthog.com)
+      - POSTHOG_API_KEY: PostHog project API key (`phc_...`)
+      - POSTHOG_HOST: PostHog ingestion host (default: https://us.i.posthog.com,
+        use https://eu.i.posthog.com for EU projects)
       - POSTHOG_DEBUG: Enable debug logging
+      - POSTHOG_DISABLED: Disable tracking entirely
+      - POSTHOG_SYNC_MODE: Force sync send mode (set true for serverless / Modal
+        sandbox so events flush before container exit)
+      - POSTHOG_CAPTURE_EXCEPTIONS: Enable PostHog error autocapture (default: true)
+      - POSTHOG_CAPTURE_CODE_VARIABLES: Capture local variable values on exceptions
+        (default: false; set true once you've reviewed PII risk for your env)
     """
 
     yaml_section = "posthog"
@@ -794,9 +801,14 @@ class PostHogSettings(OmoiBaseSettings):
     )
 
     api_key: Optional[str] = None  # POSTHOG_API_KEY
-    host: str = "https://app.posthog.com"  # POSTHOG_HOST
+    host: str = "https://us.i.posthog.com"  # POSTHOG_HOST
     debug: bool = False  # POSTHOG_DEBUG
-    disabled: bool = False  # POSTHOG_DISABLED - disable tracking entirely
+    disabled: bool = False  # POSTHOG_DISABLED
+
+    # Error tracking knobs (PostHog v7+)
+    capture_exceptions: bool = True  # POSTHOG_CAPTURE_EXCEPTIONS
+    capture_code_variables: bool = False  # POSTHOG_CAPTURE_CODE_VARIABLES
+    sync_mode: bool = False  # POSTHOG_SYNC_MODE (forced True in Modal/test/sandbox)
 
     @property
     def is_configured(self) -> bool:

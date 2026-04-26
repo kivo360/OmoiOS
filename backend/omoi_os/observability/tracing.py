@@ -1,54 +1,54 @@
-"""Performance tracing utilities for distributed tracing.
+"""Tracing wrapper layer (Sentry-free shim).
 
-This module provides:
-- Decorators for tracing external API calls
-- Context managers for custom spans
-- Request ID propagation for frontend → backend correlation
-- Custom tags and attributes for filtering
+Originally this module wrapped Sentry's APM tracing API. As part of the
+Sentry → PostHog migration, the underlying Sentry calls were removed and
+the wrappers became thin no-ops that preserve the existing public surface
+so any future caller continues to compile.
 
-Uses Sentry's distributed tracing which is built on OpenTelemetry compatible
-concepts and can propagate trace context to other services.
+Distributed tracing in this codebase is provided by Pydantic Logfire /
+OpenTelemetry — see :mod:`omoi_os.observability` (``LogfireTracer``,
+``instrument_fastapi``, ``instrument_sqlalchemy``, ``instrument_httpx``,
+``instrument_redis``). Those auto-instrumentations already capture spans
+for HTTP requests, DB queries, outbound calls, and cache operations, so
+manual ``traced_span(...)`` decoration would duplicate work.
 
-Usage:
-    from omoi_os.observability.tracing import trace_external_api, trace_operation
+PostHog has no native backend Python tracing API. The few breadcrumb-style
+calls route to PostHog as ``breadcrumb.<category>`` events (Phase 6
+strategy A) so the *intent* of breadcrumbs is preserved if anything
+re-wires those calls in the future.
 
-    @trace_external_api("github")
-    async def fetch_github_repo(repo: str):
+Usage (kept for shape compatibility — these are no-ops for span data):
+
+    from omoi_os.observability.tracing import trace_external_api, traced_span
+
+    @trace_external_api("stripe")
+    async def charge(...): ...
+
+    with traced_span("db", "complex_query"):
         ...
-
-    @trace_operation("db", "custom_query")
-    async def complex_query():
-        ...
-
-    # Context manager style
-    with traced_span("http.client", "stripe_api"):
-        stripe.charges.create(...)
 """
 
 from __future__ import annotations
 
 import functools
-import time
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Optional, TypeVar
+from typing import Any, Callable, Dict, Iterator, Optional, TypeVar
 
 from omoi_os.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Type variable for decorated functions
 F = TypeVar("F", bound=Callable[..., Any])
 
 
 def _get_request_id() -> Optional[str]:
-    """Get the current request ID from context.
+    """Get the current request ID from context, if available."""
+    try:
+        from omoi_os.logging import get_request_id
 
-    Returns:
-        Request ID if available, None otherwise
-    """
-    from omoi_os.logging import get_request_id
-
-    return get_request_id()
+        return get_request_id()
+    except Exception:  # noqa: BLE001
+        return None
 
 
 @contextmanager
@@ -57,416 +57,135 @@ def traced_span(
     description: str,
     tags: Optional[Dict[str, str]] = None,
     data: Optional[Dict[str, Any]] = None,
-):
-    """Context manager for creating a traced span.
+) -> Iterator[None]:
+    """No-op span context manager.
 
-    This wraps Sentry's start_span for manual instrumentation.
-
-    Args:
-        op: Operation type (e.g., "http.client", "db", "serialize")
-        description: Human-readable description
-        tags: Key-value tags for filtering
-        data: Additional data to attach to the span
-
-    Yields:
-        The created span object
-
-    Example:
-        with traced_span("http.client", "stripe_create_customer") as span:
-            span.set_data("customer_email", email)
-            result = stripe.customers.create(email=email)
+    Span tracking is now handled by Logfire's auto-instrumentation. Any
+    tags/data passed here are dropped silently so callers don't crash.
     """
-    try:
-        import sentry_sdk
-    except ImportError:
-        # Sentry not available - just yield None
-        yield None
-        return
-
-    with sentry_sdk.start_span(op=op, description=description) as span:
-        # Set tags if provided
-        if tags:
-            for key, value in tags.items():
-                span.set_tag(key, value)
-
-        # Set data if provided
-        if data:
-            for key, value in data.items():
-                span.set_data(key, value)
-
-        # Add request ID for correlation
-        request_id = _get_request_id()
-        if request_id:
-            span.set_tag("request_id", request_id)
-
-        yield span
+    yield None
 
 
-def trace_external_api(service_name: str, tags: Optional[Dict[str, str]] = None):
-    """Decorator to trace external API calls.
-
-    Creates a span around the decorated function with the service name.
-
-    Args:
-        service_name: Name of the external service (e.g., "github", "stripe", "openai")
-        tags: Additional tags to add to the span
-
-    Returns:
-        Decorated function
-
-    Example:
-        @trace_external_api("github")
-        async def fetch_repo_info(repo: str) -> dict:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"https://api.github.com/repos/{repo}")
-                return response.json()
-    """
+def trace_external_api(provider: str) -> Callable[[F], F]:
+    """No-op decorator for external API calls (Logfire instruments httpx)."""
 
     def decorator(func: F) -> F:
         @functools.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            try:
-                import sentry_sdk
-
-                with sentry_sdk.start_span(
-                    op="http.client",
-                    description=f"{service_name}: {func.__name__}",
-                ) as span:
-                    span.set_tag("service", service_name)
-                    span.set_tag("function", func.__name__)
-
-                    if tags:
-                        for key, value in tags.items():
-                            span.set_tag(key, value)
-
-                    request_id = _get_request_id()
-                    if request_id:
-                        span.set_tag("request_id", request_id)
-
-                    start_time = time.perf_counter()
-                    try:
-                        result = await func(*args, **kwargs)
-                        span.set_data("success", True)
-                        return result
-                    except Exception as e:
-                        span.set_data("success", False)
-                        span.set_data("error_type", type(e).__name__)
-                        span.set_data("error_message", str(e)[:500])  # Truncate
-                        raise
-                    finally:
-                        duration_ms = (time.perf_counter() - start_time) * 1000
-                        span.set_data("duration_ms", duration_ms)
-
-            except ImportError:
-                # Sentry not available
-                return await func(*args, **kwargs)
+            return await func(*args, **kwargs)
 
         @functools.wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            try:
-                import sentry_sdk
+            return func(*args, **kwargs)
 
-                with sentry_sdk.start_span(
-                    op="http.client",
-                    description=f"{service_name}: {func.__name__}",
-                ) as span:
-                    span.set_tag("service", service_name)
-                    span.set_tag("function", func.__name__)
-
-                    if tags:
-                        for key, value in tags.items():
-                            span.set_tag(key, value)
-
-                    request_id = _get_request_id()
-                    if request_id:
-                        span.set_tag("request_id", request_id)
-
-                    start_time = time.perf_counter()
-                    try:
-                        result = func(*args, **kwargs)
-                        span.set_data("success", True)
-                        return result
-                    except Exception as e:
-                        span.set_data("success", False)
-                        span.set_data("error_type", type(e).__name__)
-                        span.set_data("error_message", str(e)[:500])
-                        raise
-                    finally:
-                        duration_ms = (time.perf_counter() - start_time) * 1000
-                        span.set_data("duration_ms", duration_ms)
-
-            except ImportError:
-                return func(*args, **kwargs)
-
-        # Return appropriate wrapper based on function type
         import asyncio
 
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper  # type: ignore
-        return sync_wrapper  # type: ignore
+        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper  # type: ignore[return-value]
 
     return decorator
 
 
-def trace_operation(
-    op: str, description: Optional[str] = None, tags: Optional[Dict[str, str]] = None
-):
-    """Decorator to trace any operation with a custom span.
-
-    Similar to trace_external_api but for general operations like
-    database queries, serialization, or business logic.
-
-    Args:
-        op: Operation type (e.g., "db", "serialize", "validate")
-        description: Human-readable description (defaults to function name)
-        tags: Additional tags to add to the span
-
-    Returns:
-        Decorated function
-
-    Example:
-        @trace_operation("db", "complex_aggregation")
-        async def get_monthly_stats(org_id: str) -> dict:
-            ...
-
-        @trace_operation("serialize")
-        def serialize_response(data: dict) -> bytes:
-            ...
-    """
+def trace_operation(category: str, name: str) -> Callable[[F], F]:
+    """No-op decorator for application-level operations."""
 
     def decorator(func: F) -> F:
-        span_description = description or func.__name__
-
         @functools.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            try:
-                import sentry_sdk
-
-                with sentry_sdk.start_span(op=op, description=span_description) as span:
-                    span.set_tag("function", func.__name__)
-
-                    if tags:
-                        for key, value in tags.items():
-                            span.set_tag(key, value)
-
-                    request_id = _get_request_id()
-                    if request_id:
-                        span.set_tag("request_id", request_id)
-
-                    start_time = time.perf_counter()
-                    try:
-                        result = await func(*args, **kwargs)
-                        span.set_data("success", True)
-                        return result
-                    except Exception as e:
-                        span.set_data("success", False)
-                        span.set_data("error_type", type(e).__name__)
-                        raise
-                    finally:
-                        duration_ms = (time.perf_counter() - start_time) * 1000
-                        span.set_data("duration_ms", duration_ms)
-
-            except ImportError:
-                return await func(*args, **kwargs)
+            return await func(*args, **kwargs)
 
         @functools.wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            try:
-                import sentry_sdk
-
-                with sentry_sdk.start_span(op=op, description=span_description) as span:
-                    span.set_tag("function", func.__name__)
-
-                    if tags:
-                        for key, value in tags.items():
-                            span.set_tag(key, value)
-
-                    request_id = _get_request_id()
-                    if request_id:
-                        span.set_tag("request_id", request_id)
-
-                    start_time = time.perf_counter()
-                    try:
-                        result = func(*args, **kwargs)
-                        span.set_data("success", True)
-                        return result
-                    except Exception as e:
-                        span.set_data("success", False)
-                        span.set_data("error_type", type(e).__name__)
-                        raise
-                    finally:
-                        duration_ms = (time.perf_counter() - start_time) * 1000
-                        span.set_data("duration_ms", duration_ms)
-
-            except ImportError:
-                return func(*args, **kwargs)
+            return func(*args, **kwargs)
 
         import asyncio
 
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper  # type: ignore
-        return sync_wrapper  # type: ignore
+        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper  # type: ignore[return-value]
 
     return decorator
 
 
-def trace_db_operation(description: Optional[str] = None):
-    """Specialized decorator for database operations.
+def trace_db_operation(query_type: str, table: str) -> Callable[[F], F]:
+    """No-op decorator for DB operations (Logfire instruments SQLAlchemy)."""
 
-    Convenience wrapper around trace_operation for database calls.
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            return await func(*args, **kwargs)
 
-    Args:
-        description: Operation description (defaults to function name)
+        @functools.wraps(func)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
 
-    Example:
-        @trace_db_operation("get_user_by_email")
-        async def get_user_by_email(email: str) -> Optional[User]:
-            ...
-    """
-    return trace_operation(
-        op="db.query", description=description, tags={"category": "database"}
-    )
+        import asyncio
+
+        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper  # type: ignore[return-value]
+
+    return decorator
 
 
 def set_transaction_name(name: str) -> None:
-    """Set the transaction name for the current trace.
-
-    Useful for custom naming when the automatic naming isn't descriptive enough.
-
-    Args:
-        name: Transaction name
-    """
-    try:
-        import sentry_sdk
-
-        scope = sentry_sdk.get_current_scope()
-        if scope.transaction:
-            scope.transaction.name = name
-    except Exception:
-        pass
+    """No-op (transactions are owned by Logfire)."""
+    return None
 
 
-def set_span_tag(key: str, value: str) -> None:
-    """Set a tag on the current span.
-
-    Tags are searchable and can be used for filtering in Sentry.
-
-    Args:
-        key: Tag name
-        value: Tag value
-    """
-    try:
-        import sentry_sdk
-
-        span = sentry_sdk.get_current_span()
-        if span:
-            span.set_tag(key, value)
-    except Exception:
-        pass
+def set_span_tag(key: str, value: Any) -> None:
+    """No-op (Logfire auto-spans don't accept post-hoc tags from here)."""
+    return None
 
 
 def set_span_data(key: str, value: Any) -> None:
-    """Set data on the current span.
-
-    Data is attached to the span for debugging but not searchable.
-
-    Args:
-        key: Data key
-        value: Data value
-    """
-    try:
-        import sentry_sdk
-
-        span = sentry_sdk.get_current_span()
-        if span:
-            span.set_data(key, value)
-    except Exception:
-        pass
+    """No-op (Logfire auto-spans don't accept post-hoc data from here)."""
+    return None
 
 
 def add_breadcrumb(
+    category: str,
     message: str,
-    category: str = "custom",
-    level: str = "info",
     data: Optional[Dict[str, Any]] = None,
+    level: str = "info",
 ) -> None:
-    """Add a breadcrumb to the current trace.
+    """Convert Sentry-style breadcrumb to a PostHog ``breadcrumb.<category>`` event.
 
-    Breadcrumbs are a trail of events leading up to an error.
-
-    Args:
-        message: Breadcrumb message
-        category: Category for grouping
-        level: Severity level (debug, info, warning, error)
-        data: Additional data
+    PostHog has no native breadcrumb concept. Per the migration plan
+    (Phase 6, strategy A) we ship the breadcrumb as a regular event so
+    its intent is preserved. Falls through to a no-op if PostHog
+    observability isn't initialized.
     """
     try:
-        import sentry_sdk
+        from omoi_os.observability import posthog as _ph_obs
+    except Exception:  # noqa: BLE001
+        return
 
-        sentry_sdk.add_breadcrumb(
-            message=message,
-            category=category,
-            level=level,
-            data=data or {},
-        )
-    except Exception:
-        pass
+    if getattr(_ph_obs, "_posthog_module", None) is None:
+        return
+
+    try:
+        properties: Dict[str, Any] = {
+            "message": message,
+            "level": level,
+        }
+        if data:
+            properties.update(data)
+        _ph_obs._posthog_module.capture(f"breadcrumb.{category}", properties=properties)
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"breadcrumb capture failed: {e}")
 
 
 def get_trace_headers() -> Dict[str, str]:
-    """Get trace context headers for propagating to downstream services.
+    """Return W3C ``traceparent``/``tracestate`` headers if available.
 
-    Use this when making HTTP calls to other instrumented services to
-    enable distributed tracing.
-
-    Returns:
-        Dictionary of headers to include in outgoing requests
-
-    Example:
-        headers = get_trace_headers()
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers)
+    Logfire/OpenTelemetry handles distributed trace propagation natively
+    on instrumented httpx clients. This helper used to return Sentry's
+    ``sentry-trace`` + ``baggage`` headers for the Sentry distributed
+    tracing protocol; we don't need that anymore. Returns an empty dict
+    so any caller still calling this gets a safe fallback.
     """
-    try:
-        import sentry_sdk
-
-        # Get the propagation headers from the current scope
-        scope = sentry_sdk.get_current_scope()
-        if scope.span:
-            return {
-                "sentry-trace": scope.span.to_traceparent(),
-                "baggage": scope.span.to_baggage(),
-            }
-    except Exception:
-        pass
-
     return {}
 
 
 def extract_trace_context(headers: Dict[str, str]) -> None:
-    """Extract trace context from incoming request headers.
-
-    Called automatically by FastAPI integration, but useful for
-    custom scenarios like background jobs or message queues.
-
-    Args:
-        headers: Incoming request headers
-    """
-    try:
-        import sentry_sdk
-        from sentry_sdk.tracing import Transaction
-
-        sentry_trace = headers.get("sentry-trace")
-        baggage = headers.get("baggage")
-
-        if sentry_trace:
-            # Continue the existing trace
-            transaction = Transaction.continue_from_headers(
-                {"sentry-trace": sentry_trace, "baggage": baggage}
-            )
-            sentry_sdk.get_current_scope().set_transaction(transaction)
-    except Exception:
-        pass
+    """No-op extraction (Logfire's OTel handles upstream-context propagation)."""
+    return None
 
 
 __all__ = [
