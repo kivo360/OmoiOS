@@ -497,6 +497,55 @@ class ModalSpawnerService:
 
     # ─── exec + filesystem (used by integration tests / debugging) ──────────
 
+    async def register_foreign_sandbox(
+        self,
+        sandbox_id: str,
+        modal_object_id: str,
+        *,
+        task_id: str,
+        phase_id: str = "chat",
+    ) -> bool:
+        """Register a Modal sandbox that was created by another replica.
+
+        Used by the cross-replica rehydration path in
+        `modal_sandboxed_agent`: replica B receives a chat turn for a
+        session whose sandbox was spawned by replica A, looks up the
+        modal_object_id from `task.result`, and calls this to wire the
+        foreign sandbox into the local spawner so subsequent
+        `spawner.exec(sandbox_id, ...)` calls drive the right sandbox.
+
+        Returns True if the rehydration succeeded; False if the Modal
+        SDK couldn't find the sandbox (e.g. it was reaped).
+        """
+        if sandbox_id in self._sandboxes:
+            return True  # Already attached.
+        modal = self._ensure_modal()
+        try:
+            sandbox = await _run_sync(lambda: modal.Sandbox.from_id(modal_object_id))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[MODAL_SPAWNER] foreign sandbox lookup failed",
+                extra={
+                    "sandbox_id": sandbox_id,
+                    "modal_object_id": modal_object_id,
+                    "error": str(exc),
+                },
+            )
+            return False
+        info = ModalSandboxInfo(
+            sandbox_id=sandbox_id,
+            task_id=task_id,
+            phase_id=phase_id,
+            status="running",
+            started_at=utc_now(),
+        )
+        info.extra_data["modal_sandbox"] = sandbox
+        info.extra_data["modal_object_id"] = modal_object_id
+        info.extra_data["foreign"] = True
+        self._sandboxes[sandbox_id] = info
+        self._task_to_sandbox[task_id] = sandbox_id
+        return True
+
     async def exec(self, sandbox_id: str, *cmd: str) -> Dict[str, Any]:
         info = self._sandboxes.get(sandbox_id)
         if info is None:

@@ -198,3 +198,106 @@ class TestChatResponderDispatch:
         mock_settings.return_value.feature_flags.sandboxed_agent_enabled = True
         mock_settings.return_value.sandbox.provider = "local"  # not wired
         assert await _dispatch_to_sandboxed_agent("sess-1", "hi") == ""
+
+
+# ─── cross-replica rehydration ───────────────────────────────────────────────
+
+
+class TestRehydrateAgent:
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_state(self) -> None:
+        with patch.object(msa, "_load_runtime_state", AsyncMock(return_value=None)):
+            assert await msa._rehydrate_agent("sess-1") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_runtime_is_daytona(self) -> None:
+        state = {
+            "runtime": "opencode",
+            "status": "live",
+            "sandbox_id": "sb-1",
+            "modal_object_id": "modal-abc",
+            "spawned_at": 1.0,
+        }
+        with patch.object(msa, "_load_runtime_state", AsyncMock(return_value=state)):
+            # Daytona-runtime persisted state must NOT be picked up by the
+            # Modal rehydrator (and vice versa).
+            assert await msa._rehydrate_agent("sess-1") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_status_closed(self) -> None:
+        state = {
+            "runtime": "opencode-modal",
+            "status": "closed",
+            "sandbox_id": "sb-1",
+            "modal_object_id": "modal-abc",
+            "spawned_at": 1.0,
+        }
+        with patch.object(msa, "_load_runtime_state", AsyncMock(return_value=state)):
+            assert await msa._rehydrate_agent("sess-1") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_too_old(self) -> None:
+        # spawned_at = 0 → epoch → way past 6h cutoff
+        state = {
+            "runtime": "opencode-modal",
+            "status": "live",
+            "sandbox_id": "sb-1",
+            "modal_object_id": "modal-abc",
+            "spawned_at": 1.0,
+        }
+        with patch.object(msa, "_load_runtime_state", AsyncMock(return_value=state)):
+            assert await msa._rehydrate_agent("sess-1") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_register_failure(self) -> None:
+        import time as _time
+
+        state = {
+            "runtime": "opencode-modal",
+            "status": "live",
+            "sandbox_id": "sb-1",
+            "modal_object_id": "modal-abc",
+            "spawned_at": _time.time(),
+        }
+        spawner = MagicMock()
+        spawner.register_foreign_sandbox = AsyncMock(return_value=False)
+        with (
+            patch.object(msa, "_load_runtime_state", AsyncMock(return_value=state)),
+            patch.object(msa, "_persist_runtime_state", AsyncMock()),
+            patch(
+                "omoi_os.services.modal_spawner.get_modal_spawner",
+                return_value=spawner,
+            ),
+        ):
+            assert await msa._rehydrate_agent("sess-1") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_agent_on_success(self) -> None:
+        import time as _time
+
+        state = {
+            "runtime": "opencode-modal",
+            "status": "live",
+            "sandbox_id": "sb-1",
+            "modal_object_id": "modal-abc",
+            "provider": "fireworks-ai",
+            "model": "kimi",
+            "spawned_at": _time.time(),
+        }
+        spawner = MagicMock()
+        spawner.register_foreign_sandbox = AsyncMock(return_value=True)
+        with (
+            patch.object(msa, "_load_runtime_state", AsyncMock(return_value=state)),
+            patch(
+                "omoi_os.services.modal_spawner.get_modal_spawner",
+                return_value=spawner,
+            ),
+        ):
+            agent = await msa._rehydrate_agent("sess-1")
+        assert agent is not None
+        assert agent.sandbox_id == "sb-1"
+        assert agent.modal_object_id == "modal-abc"
+        assert agent.provider == "fireworks-ai"
+        spawner.register_foreign_sandbox.assert_awaited_once_with(
+            "sb-1", "modal-abc", task_id="sess-1"
+        )

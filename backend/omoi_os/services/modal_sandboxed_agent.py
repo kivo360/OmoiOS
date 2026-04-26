@@ -64,6 +64,7 @@ class ModalSandboxedAgent:
     provider: str
     model: str
     spawned_at: float
+    modal_object_id: Optional[str] = None
     runtime: str = "opencode-modal"
 
     async def prompt(self, text: str) -> str:
@@ -125,6 +126,7 @@ class ModalSandboxedAgent:
             "runtime": self.runtime,
             "status": "live",
             "sandbox_id": self.sandbox_id,
+            "modal_object_id": self.modal_object_id,
             "provider": self.provider,
             "model": self.model,
             "spawned_at": self.spawned_at,
@@ -141,11 +143,16 @@ _spawn_lock = asyncio.Lock()
 async def get_or_spawn(omoios_session_id: str) -> ModalSandboxedAgent:
     """Return a Modal sandboxed agent for this session.
 
-    In-memory cache only — multi-replica rehydration via task.result is
-    deferred until we have a durable Modal sandbox handle (Modal's
-    `Sandbox.from_id` exists but the spawner doesn't currently re-register
-    foreign sandboxes in `_sandboxes`, so a fresh process can't drive a
-    pre-existing sandbox). For single-replica dev this is sufficient.
+    Lookup order:
+      1. in-process cache (fast path)
+      2. task.result.sandbox_agent → rehydrate via spawner.register_foreign_sandbox
+      3. fresh spawn → persist runtime state, return
+
+    Cross-replica rehydration uses Modal's `Sandbox.from_id(modal_object_id)`
+    primitive: replica B sees a chat turn for a session whose sandbox was
+    spawned by replica A, reads the `modal_object_id` from `task.result`,
+    and re-attaches via the spawner. If `from_id` fails (sandbox was
+    reaped), we fall through to a fresh spawn.
     """
     existing = _registry.get(omoios_session_id)
     if existing is not None:
@@ -156,8 +163,14 @@ async def get_or_spawn(omoios_session_id: str) -> ModalSandboxedAgent:
         if existing is not None:
             return existing
 
+        rehydrated = await _rehydrate_agent(omoios_session_id)
+        if rehydrated is not None:
+            _registry[omoios_session_id] = rehydrated
+            return rehydrated
+
         agent = await _spawn_agent(omoios_session_id)
         _registry[omoios_session_id] = agent
+        await _persist_runtime_state(omoios_session_id, agent.as_runtime_state())
         return agent
 
 
@@ -165,6 +178,39 @@ async def close(omoios_session_id: str) -> None:
     agent = _registry.pop(omoios_session_id, None)
     if agent is not None:
         await agent.close()
+        await _persist_runtime_state(
+            omoios_session_id,
+            {**agent.as_runtime_state(), "status": "closed"},
+        )
+        return
+    # Cache miss: still tear down any persisted sandbox so a foreign-
+    # replica spawn isn't left dangling.
+    state = await _load_runtime_state(omoios_session_id)
+    if not state or state.get("runtime") != "opencode-modal":
+        return
+    modal_object_id = state.get("modal_object_id")
+    sandbox_id = state.get("sandbox_id")
+    if not (modal_object_id and sandbox_id):
+        return
+    try:
+        from omoi_os.services.modal_spawner import get_modal_spawner
+
+        spawner = get_modal_spawner()
+        attached = await spawner.register_foreign_sandbox(
+            sandbox_id,
+            modal_object_id,
+            task_id=omoios_session_id,
+        )
+        if attached:
+            await spawner.terminate_sandbox(sandbox_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "modal sandboxed agent: foreign teardown failed",
+            omoios_session_id=omoios_session_id,
+            sandbox_id=sandbox_id,
+            error=str(exc),
+        )
+    await _persist_runtime_state(omoios_session_id, {**state, "status": "closed"})
 
 
 async def close_all() -> None:
@@ -222,6 +268,11 @@ async def _spawn_agent(omoios_session_id: str) -> ModalSandboxedAgent:
     # mode=llm (lines 210-228).
     await _write_opencode_configs(spawner, sandbox_id, api_key=api_key)
 
+    info = spawner.get_sandbox_info(sandbox_id)
+    modal_object_id = (
+        info.extra_data.get("modal_object_id") if info is not None else None
+    )
+
     return ModalSandboxedAgent(
         omoios_session_id=omoios_session_id,
         sandbox_id=sandbox_id,
@@ -229,6 +280,138 @@ async def _spawn_agent(omoios_session_id: str) -> ModalSandboxedAgent:
         provider="fireworks-ai",
         model=_DEFAULT_OPENCODE_MODEL,
         spawned_at=time.time(),
+        modal_object_id=modal_object_id,
+    )
+
+
+# ─── persistence + cross-replica rehydration ─────────────────────────────────
+
+
+# Mirrors `services.sandboxed_agent._MAX_AGENT_AGE_SECONDS`. Modal's default
+# sandbox timeout is 24h via `sandbox_timeout_seconds` on the spawner; we
+# treat anything older than 6h as "probably reaped" and fall through to a
+# fresh spawn rather than burn a round-trip on a doomed reattach.
+_MAX_AGENT_AGE_SECONDS = 60 * 60 * 6
+
+
+async def _persist_runtime_state(omoios_session_id: str, state: dict[str, Any]) -> None:
+    """Merge `state` into task.result.sandbox_agent for this session.
+
+    Best-effort — persistence failures should never block a chat turn.
+    Same shape as `services.sandboxed_agent._persist_runtime_state` so the
+    `agent_runtime` field on `GET /sessions/{id}` is uniform across the
+    Daytona and Modal paths.
+    """
+    try:
+        from omoi_os.api.dependencies import get_db_service
+        from omoi_os.models.task import Task
+        from sqlalchemy.orm.attributes import flag_modified
+
+        db = get_db_service()
+        with db.get_session() as session:
+            task = session.get(Task, omoios_session_id)
+            if task is None:
+                return
+            result = dict(task.result or {})
+            result["sandbox_agent"] = {
+                **(result.get("sandbox_agent") or {}),
+                **state,
+            }
+            task.result = result
+            flag_modified(task, "result")
+            session.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "modal sandboxed agent: persist runtime state failed",
+            omoios_session_id=omoios_session_id,
+            error=str(exc),
+        )
+
+
+async def _load_runtime_state(
+    omoios_session_id: str,
+) -> Optional[dict[str, Any]]:
+    try:
+        from omoi_os.api.dependencies import get_db_service
+        from omoi_os.models.task import Task
+
+        db = get_db_service()
+        with db.get_session() as session:
+            task = session.get(Task, omoios_session_id)
+            if task is None:
+                return None
+            result = task.result or {}
+            state = result.get("sandbox_agent")
+            return state if isinstance(state, dict) else None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "modal sandboxed agent: load runtime state failed",
+            omoios_session_id=omoios_session_id,
+            error=str(exc),
+        )
+        return None
+
+
+async def _rehydrate_agent(
+    omoios_session_id: str,
+) -> Optional[ModalSandboxedAgent]:
+    """Try to reattach to a Modal sandbox spawned by another replica.
+
+    Reads `task.result['sandbox_agent']`. If it's a Modal entry, still
+    "live", and not too stale, calls `spawner.register_foreign_sandbox`
+    to wire the foreign Modal sandbox handle into the local spawner so
+    `spawner.exec(sandbox_id, ...)` drives the right sandbox. Returns
+    None on any failure — the caller falls through to a fresh spawn.
+    """
+    state = await _load_runtime_state(omoios_session_id)
+    if not state:
+        return None
+    if state.get("runtime") != "opencode-modal":
+        return None
+    if state.get("status") in ("closed", "error"):
+        return None
+
+    sandbox_id = state.get("sandbox_id")
+    modal_object_id = state.get("modal_object_id")
+    if not (sandbox_id and modal_object_id):
+        return None
+
+    spawned_at = float(state.get("spawned_at") or 0)
+    if spawned_at and time.time() - spawned_at > _MAX_AGENT_AGE_SECONDS:
+        logger.info(
+            "modal sandboxed agent: persisted state too old, skipping rehydration",
+            omoios_session_id=omoios_session_id,
+            age_s=time.time() - spawned_at,
+        )
+        return None
+
+    from omoi_os.services.modal_spawner import get_modal_spawner
+
+    spawner = get_modal_spawner()
+    attached = await spawner.register_foreign_sandbox(
+        sandbox_id,
+        modal_object_id,
+        task_id=omoios_session_id,
+    )
+    if not attached:
+        # Mark stale so the next spawn doesn't keep retrying the dead handle.
+        await _persist_runtime_state(omoios_session_id, {**state, "status": "error"})
+        return None
+
+    logger.info(
+        "modal sandboxed agent: rehydrated from persisted state",
+        omoios_session_id=omoios_session_id,
+        sandbox_id=sandbox_id,
+        modal_object_id=modal_object_id,
+    )
+    return ModalSandboxedAgent(
+        omoios_session_id=omoios_session_id,
+        sandbox_id=sandbox_id,
+        spawner=spawner,
+        provider=state.get("provider") or "fireworks-ai",
+        model=state.get("model") or _DEFAULT_OPENCODE_MODEL,
+        spawned_at=spawned_at or time.time(),
+        modal_object_id=modal_object_id,
     )
 
 

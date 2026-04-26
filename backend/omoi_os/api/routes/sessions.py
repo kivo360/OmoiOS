@@ -949,18 +949,25 @@ async def delete_session(
     # Regardless of whether the task was cancellable (it may have been
     # pending — a chat-only session that never ran through the
     # orchestrator), tear the sandboxed agent down. Otherwise closing
-    # the chat leaks the sandbox until Daytona's lifetime reaper catches
-    # it. Best-effort: any error here is logged but not raised.
-    try:
-        from omoi_os.services import sandboxed_agent as _sandboxed
+    # the chat leaks the sandbox until the provider's idle reaper catches
+    # it (Daytona's lifetime cap, Modal's `sandbox_idle_timeout_seconds`).
+    # Tear down BOTH runtimes — the in-memory registries don't know which
+    # provider served this session, so a `close()` on the wrong one is a
+    # fast no-op but a missed `close()` on the right one leaks state.
+    # Best-effort: any error here is logged but not raised.
+    for module_name in ("sandboxed_agent", "modal_sandboxed_agent"):
+        try:
+            from importlib import import_module
 
-        await _sandboxed.close(session_id)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "sandboxed agent cleanup on delete_session failed",
-            session_id=session_id,
-            error=str(exc),
-        )
+            module = import_module(f"omoi_os.services.{module_name}")
+            await module.close(session_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "sandboxed agent cleanup on delete_session failed",
+                session_id=session_id,
+                runtime=module_name,
+                error=str(exc),
+            )
 
     if not success:
         raise HTTPException(
