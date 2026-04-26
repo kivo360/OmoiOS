@@ -264,9 +264,20 @@ class ModalSpawnerService:
         # commands) tuple.
         # Don't pass `add_python=` — our default base image already ships
         # Python, and Modal's symlink injection collides with /usr/local/bin/python.
+        # Bake opencode into the image at build time. Modal hashes the
+        # spec and caches the built image, so this is a one-time cost
+        # per (image_ref, commands) tuple — every subsequent spawn skips
+        # the install entirely. Validated empirically: install-on-spawn
+        # is ~5-30s of dead time per session; pre-baked image makes
+        # `opencode --version` a sub-3s call from a fresh sandbox.
         image = modal.Image.from_registry(image_ref).run_commands(
             "mkdir -p /root/.local/share/opencode /root/.config/opencode",
             "chmod 700 /root/.local/share/opencode",
+            "curl -fsSL https://opencode.ai/install | bash",
+            # Forces install verification at image-build time, so a
+            # broken install surfaces here (visible in Modal build logs)
+            # rather than silently at first sandbox.exec.
+            "/root/.opencode/bin/opencode --version",
         )
 
         # Volumes: opt-in via `env_version.persistent_volume` flag, same
