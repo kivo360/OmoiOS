@@ -265,6 +265,13 @@ async def _enrich_session_response(
         task_result = None
 
     data = dict(data)
+    # Spec §03 surfaces session-level statuses (`succeeded` / `failed` /
+    # `cancelled`) which are the participle form of the `session.*` event
+    # envelope. The underlying Task model still persists `completed`, so we
+    # map at the response boundary to keep GET /sessions/{id}.status aligned
+    # with the event types emitted on /sessions/{id}/events.
+    if data.get("status") == "completed":
+        data["status"] = "succeeded"
     data["urls"] = _session_urls(request, session_id, task_result)
     data["usage"] = await _session_usage(db, session_id)
     data["acl"] = await _session_acl(db, session_id)
