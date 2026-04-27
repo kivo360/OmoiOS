@@ -56,6 +56,43 @@ install:
 install-all:
     cd {{backend_dir}} && uv sync --active --group dev --group test
 
+# Sync all monorepo dependencies (backend + frontend + migrations)
+[group('setup')]
+sync:
+    #!/usr/bin/env bash
+    set -e
+    echo "🔄 Syncing OmoiOS monorepo..."
+    echo ""
+    
+    # --- Backend dependencies ---
+    echo "🐍 Installing backend dependencies..."
+    cd {{backend_dir}} && uv sync --active --group dev --group test
+    cd ..
+    echo "   ✅ Backend synced"
+    echo ""
+    
+    # --- Frontend dependencies ---
+    echo "⚡ Installing frontend dependencies..."
+    cd {{frontend_dir}} && pnpm install
+    cd ..
+    echo "   ✅ Frontend synced"
+    echo ""
+    
+    # --- Database migrations ---
+    echo "🗄️  Running database migrations..."
+    cd {{backend_dir}} && uv run python -m alembic upgrade head
+    cd ..
+    echo "   ✅ Migrations applied"
+    echo ""
+    
+    echo "═══════════════════════════════════════════════════════════"
+    echo "✅ Monorepo sync complete!"
+    echo ""
+    echo "Start developing:"
+    echo "  just dev-all         # Start API + frontend"
+    echo "  just watch           # Backend with hot-reload"
+    echo "  just test            # Run tests"
+
 # Setup test environment (create .env.test, config/test.yaml)
 [group('setup')]
 setup-test:
@@ -145,6 +182,233 @@ quickstart:
     echo ""
     echo "💡 Don't forget to edit .env.local with your API keys!"
     echo ""
+
+# ============================================================================
+# Git Worktree Management
+# ============================================================================
+#
+# Worktrees let you work on multiple branches simultaneously in separate
+# directories, each with its own working tree but sharing the same .git.
+#
+# Typical workflow:
+#   just worktree-create feature-xyz ../feature-xyz
+#   cd ../feature-xyz
+#   just dev-all
+#
+# For isolated worktrees (env changes won't affect the original repo):
+#   just worktree-create feature-xyz ../feature-xyz --copy
+#
+
+# Symlink .env files into a git worktree (default) or copy them (--copy).
+# Automatically finds the main working tree to source .env files from.
+# Usage: just worktree-env [path]          # path defaults to "."
+#        just worktree-env ../my-feature-branch
+#        just worktree-env --copy
+[group('setup')]
+worktree-env worktree_path='.' *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    WORKTREE="{{worktree_path}}"
+
+    # Parse flags
+    COPY_MODE=false
+    for flag in {{flags}}; do
+        case "$flag" in
+            --copy) COPY_MODE=true ;;
+            *) echo "Unknown flag: $flag" >&2; exit 1 ;;
+        esac
+    done
+
+    # Resolve worktree path to absolute
+    if [[ ! "$WORKTREE" = /* ]]; then
+        WORKTREE="$(cd "$WORKTREE" && pwd)"
+    fi
+
+    if [ ! -d "$WORKTREE" ]; then
+        echo "❌ Worktree directory not found: $WORKTREE" >&2
+        echo "   Create it first: git worktree add $WORKTREE <branch>" >&2
+        exit 1
+    fi
+
+    # Find the main working tree (source of .env files).
+    # In a worktree, .git is a file pointing to the main repo's .git/worktrees/<name>/.
+    # In the main repo, .git is a directory.
+    # We need the main repo's root — that's where the authoritative .env files live.
+    MAIN_REPO=""
+    if [ -f "$WORKTREE/.git" ]; then
+        # We're in a worktree — extract main repo path from .git file
+        # .git contains: gitdir: /path/to/main-repo/.git/worktrees/<name>
+        GITDIR_LINE="$(cat "$WORKTREE/.git")"
+        GITDIR_PATH="${GITDIR_LINE#gitdir: }"
+        # Derive main repo root: go up from .git/worktrees/<name> to the repo root
+        # e.g., /path/to/main-repo/.git/worktrees/feature-xyz → /path/to/main-repo
+        MAIN_REPO="$(cd "$(dirname "$(dirname "$(dirname "$GITDIR_PATH")")")" && pwd)"
+    else
+        # We're in the main repo (or a bare repo) — find the root normally
+        MAIN_REPO="$(git -C "$WORKTREE" rev-parse --show-toplevel)"
+    fi
+
+    if [ "$MAIN_REPO" = "$WORKTREE" ]; then
+        echo "ℹ️  Worktree is the main repo — no .env linking needed."
+        echo "   .env files are already in place."
+        exit 0
+    fi
+
+    echo "📁 Main repo: $MAIN_REPO"
+    echo "🌳 Worktree:  $WORKTREE"
+
+    if [ "$COPY_MODE" = true ]; then
+        echo "📋 Copying .env files from main repo to worktree"
+    else
+        echo "🔗 Symlinking .env files from main repo to worktree"
+    fi
+    echo ""
+
+    # Find all .env files in the MAIN repo (excluding examples, backups, node_modules, .venv)
+    cd "$MAIN_REPO"
+
+    FOUND=0
+    fd --hidden --type f '^\.env' \
+       --exclude '*.example' \
+       --exclude '*.backup*' \
+       --exclude 'node_modules' \
+       --exclude '.venv' \
+       --exclude '.git' \
+       --exclude '__pycache__' \
+       --exclude '.next' \
+       | while read -r envfile; do
+
+         target="$WORKTREE/$envfile"
+
+         # Create parent directory in worktree if needed
+         mkdir -p "$(dirname "$target")"
+
+         # Use absolute paths for symlinks to survive directory changes
+         abs_source="$(cd "$(dirname "$envfile")" && pwd)/$(basename "$envfile")"
+
+         if [ -L "$target" ] || [ -f "$target" ]; then
+             echo "  ⚠️  $envfile already exists in worktree, skipping"
+         elif [ "$COPY_MODE" = true ]; then
+             cp "$abs_source" "$target"
+             echo "  ✅ $envfile (copied) → $target"
+         else
+             ln -s "$abs_source" "$target"
+             echo "  ✅ $envfile (symlinked) → $target"
+         fi
+    done \
+    | { output=$(cat); count=$(echo "$output" | grep -c '✅\|⚠️' 2>/dev/null || echo 0); echo "$output"; echo "FILES_SYNCED=$count"; }
+
+    echo ""
+    if [ "$COPY_MODE" = true ]; then
+        echo "Done. .env files are copied to worktree (edits are isolated)."
+    else
+        echo "Done. .env files are symlinked from main repo (edits sync back)."
+        echo "💡 Use --copy for isolated env (worktree edits won't affect original)."
+    fi
+
+# Install all dependencies inside a worktree (Python + Node.js).
+# Runs env sync, uv sync on all workspace members, and pnpm install in frontend.
+# Defaults to current directory if no path given.
+# Automatically finds .env files from the main repo.
+# Usage: just worktree-setup                  # in the worktree dir
+#        just worktree-setup ../my-feature-branch
+#        just worktree-setup --copy
+[group('setup')]
+worktree-setup worktree_path='.' *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    WORKTREE="{{worktree_path}}"
+
+    # Resolve relative to absolute path
+    if [[ ! "$WORKTREE" = /* ]]; then
+        WORKTREE="$(cd "$WORKTREE" && pwd)"
+    fi
+
+    if [ ! -d "$WORKTREE" ]; then
+        echo "❌ Worktree directory not found: $WORKTREE" >&2
+        exit 1
+    fi
+
+    echo "🔧 Setting up worktree dependencies: $WORKTREE"
+    echo ""
+    echo "═══════════════════════════════════════════════════════════"
+
+    # --- Step 1: Environment files ---
+    echo ""
+    echo "📋 Step 1/4: Environment files"
+    FLAGS=""
+    for flag in {{flags}}; do FLAGS="$FLAGS $flag"; done
+    just worktree-env "$WORKTREE" $FLAGS
+
+    # --- Step 2: Backend Python dependencies (uv workspace) ---
+    echo ""
+    echo "🐍 Step 2/4: Installing backend dependencies (uv sync)"
+    if [ -f "$WORKTREE/backend/pyproject.toml" ]; then
+        cd "$WORKTREE/backend" && uv sync --group test
+        echo "   ✅ Backend dependencies installed"
+    else
+        echo "   ⚠️  No backend/pyproject.toml found, skipping"
+    fi
+
+    # --- Step 3: SDK Python dependencies ---
+    echo ""
+    echo "📦 Step 3/4: Installing SDK dependencies"
+    if [ -f "$WORKTREE/sdk/python/pyproject.toml" ]; then
+        cd "$WORKTREE/sdk/python" && uv sync
+        echo "   ✅ SDK dependencies installed"
+    else
+        echo "   ⚠️  No sdk/python/pyproject.toml found, skipping"
+    fi
+
+    # --- Step 4: Frontend Node.js dependencies ---
+    echo ""
+    echo "⚡ Step 4/4: Installing frontend dependencies (pnpm install)"
+    if [ -f "$WORKTREE/frontend/package.json" ]; then
+        cd "$WORKTREE/frontend" && pnpm install
+        echo "   ✅ Frontend dependencies installed"
+    else
+        echo "   ⚠️  No frontend/package.json found, skipping"
+    fi
+
+    echo ""
+    echo "═══════════════════════════════════════════════════════════"
+    echo "✅ Worktree setup complete: $WORKTREE"
+    echo ""
+    echo "Start developing:"
+    echo "  cd $WORKTREE"
+    echo "  just docker-up        # Start Postgres + Redis"
+    echo "  just dev-all           # Start API + frontend"
+    echo "  just test              # Run tests"
+
+# Create a git worktree and set it up in one step.
+# Creates the worktree, symlinks .env files, and installs all dependencies.
+# Usage: just worktree-create feature-xyz ../feature-xyz
+#        just worktree-create feature-xyz ../feature-xyz --copy
+[group('setup')]
+worktree-create branch path *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Parse flags
+    COPY_FLAG=""
+    for flag in {{flags}}; do
+        case "$flag" in
+            --copy) COPY_FLAG="--copy" ;;
+            *) echo "Unknown flag: $flag" >&2; exit 1 ;;
+        esac
+    done
+
+    echo "🌳 Creating git worktree: {{path}} (branch: {{branch}})"
+    echo ""
+
+    # Create the worktree
+    git worktree add "{{path}}" "{{branch}}"
+    echo "✅ Worktree created at {{path}}"
+    echo ""
+
+    # Run full setup (env + dependencies)
+    just worktree-env "{{path}}" $COPY_FLAG
+    just worktree-setup "{{path}}"
 
 # Check all development dependencies
 [group('setup')]
