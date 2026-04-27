@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -263,13 +263,26 @@ class TestBootstrapChecker:
         """Test _check_llm_key when mode is null."""
         monkeypatch.setenv("LLM_MODE", "null")
 
-        checker = BootstrapChecker()
-        await checker._check_llm_key()
+        # Clear cached settings so the env override actually flows through —
+        # without this, get_app_settings() returns whatever was loaded at
+        # import time (mode="live") and the early-return at _check_llm_key:420
+        # is never taken.
+        from omoi_os.config import _load_yaml_config, get_app_settings
 
-        llm_checks = [c for c in checker.report.checks if c.name == "LLM API Key"]
-        assert len(llm_checks) == 1
-        # Should be ok because mode is null
-        assert llm_checks[0].status == "ok"
+        get_app_settings.cache_clear()
+        _load_yaml_config.cache_clear()
+
+        try:
+            checker = BootstrapChecker()
+            await checker._check_llm_key()
+
+            llm_checks = [c for c in checker.report.checks if c.name == "LLM API Key"]
+            assert len(llm_checks) == 1
+            # Should be ok because mode is null
+            assert llm_checks[0].status == "ok"
+        finally:
+            get_app_settings.cache_clear()
+            _load_yaml_config.cache_clear()
 
     @pytest.mark.asyncio
     async def test_check_llm_key_not_set(self, monkeypatch):
@@ -281,6 +294,7 @@ class TestBootstrapChecker:
 
         # Clear cached settings so they reload with test env
         from omoi_os.config import get_app_settings, _load_yaml_config
+
         get_app_settings.cache_clear()
         _load_yaml_config.cache_clear()
 
@@ -547,7 +561,7 @@ class TestMainAsync:
         """Test main with check --json outputs valid JSON."""
         import json
 
-        result = await main_async(["check", "--json"])
+        await main_async(["check", "--json"])
         captured = capsys.readouterr()
 
         # Should be valid JSON
@@ -663,10 +677,23 @@ class TestMockSubprocessScenarios:
 
     @pytest.mark.asyncio
     async def test_check_postgres_not_running(self):
-        """Test _check_postgres when postgres is not running."""
+        """Test _check_postgres when postgres is not running.
+
+        `_check_postgres` has a TCP-socket fallback after pg_isready fails,
+        so we must also stub socket.connect_ex to a non-zero return value —
+        otherwise CI runners with their own postgres on :15432 (or any
+        local dev environment with docker-compose running) take the
+        socket-fallback "ok" branch and the test misreads the status.
+        """
         checker = BootstrapChecker()
 
-        with patch.object(checker, "_run_command", new_callable=AsyncMock) as mock_run:
+        fake_sock = MagicMock()
+        fake_sock.connect_ex.return_value = 111  # ECONNREFUSED-ish
+
+        with (
+            patch.object(checker, "_run_command", new_callable=AsyncMock) as mock_run,
+            patch("omoi_os.cli.bootstrap.socket.socket", return_value=fake_sock),
+        ):
             mock_run.return_value = (2, "", "Connection refused")
             await checker._check_postgres()
 

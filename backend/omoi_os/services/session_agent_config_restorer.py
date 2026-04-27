@@ -117,7 +117,10 @@ class SessionAgentConfigRestorer:
             return RestorationResult(
                 success=False,
                 error_message=error_msg,
-                restoration_metadata={"session_id": session_id, "sandbox_id": new_sandbox_id},
+                restoration_metadata={
+                    "session_id": session_id,
+                    "sandbox_id": new_sandbox_id,
+                },
             )
 
         # Step 2: Parse session metadata to extract agent configuration
@@ -125,7 +128,9 @@ class SessionAgentConfigRestorer:
         agent_config = self._extract_agent_config(session_metadata)
 
         if not agent_config:
-            error_msg = f"No agent configuration found in session metadata for {session_id}"
+            error_msg = (
+                f"No agent configuration found in session metadata for {session_id}"
+            )
             logger.error(error_msg)
             return RestorationResult(
                 success=False,
@@ -307,9 +312,6 @@ class SessionAgentConfigRestorer:
         if capabilities:
             current_metadata["restored_capabilities"] = capabilities
 
-        # Update phase if specified
-        phase_id = target_phase_id or agent_config.get("phase_id")
-
         # Use agent registry to update the agent
         updated_agent = self.agent_registry.update_agent(
             agent_id=agent.id,
@@ -331,7 +333,10 @@ class SessionAgentConfigRestorer:
                 to_status=AgentStatus.IDLE.value,
                 initiated_by="session_restorer",
                 reason=f"Restored after compaction to sandbox {new_sandbox_id}",
-                metadata={"compaction_recovery": True, "new_sandbox_id": new_sandbox_id},
+                metadata={
+                    "compaction_recovery": True,
+                    "new_sandbox_id": new_sandbox_id,
+                },
             )
 
         return updated_agent
@@ -392,7 +397,9 @@ class SessionAgentConfigRestorer:
             version=agent_config.get("version"),
         )
 
-        logger.info(f"Created restored agent {new_agent.id} (original: {original_agent_id})")
+        logger.info(
+            f"Created restored agent {new_agent.id} (original: {original_agent_id})"
+        )
 
         return new_agent
 
@@ -495,7 +502,9 @@ class SessionAgentConfigRestorer:
         if not transcript:
             validation_result["valid"] = False
             validation_result["checks"]["transcript_exists"] = False
-            validation_result["errors"].append(f"No transcript found for session {session_id}")
+            validation_result["errors"].append(
+                f"No transcript found for session {session_id}"
+            )
         else:
             validation_result["checks"]["transcript_exists"] = True
             validation_result["checks"]["transcript_id"] = transcript.id
@@ -506,10 +515,14 @@ class SessionAgentConfigRestorer:
             if not agent_config:
                 validation_result["valid"] = False
                 validation_result["checks"]["agent_config_present"] = False
-                validation_result["errors"].append("No agent configuration in session metadata")
+                validation_result["errors"].append(
+                    "No agent configuration in session metadata"
+                )
             else:
                 validation_result["checks"]["agent_config_present"] = True
-                validation_result["checks"]["agent_config_keys"] = list(agent_config.keys())
+                validation_result["checks"]["agent_config_keys"] = list(
+                    agent_config.keys()
+                )
 
         # Check 3: New sandbox is ready (placeholder - would check sandbox status)
         validation_result["checks"]["sandbox_ready"] = True

@@ -30,6 +30,7 @@ from omoi_os.models.artifact import Artifact
 # Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def temp_storage_dir(tmp_path: Path) -> Path:
     """Create a temporary storage directory."""
@@ -57,6 +58,7 @@ def artifact_service(temp_storage_dir: Path) -> ArtifactService:
 # Storage Backend Tests
 # ============================================================================
 
+
 class TestLocalFilesystemBackend:
     """Tests for LocalFilesystemBackend."""
 
@@ -71,7 +73,7 @@ class TestLocalFilesystemBackend:
     def test_backend_creates_directory(self, tmp_path: Path):
         """Test backend creates base directory if it doesn't exist."""
         non_existent = tmp_path / "new_artifacts"
-        backend = LocalFilesystemBackend(base_dir=str(non_existent))
+        LocalFilesystemBackend(base_dir=str(non_existent))
         assert non_existent.exists()
 
     @pytest.mark.asyncio
@@ -116,7 +118,9 @@ class TestLocalFilesystemBackend:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_download_returns_content(self, local_backend: LocalFilesystemBackend):
+    async def test_download_returns_content(
+        self, local_backend: LocalFilesystemBackend
+    ):
         """Test download returns correct file content."""
         content = b"Downloadable content"
         stream = io.BytesIO(content)
@@ -138,7 +142,9 @@ class TestLocalFilesystemBackend:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_download_large_file_chunks(self, local_backend: LocalFilesystemBackend):
+    async def test_download_large_file_chunks(
+        self, local_backend: LocalFilesystemBackend
+    ):
         """Test download streams large files in chunks."""
         # Create 2MB file
         content = b"x" * (2 * 1024 * 1024)
@@ -183,7 +189,9 @@ class TestLocalFilesystemBackend:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_delete_nonexistent_file_raises(self, local_backend: LocalFilesystemBackend):
+    async def test_delete_nonexistent_file_raises(
+        self, local_backend: LocalFilesystemBackend
+    ):
         """Test delete raises error for non-existent file."""
         with pytest.raises(FileNotFoundError):
             await local_backend.delete("nonexistent/path/file.txt")
@@ -241,21 +249,26 @@ class TestS3Backend:
         with pytest.raises(NotImplementedError) as exc_info:
             # Use synchronous context for async method test
             import asyncio
-            asyncio.run(backend.upload(
-                workspace_id=uuid4(),
-                artifact_id=uuid4(),
-                filename="test.txt",
-                stream=io.BytesIO(b"test"),
-            ))
+
+            asyncio.run(
+                backend.upload(
+                    workspace_id=uuid4(),
+                    artifact_id=uuid4(),
+                    filename="test.txt",
+                    stream=io.BytesIO(b"test"),
+                )
+            )
         assert "deferred to future version" in str(exc_info.value)
 
         with pytest.raises(NotImplementedError) as exc_info:
             import asyncio
+
             asyncio.run(backend.download("path"))
         assert "deferred to future version" in str(exc_info.value)
 
         with pytest.raises(NotImplementedError) as exc_info:
             import asyncio
+
             asyncio.run(backend.delete("path"))
         assert "deferred to future version" in str(exc_info.value)
 
@@ -264,12 +277,15 @@ class TestS3Backend:
 # Artifact Service Tests
 # ============================================================================
 
+
 class TestArtifactService:
     """Tests for ArtifactService."""
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_upload_artifact_returns_metadata(self, artifact_service: ArtifactService):
+    async def test_upload_artifact_returns_metadata(
+        self, artifact_service: ArtifactService
+    ):
         """Test upload returns artifact with correct metadata."""
         workspace_id = uuid4()
         content = b"Test artifact content"
@@ -296,7 +312,9 @@ class TestArtifactService:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_upload_artifact_stores_metadata(self, artifact_service: ArtifactService):
+    async def test_upload_artifact_stores_metadata(
+        self, artifact_service: ArtifactService
+    ):
         """Test upload stores artifact metadata."""
         workspace_id = uuid4()
         content = b"Metadata test"
@@ -318,7 +336,9 @@ class TestArtifactService:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_download_artifact_returns_content(self, artifact_service: ArtifactService):
+    async def test_download_artifact_returns_content(
+        self, artifact_service: ArtifactService
+    ):
         """Test download returns original content."""
         workspace_id = uuid4()
         content = b"Download test content"
@@ -361,7 +381,9 @@ class TestArtifactService:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_delete_artifact_removes_file_and_metadata(self, artifact_service: ArtifactService):
+    async def test_delete_artifact_removes_file_and_metadata(
+        self, artifact_service: ArtifactService
+    ):
         """Test delete removes both file and database record."""
         workspace_id = uuid4()
         content = b"To be deleted"
@@ -427,7 +449,9 @@ class TestArtifactService:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_list_artifacts_empty_workspace(self, artifact_service: ArtifactService):
+    async def test_list_artifacts_empty_workspace(
+        self, artifact_service: ArtifactService
+    ):
         """Test list returns empty list for workspace with no artifacts."""
         empty_workspace = uuid4()
         artifacts = await artifact_service.list_artifacts(workspace_id=empty_workspace)
@@ -435,14 +459,18 @@ class TestArtifactService:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_get_artifact_returns_none_for_missing(self, artifact_service: ArtifactService):
+    async def test_get_artifact_returns_none_for_missing(
+        self, artifact_service: ArtifactService
+    ):
         """Test get returns None for non-existent artifact."""
         result = await artifact_service.get_artifact(uuid4())
         assert result is None
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_large_file_streams_without_loading_all(self, artifact_service: ArtifactService, tmp_path: Path):
+    async def test_large_file_streams_without_loading_all(
+        self, artifact_service: ArtifactService, tmp_path: Path
+    ):
         """Test large file upload/download streams without loading all in memory."""
         workspace_id = uuid4()
 
@@ -491,6 +519,7 @@ class TestArtifactService:
 # Singleton Pattern Tests
 # ============================================================================
 
+
 class TestArtifactServiceSingleton:
     """Tests for artifact service singleton pattern."""
 
@@ -525,6 +554,7 @@ class TestArtifactServiceSingleton:
 # Checksum Validation Tests
 # ============================================================================
 
+
 class TestChecksumValidation:
     """Tests for SHA-256 checksum validation."""
 
@@ -548,7 +578,9 @@ class TestChecksumValidation:
 
     @pytest.mark.asyncio
     @pytest.mark.unit
-    async def test_different_content_different_checksum(self, artifact_service: ArtifactService):
+    async def test_different_content_different_checksum(
+        self, artifact_service: ArtifactService
+    ):
         """Test different content produces different checksums."""
         workspace_id = uuid4()
 

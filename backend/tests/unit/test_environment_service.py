@@ -31,6 +31,7 @@ from omoi_os.services.environment_service import (
 # Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def encryption_key() -> str:
     """Generate a valid test encryption key."""
@@ -65,6 +66,7 @@ def test_org_id() -> UUID:
 # ============================================================================
 # Environment Creation Tests
 # ============================================================================
+
 
 class TestEnvironmentCreation:
     """Tests for environment creation."""
@@ -122,6 +124,7 @@ class TestEnvironmentCreation:
 
         # Attempt to create another with same name
         from sqlalchemy.exc import IntegrityError
+
         with pytest.raises(IntegrityError):
             environment_service.create_environment(
                 org_id=test_org_id,
@@ -132,6 +135,7 @@ class TestEnvironmentCreation:
 # ============================================================================
 # Environment Listing Tests
 # ============================================================================
+
 
 class TestEnvironmentListing:
     """Tests for environment listing."""
@@ -187,8 +191,8 @@ class TestEnvironmentListing:
             name="env-1",
         )
 
-        # Create in second org
-        env2 = environment_service.create_environment(
+        # Create in second org (side-effect only — we don't reference it after)
+        environment_service.create_environment(
             org_id=other_org_id,
             name="env-2",
         )
@@ -202,6 +206,7 @@ class TestEnvironmentListing:
 # ============================================================================
 # Environment Get Tests
 # ============================================================================
+
 
 class TestEnvironmentGet:
     """Tests for getting environment by ID."""
@@ -240,6 +245,7 @@ class TestEnvironmentGet:
 # ============================================================================
 # Version Creation Tests
 # ============================================================================
+
 
 class TestVersionCreation:
     """Tests for version creation."""
@@ -308,45 +314,6 @@ class TestVersionCreation:
         with db_service.get_session() as session:
             v1_from_db = session.get(EnvironmentVersion, version1.id)
             assert v1_from_db.variables["VAR1"]["value"] == "value1"
-    @pytest.mark.requires_db
-    def test_create_second_version_increments_version_number(
-        self,
-        environment_service: EnvironmentService,
-        test_org_id: UUID,
-    ):
-        """Test create second version: version_number=2, first version still exists unchanged."""
-        env = environment_service.create_environment(
-            org_id=test_org_id,
-            name="test-env",
-        )
-
-        # Create first version
-        version1 = environment_service.create_version(
-            env_id=env.id,
-            variables={
-                "VAR1": {"type": "string", "value": "value1"},
-            },
-        )
-
-        # Create second version
-        version2 = environment_service.create_version(
-            env_id=env.id,
-            variables={
-                "VAR1": {"type": "string", "value": "value1_updated"},
-                "VAR2": {"type": "string", "value": "value2"},
-            },
-        )
-
-        assert version1.version_number == 1
-        assert version2.version_number == 2
-
-        # Verify first version is unchanged
-        from omoi_os.config import get_app_settings
-
-        db = DatabaseService(connection_string=get_app_settings().database.url)
-        with db.get_session() as session:
-            v1_from_db = session.get(EnvironmentVersion, version1.id)
-            assert v1_from_db.variables["VAR1"]["value"] == "value1"
 
     @pytest.mark.unit
     @pytest.mark.requires_db
@@ -375,6 +342,7 @@ class TestVersionCreation:
 # ============================================================================
 # Secret Encryption Tests
 # ============================================================================
+
 
 class TestSecretEncryption:
     """Tests for secret variable encryption."""
@@ -443,6 +411,7 @@ class TestSecretEncryption:
 # ============================================================================
 # Variable Validation Tests
 # ============================================================================
+
 
 class TestVariableValidation:
     """Tests for variable structure validation."""
@@ -544,6 +513,7 @@ class TestVariableValidation:
 # Masking Tests
 # ============================================================================
 
+
 class TestVariableMasking:
     """Tests for variable masking in API responses."""
 
@@ -570,6 +540,7 @@ class TestVariableMasking:
 # ============================================================================
 # Singleton Pattern Tests
 # ============================================================================
+
 
 class TestEnvironmentServiceSingleton:
     """Tests for environment service singleton pattern."""

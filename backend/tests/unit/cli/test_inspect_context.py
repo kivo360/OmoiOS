@@ -369,7 +369,7 @@ class TestInspectTaskFunction:
             mock_settings.return_value = MagicMock()
             mock_settings.return_value.database.url = "postgresql://test"
 
-            with patch("omoi_os.cli.inspect_context.DatabaseService") as MockDB:
+            with patch("omoi_os.cli.inspect_context.DatabaseService"):
                 with patch(
                     "omoi_os.cli.inspect_context.TaskContextBuilder"
                 ) as MockBuilder:
@@ -392,7 +392,7 @@ class TestInspectTaskFunction:
             mock_settings.return_value = MagicMock()
             mock_settings.return_value.database.url = "postgresql://test"
 
-            with patch("omoi_os.cli.inspect_context.DatabaseService") as MockDB:
+            with patch("omoi_os.cli.inspect_context.DatabaseService"):
                 with patch(
                     "omoi_os.cli.inspect_context.TaskContextBuilder"
                 ) as MockBuilder:
@@ -417,7 +417,7 @@ class TestInspectTaskFunction:
             mock_settings.return_value = MagicMock()
             mock_settings.return_value.database.url = "postgresql://test"
 
-            with patch("omoi_os.cli.inspect_context.DatabaseService") as MockDB:
+            with patch("omoi_os.cli.inspect_context.DatabaseService"):
                 with patch(
                     "omoi_os.cli.inspect_context.TaskContextBuilder"
                 ) as MockBuilder:
