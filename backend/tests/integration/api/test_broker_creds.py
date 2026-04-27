@@ -85,8 +85,8 @@ def broker_app(
     app.dependency_overrides[broker_runtime.require_broker_enabled] = lambda: None
 
     # 2. Override the credential broker dependency
-    app.dependency_overrides[broker_runtime.get_runtime_credential_broker] = (
-        lambda: credential_broker_service
+    app.dependency_overrides[broker_runtime.get_runtime_credential_broker] = lambda: (
+        credential_broker_service
     )
 
     # 3. Override the async DB session dependency used by get_session_service

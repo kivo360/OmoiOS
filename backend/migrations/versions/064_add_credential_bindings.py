@@ -163,9 +163,15 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Drop credential bindings and access logs tables."""
     # Drop indexes first (reverse order)
-    op.drop_index("idx_credential_access_logs_actor", table_name="credential_access_logs")
-    op.drop_index("idx_credential_access_logs_binding", table_name="credential_access_logs")
-    op.drop_index("idx_credential_access_logs_workspace", table_name="credential_access_logs")
+    op.drop_index(
+        "idx_credential_access_logs_actor", table_name="credential_access_logs"
+    )
+    op.drop_index(
+        "idx_credential_access_logs_binding", table_name="credential_access_logs"
+    )
+    op.drop_index(
+        "idx_credential_access_logs_workspace", table_name="credential_access_logs"
+    )
     op.drop_table("credential_access_logs")
 
     op.drop_index("idx_credential_bindings_kind", table_name="credential_bindings")

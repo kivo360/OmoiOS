@@ -34,7 +34,7 @@ def upgrade() -> None:
             comment="Encrypted API key (Fernet AES-256-GCM)",
         ),
     )
-    
+
     # Add index for lookups
     op.create_index(
         "idx_user_credentials_encrypted",
@@ -42,7 +42,7 @@ def upgrade() -> None:
         ["encrypted_value"],
         postgresql_where=sa.text("encrypted_value IS NOT NULL"),
     )
-    
+
     # Note: Backfill of existing credentials happens in application layer
     # via CredentialsService when credentials are accessed.
     # This avoids requiring encryption key during migration.

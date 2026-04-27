@@ -223,6 +223,7 @@ class TestMonitoringSettings:
         """Test the class default values for replay settings."""
         # Test the class default directly, bypassing YAML config
         from omoi_os.services.monitoring_replay import MonitoringReplayService
+
         svc = MonitoringReplayService()
         assert svc._replay_dir == Path(".monitoring-recordings")
 

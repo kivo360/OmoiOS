@@ -60,9 +60,7 @@ async def _user_org_ids(db: AsyncSession, user: User) -> List[UUID]:
     return [row[0] for row in result.all()]
 
 
-@router.post(
-    "", response_model=WorkspaceResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("", response_model=WorkspaceResponse, status_code=status.HTTP_201_CREATED)
 async def create_workspace(
     request: WorkspaceCreate,
     auth_ctx: tuple[User, Optional[UUID]] = Depends(get_auth_context),
@@ -135,7 +133,10 @@ async def list_workspaces(
     if organization_id is not None:
         member_org_ids = await _user_org_ids(db, user)
         if organization_id not in member_org_ids:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this organization")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member of this organization",
+            )
         scope_ids = [organization_id]
     elif key_org_id is not None:
         scope_ids = [key_org_id]
@@ -164,7 +165,9 @@ async def get_workspace(
     result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     ws = result.scalar_one_or_none()
     if not ws:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
 
     user, _ = auth_ctx
     await _assert_org_member(auth_service, user, ws.organization_id, "org:read")
@@ -183,7 +186,9 @@ async def update_workspace(
     result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     ws = result.scalar_one_or_none()
     if not ws:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
 
     user, _ = auth_ctx
     await _assert_org_member(auth_service, user, ws.organization_id, "org:write")
@@ -220,7 +225,9 @@ async def delete_workspace(
     result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     ws = result.scalar_one_or_none()
     if not ws:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
 
     user, _ = auth_ctx
     await _assert_org_member(auth_service, user, ws.organization_id, "org:write")

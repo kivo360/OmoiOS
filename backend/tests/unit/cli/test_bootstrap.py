@@ -716,10 +716,22 @@ class TestMockSubprocessScenarios:
 
     @pytest.mark.asyncio
     async def test_check_redis_not_running(self):
-        """Test _check_redis when redis is not running."""
+        """Test _check_redis when redis is not running.
+
+        Same pattern as test_check_postgres_not_running — `_check_redis` has
+        a TCP-socket fallback after redis-cli fails, so we must also stub
+        socket.connect_ex to a non-zero value or CI runners with redis on
+        :16379 (or local docker-compose) take the socket-fallback "ok" branch.
+        """
         checker = BootstrapChecker()
 
-        with patch.object(checker, "_run_command", new_callable=AsyncMock) as mock_run:
+        fake_sock = MagicMock()
+        fake_sock.connect_ex.return_value = 111  # ECONNREFUSED-ish
+
+        with (
+            patch.object(checker, "_run_command", new_callable=AsyncMock) as mock_run,
+            patch("omoi_os.cli.bootstrap.socket.socket", return_value=fake_sock),
+        ):
             mock_run.return_value = (1, "", "Could not connect")
             await checker._check_redis()
 

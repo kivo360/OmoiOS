@@ -119,18 +119,20 @@ class TestGetSessionTranscript:
     def test_get_existing_transcript(self, restorer, mock_db):
         """Test retrieving an existing session transcript."""
         db, session_context = mock_db
-        
+
         # Create mock transcript
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
         mock_transcript.session_id = "sess-456"
         mock_transcript.session_metadata = {"agent_config": {"agent_type": "worker"}}
-        
+
         # Configure mock query
-        session_context.query.return_value.filter.return_value.first.return_value = mock_transcript
-        
+        session_context.query.return_value.filter.return_value.first.return_value = (
+            mock_transcript
+        )
+
         result = restorer._get_session_transcript("sess-456")
-        
+
         assert result is not None
         assert result.id == "transcript-123"
         session_context.query.assert_called_once_with(ClaudeSessionTranscript)
@@ -138,12 +140,12 @@ class TestGetSessionTranscript:
     def test_get_nonexistent_transcript(self, restorer, mock_db):
         """Test retrieving a non-existent session transcript."""
         db, session_context = mock_db
-        
+
         # Configure mock query to return None
         session_context.query.return_value.filter.return_value.first.return_value = None
-        
+
         result = restorer._get_session_transcript("nonexistent-sess")
-        
+
         assert result is None
 
 
@@ -159,9 +161,9 @@ class TestExtractAgentConfig:
                 "capabilities": ["code", "test"],
             }
         }
-        
+
         result = restorer._extract_agent_config(metadata)
-        
+
         assert result is not None
         assert result["agent_id"] == "agent-123"
         assert result["agent_type"] == "worker"
@@ -174,9 +176,9 @@ class TestExtractAgentConfig:
                 "agent_type": "monitor",
             }
         }
-        
+
         result = restorer._extract_agent_config(metadata)
-        
+
         assert result is not None
         assert result["agent_id"] == "agent-456"
 
@@ -189,9 +191,9 @@ class TestExtractAgentConfig:
             "phase_id": "PHASE_IMPLEMENTATION",
             "config": {"key": "value"},
         }
-        
+
         result = restorer._extract_agent_config(metadata)
-        
+
         assert result is not None
         assert result["agent_id"] == "agent-789"
         assert result["phase_id"] == "PHASE_IMPLEMENTATION"
@@ -199,9 +201,9 @@ class TestExtractAgentConfig:
     def test_extract_no_config(self, restorer):
         """Test extracting when no agent config is present."""
         metadata = {"other_key": "other_value"}
-        
+
         result = restorer._extract_agent_config(metadata)
-        
+
         assert result is None
 
 
@@ -211,13 +213,13 @@ class TestGetAgentById:
     def test_get_existing_agent(self, restorer, mock_db):
         """Test retrieving an existing agent."""
         db, session_context = mock_db
-        
+
         mock_agent = MagicMock()
         mock_agent.id = "agent-123"
         session_context.get.return_value = mock_agent
-        
+
         result = restorer._get_agent_by_id("agent-123")
-        
+
         assert result is not None
         assert result.id == "agent-123"
         session_context.get.assert_called_once_with(Agent, "agent-123")
@@ -225,11 +227,11 @@ class TestGetAgentById:
     def test_get_nonexistent_agent(self, restorer, mock_db):
         """Test retrieving a non-existent agent."""
         db, session_context = mock_db
-        
+
         session_context.get.return_value = None
-        
+
         result = restorer._get_agent_by_id("nonexistent-agent")
-        
+
         assert result is None
 
 
@@ -237,56 +239,60 @@ class TestUpdateExistingAgent:
     """Test _update_existing_agent method."""
 
     @pytest.mark.asyncio
-    async def test_update_agent_success(self, restorer, mock_agent_registry, mock_status_manager):
+    async def test_update_agent_success(
+        self, restorer, mock_agent_registry, mock_status_manager
+    ):
         """Test successfully updating an existing agent."""
         mock_agent = MagicMock()
         mock_agent.id = "agent-123"
         mock_agent.agent_metadata = {"existing": "data"}
         mock_agent.status = AgentStatus.TERMINATED.value
-        
+
         mock_agent_registry.update_agent.return_value = mock_agent
-        
+
         agent_config = {
             "agent_type": "worker",
             "capabilities": ["code"],
             "sandbox_id": "old-sandbox",
             "tags": ["test"],
         }
-        
+
         result = await restorer._update_existing_agent(
             agent=mock_agent,
             new_sandbox_id="new-sandbox-456",
             agent_config=agent_config,
             target_phase_id="PHASE_IMPLEMENTATION",
         )
-        
+
         assert result is not None
         mock_agent_registry.update_agent.assert_called_once()
         call_args = mock_agent_registry.update_agent.call_args
         assert call_args.kwargs["agent_id"] == "agent-123"
-        
+
         # Verify status transition was called for terminal state
         mock_status_manager.transition_status.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_update_agent_no_status_transition(self, restorer, mock_agent_registry, mock_status_manager):
+    async def test_update_agent_no_status_transition(
+        self, restorer, mock_agent_registry, mock_status_manager
+    ):
         """Test updating agent without status transition for non-terminal state."""
         mock_agent = MagicMock()
         mock_agent.id = "agent-123"
         mock_agent.agent_metadata = {}
         mock_agent.status = AgentStatus.IDLE.value  # Non-terminal
-        
+
         mock_agent_registry.update_agent.return_value = mock_agent
-        
+
         agent_config = {"agent_type": "worker"}
-        
+
         await restorer._update_existing_agent(
             agent=mock_agent,
             new_sandbox_id="new-sandbox",
             agent_config=agent_config,
             target_phase_id=None,
         )
-        
+
         # Status transition should not be called for non-terminal state
         mock_status_manager.transition_status.assert_not_called()
 
@@ -300,18 +306,18 @@ class TestCreateRestoredAgent:
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
         mock_transcript.session_id = "sess-456"
-        
+
         new_agent = MagicMock()
         new_agent.id = "new-agent-789"
         mock_agent_registry.register_agent.return_value = new_agent
-        
+
         agent_config = {
             "agent_type": "worker",
             "capabilities": ["code", "test"],
             "config": {"original": "settings"},
             "tags": ["restored"],
         }
-        
+
         result = await restorer._create_restored_agent(
             original_agent_id="original-agent-abc",
             new_sandbox_id="sandbox-xyz",
@@ -319,11 +325,11 @@ class TestCreateRestoredAgent:
             target_phase_id="PHASE_IMPLEMENTATION",
             transcript=mock_transcript,
         )
-        
+
         assert result is not None
         assert result.id == "new-agent-789"
         mock_agent_registry.register_agent.assert_called_once()
-        
+
         call_args = mock_agent_registry.register_agent.call_args
         assert call_args.kwargs["agent_type"] == "worker"
         assert call_args.kwargs["status"] == AgentStatus.IDLE.value
@@ -336,17 +342,17 @@ class TestUpdateTranscriptSandboxRef:
     def test_update_sandbox_reference(self, restorer, mock_db):
         """Test updating transcript sandbox reference."""
         db, session_context = mock_db
-        
+
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
         mock_transcript.sandbox_id = "old-sandbox"
         mock_transcript.session_metadata = {}
-        
+
         # Configure merge to return the transcript
         session_context.merge.return_value = mock_transcript
-        
+
         restorer._update_transcript_sandbox_ref(mock_transcript, "new-sandbox")
-        
+
         assert mock_transcript.sandbox_id == "new-sandbox"
         assert "sandbox_history" in mock_transcript.session_metadata
         session_context.commit.assert_called_once()
@@ -354,7 +360,7 @@ class TestUpdateTranscriptSandboxRef:
     def test_update_with_existing_history(self, restorer, mock_db):
         """Test updating transcript with existing sandbox history."""
         db, session_context = mock_db
-        
+
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
         mock_transcript.sandbox_id = "sandbox-v2"
@@ -363,11 +369,11 @@ class TestUpdateTranscriptSandboxRef:
                 {"from": "sandbox-v1", "to": "sandbox-v2", "reason": "compaction"}
             ]
         }
-        
+
         session_context.merge.return_value = mock_transcript
-        
+
         restorer._update_transcript_sandbox_ref(mock_transcript, "sandbox-v3")
-        
+
         history = mock_transcript.session_metadata["sandbox_history"]
         assert len(history) == 2
         assert history[1]["to"] == "sandbox-v3"
@@ -385,7 +391,7 @@ class TestPublishRestorationEvent:
             new_sandbox_id="sandbox-789",
             compaction_metadata={"reason": "memory_pressure"},
         )
-        
+
         mock_event_bus.publish.assert_called_once()
         call_args = mock_event_bus.publish.call_args
         event = call_args[0][0]
@@ -397,7 +403,7 @@ class TestPublishRestorationEvent:
     def test_publish_no_event_bus(self, restorer):
         """Test that no event is published when event_bus is None."""
         restorer.event_bus = None
-        
+
         # Should not raise any exception
         restorer._publish_restoration_event(
             session_id="sess-123",
@@ -415,17 +421,19 @@ class TestValidateRestorationPrerequisites:
     async def test_validation_success(self, restorer, mock_db):
         """Test successful validation."""
         db, session_context = mock_db
-        
+
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
-        mock_transcript.session_metadata = {
-            "agent_config": {"agent_type": "worker"}
-        }
-        
-        session_context.query.return_value.filter.return_value.first.return_value = mock_transcript
-        
-        result = await restorer.validate_restoration_prerequisites("sess-123", "sandbox-456")
-        
+        mock_transcript.session_metadata = {"agent_config": {"agent_type": "worker"}}
+
+        session_context.query.return_value.filter.return_value.first.return_value = (
+            mock_transcript
+        )
+
+        result = await restorer.validate_restoration_prerequisites(
+            "sess-123", "sandbox-456"
+        )
+
         assert result["valid"] is True
         assert result["checks"]["transcript_exists"] is True
         assert result["checks"]["agent_config_present"] is True
@@ -434,11 +442,13 @@ class TestValidateRestorationPrerequisites:
     async def test_validation_missing_transcript(self, restorer, mock_db):
         """Test validation fails when transcript is missing."""
         db, session_context = mock_db
-        
+
         session_context.query.return_value.filter.return_value.first.return_value = None
-        
-        result = await restorer.validate_restoration_prerequisites("nonexistent-sess", "sandbox-456")
-        
+
+        result = await restorer.validate_restoration_prerequisites(
+            "nonexistent-sess", "sandbox-456"
+        )
+
         assert result["valid"] is False
         assert result["checks"]["transcript_exists"] is False
         assert len(result["errors"]) > 0
@@ -447,15 +457,19 @@ class TestValidateRestorationPrerequisites:
     async def test_validation_missing_agent_config(self, restorer, mock_db):
         """Test validation fails when agent config is missing."""
         db, session_context = mock_db
-        
+
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
         mock_transcript.session_metadata = {"other_key": "value"}
-        
-        session_context.query.return_value.filter.return_value.first.return_value = mock_transcript
-        
-        result = await restorer.validate_restoration_prerequisites("sess-123", "sandbox-456")
-        
+
+        session_context.query.return_value.filter.return_value.first.return_value = (
+            mock_transcript
+        )
+
+        result = await restorer.validate_restoration_prerequisites(
+            "sess-123", "sandbox-456"
+        )
+
         assert result["valid"] is False
         assert result["checks"]["agent_config_present"] is False
 
@@ -464,10 +478,17 @@ class TestRestoreAfterCompaction:
     """Test restore_after_compaction method - main entry point."""
 
     @pytest.mark.asyncio
-    async def test_restore_success_existing_agent(self, restorer, mock_db, mock_agent_registry, mock_status_manager, mock_event_bus):
+    async def test_restore_success_existing_agent(
+        self,
+        restorer,
+        mock_db,
+        mock_agent_registry,
+        mock_status_manager,
+        mock_event_bus,
+    ):
         """Test successful restoration with existing agent."""
         db, session_context = mock_db
-        
+
         # Setup mock transcript
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
@@ -479,36 +500,40 @@ class TestRestoreAfterCompaction:
                 "capabilities": ["code"],
             }
         }
-        
+
         # Setup mock agent
         mock_agent = MagicMock()
         mock_agent.id = "existing-agent"
         mock_agent.status = AgentStatus.IDLE.value
-        
+
         # Configure mocks
-        session_context.query.return_value.filter.return_value.first.return_value = mock_transcript
+        session_context.query.return_value.filter.return_value.first.return_value = (
+            mock_transcript
+        )
         session_context.get.return_value = mock_agent
         session_context.merge.return_value = mock_transcript
-        
+
         mock_agent_registry.update_agent.return_value = mock_agent
-        
+
         result = await restorer.restore_after_compaction(
             session_id="sess-456",
             new_sandbox_id="new-sandbox-789",
             target_phase_id="PHASE_IMPLEMENTATION",
             compaction_metadata={"reason": "test"},
         )
-        
+
         assert result.success is True
         assert result.agent_id == "existing-agent"
         assert result.restored_config is not None
         mock_event_bus.publish.assert_called()
 
     @pytest.mark.asyncio
-    async def test_restore_success_new_agent(self, restorer, mock_db, mock_agent_registry, mock_event_bus):
+    async def test_restore_success_new_agent(
+        self, restorer, mock_db, mock_agent_registry, mock_event_bus
+    ):
         """Test successful restoration creating new agent."""
         db, session_context = mock_db
-        
+
         # Setup mock transcript without existing agent
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
@@ -519,23 +544,25 @@ class TestRestoreAfterCompaction:
                 "capabilities": ["code"],
             }
         }
-        
+
         new_agent = MagicMock()
         new_agent.id = "new-agent-789"
-        
+
         # Configure mocks - no existing agent
-        session_context.query.return_value.filter.return_value.first.return_value = mock_transcript
+        session_context.query.return_value.filter.return_value.first.return_value = (
+            mock_transcript
+        )
         session_context.get.return_value = None  # No existing agent
         session_context.merge.return_value = mock_transcript
-        
+
         mock_agent_registry.register_agent.return_value = new_agent
-        
+
         result = await restorer.restore_after_compaction(
             session_id="sess-456",
             new_sandbox_id="new-sandbox-789",
             target_phase_id="PHASE_IMPLEMENTATION",
         )
-        
+
         assert result.success is True
         assert result.agent_id == "new-agent-789"
         mock_agent_registry.register_agent.assert_called_once()
@@ -544,15 +571,15 @@ class TestRestoreAfterCompaction:
     async def test_restore_missing_transcript(self, restorer, mock_db):
         """Test restoration fails when transcript is missing."""
         db, session_context = mock_db
-        
+
         # No transcript found
         session_context.query.return_value.filter.return_value.first.return_value = None
-        
+
         result = await restorer.restore_after_compaction(
             session_id="nonexistent-sess",
             new_sandbox_id="sandbox-789",
         )
-        
+
         assert result.success is False
         assert "No session transcript found" in result.error_message
 
@@ -560,42 +587,46 @@ class TestRestoreAfterCompaction:
     async def test_restore_missing_agent_config(self, restorer, mock_db):
         """Test restoration fails when agent config is missing."""
         db, session_context = mock_db
-        
+
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
         mock_transcript.session_metadata = {"other_key": "value"}  # No agent config
-        
-        session_context.query.return_value.filter.return_value.first.return_value = mock_transcript
-        
+
+        session_context.query.return_value.filter.return_value.first.return_value = (
+            mock_transcript
+        )
+
         result = await restorer.restore_after_compaction(
             session_id="sess-456",
             new_sandbox_id="sandbox-789",
         )
-        
+
         assert result.success is False
         assert "No agent configuration found" in result.error_message
 
     @pytest.mark.asyncio
-    async def test_restore_exception_handling(self, restorer, mock_db, mock_agent_registry):
+    async def test_restore_exception_handling(
+        self, restorer, mock_db, mock_agent_registry
+    ):
         """Test exception handling during restoration."""
         db, session_context = mock_db
-        
+
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
-        mock_transcript.session_metadata = {
-            "agent_config": {"agent_type": "worker"}
-        }
-        
-        session_context.query.return_value.filter.return_value.first.return_value = mock_transcript
-        
+        mock_transcript.session_metadata = {"agent_config": {"agent_type": "worker"}}
+
+        session_context.query.return_value.filter.return_value.first.return_value = (
+            mock_transcript
+        )
+
         # Simulate error during agent creation
         mock_agent_registry.register_agent.side_effect = Exception("Database error")
-        
+
         result = await restorer.restore_after_compaction(
             session_id="sess-456",
             new_sandbox_id="sandbox-789",
         )
-        
+
         assert result.success is False
         assert "Failed to restore agent configuration" in result.error_message
         assert result.restoration_metadata["error_type"] == "Exception"
@@ -605,37 +636,42 @@ class TestBatchRestore:
     """Test batch_restore_after_compaction method."""
 
     @pytest.mark.asyncio
-    async def test_batch_restore(self, restorer, mock_db, mock_agent_registry, mock_event_bus):
+    async def test_batch_restore(
+        self, restorer, mock_db, mock_agent_registry, mock_event_bus
+    ):
         """Test batch restoration of multiple sessions."""
         db, session_context = mock_db
-        
+
         # Setup mock transcript
         mock_transcript = MagicMock()
         mock_transcript.id = "transcript-123"
         mock_transcript.session_id = "sess-456"
-        mock_transcript.session_metadata = {
-            "agent_config": {"agent_type": "worker"}
-        }
-        
+        mock_transcript.session_metadata = {"agent_config": {"agent_type": "worker"}}
+
         new_agent = MagicMock()
         new_agent.id = "agent-789"
-        
-        session_context.query.return_value.filter.return_value.first.return_value = mock_transcript
+
+        session_context.query.return_value.filter.return_value.first.return_value = (
+            mock_transcript
+        )
         session_context.get.return_value = None
         session_context.merge.return_value = mock_transcript
         mock_agent_registry.register_agent.return_value = new_agent
-        
+
         results = await restorer.batch_restore_after_compaction(
             session_ids=["sess-1", "sess-2", "sess-3"],
             new_sandbox_id="sandbox-batch",
         )
-        
+
         assert len(results) == 3
         assert all(r.success for r in results)
-        
+
         # Verify batch event was published
-        batch_calls = [c for c in mock_event_bus.publish.call_args_list 
-                      if c[0][0].event_type == "BATCH_AGENT_CONFIG_RESTORED"]
+        batch_calls = [
+            c
+            for c in mock_event_bus.publish.call_args_list
+            if c[0][0].event_type == "BATCH_AGENT_CONFIG_RESTORED"
+        ]
         assert len(batch_calls) == 1
 
 

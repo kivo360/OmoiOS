@@ -32,6 +32,7 @@ from omoi_os.models.webhook import WebhookDeliveryStatus, WebhookSubscription
 # Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def webhook_service() -> WebhookService:
     """Create a WebhookService with mocked DB."""
@@ -60,6 +61,7 @@ def sample_subscription() -> WebhookSubscription:
 # Subscription CRUD Tests
 # ============================================================================
 
+
 class TestWebhookSubscriptionCrud:
     """Tests for webhook subscription CRUD operations."""
 
@@ -74,7 +76,9 @@ class TestWebhookSubscriptionCrud:
         # Mock the database session
         mock_session = MagicMock()
         mock_db = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
         webhook_service._db = mock_db
 
@@ -87,7 +91,9 @@ class TestWebhookSubscriptionCrud:
             secret=secret,
             active=True,
         )
-        mock_session.query.return_value.filter.return_value.first.return_value = expected_sub
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            expected_sub
+        )
 
         result = webhook_service.create_subscription(
             org_id=org_id,
@@ -130,7 +136,14 @@ class TestWebhookSubscriptionCrud:
             webhook_service.create_subscription(
                 org_id=uuid4(),
                 url="https://example.com/webhook",
-                events=["task.completed", "spec.created", "task.started", "session.created", "artifact.uploaded", "extra.event"],
+                events=[
+                    "task.completed",
+                    "spec.created",
+                    "task.started",
+                    "session.created",
+                    "artifact.uploaded",
+                    "extra.event",
+                ],
                 secret="whsec_test",
             )
 
@@ -161,7 +174,9 @@ class TestWebhookSubscriptionCrud:
         # list_subscriptions uses filter().filter() when active_only=True
         mock_session.query.return_value.filter.return_value.filter.return_value.all.return_value = mock_subs
         mock_db = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
         webhook_service._db = mock_db
 
@@ -175,9 +190,13 @@ class TestWebhookSubscriptionCrud:
         mock_sub = MagicMock()
 
         mock_session = MagicMock()
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_sub
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            mock_sub
+        )
         mock_db = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
         webhook_service._db = mock_db
 
@@ -191,7 +210,9 @@ class TestWebhookSubscriptionCrud:
         mock_session = MagicMock()
         mock_session.query.return_value.filter.return_value.first.return_value = None
         mock_db = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
         webhook_service._db = mock_db
 
@@ -202,6 +223,7 @@ class TestWebhookSubscriptionCrud:
 # ============================================================================
 # HMAC Signature Tests
 # ============================================================================
+
 
 class TestHmacSigning:
     """Tests for HMAC-SHA256 payload signing."""
@@ -254,6 +276,7 @@ class TestHmacSigning:
 # Delivery Retry Tests
 # ============================================================================
 
+
 class TestDeliveryRetry:
     """Tests for exponential backoff retry logic."""
 
@@ -276,7 +299,9 @@ class TestDeliveryRetry:
         assert delay == 4  # 2^2 = 4 seconds
 
     @pytest.mark.unit
-    def test_calculate_backoff_exponential_growth(self, webhook_service: WebhookService):
+    def test_calculate_backoff_exponential_growth(
+        self, webhook_service: WebhookService
+    ):
         """Test exponential growth of backoff."""
         assert webhook_service._calculate_backoff(attempt=4) == 8
         assert webhook_service._calculate_backoff(attempt=5) == 16
@@ -312,6 +337,7 @@ class TestDeliveryRetry:
 # ============================================================================
 # Replay Attack Prevention Tests
 # ============================================================================
+
 
 class TestReplayPrevention:
     """Tests for replay attack prevention."""
@@ -356,6 +382,7 @@ class TestReplayPrevention:
 # Delivery Tests
 # ============================================================================
 
+
 class TestWebhookDelivery:
     """Tests for webhook delivery logic."""
 
@@ -376,9 +403,13 @@ class TestWebhookDelivery:
         ]
 
         mock_session = MagicMock()
-        mock_session.query.return_value.filter.return_value.all.return_value = matching_subs
+        mock_session.query.return_value.filter.return_value.all.return_value = (
+            matching_subs
+        )
         mock_db = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
         webhook_service._db = mock_db
 
@@ -472,7 +503,9 @@ class TestWebhookDelivery:
             active=True,
         )
 
-        with patch("httpx.AsyncClient.post", side_effect=Exception("Connection refused")):
+        with patch(
+            "httpx.AsyncClient.post", side_effect=Exception("Connection refused")
+        ):
             result = await webhook_service._deliver_to_subscription(
                 sub,
                 event="task.completed",
@@ -491,7 +524,9 @@ class TestWebhookDelivery:
 
         mock_session = MagicMock()
         mock_db = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
         webhook_service._db = mock_db
 
@@ -519,9 +554,13 @@ class TestWebhookDelivery:
         mock_delivery.attempts = 1
 
         mock_session = MagicMock()
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_delivery
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            mock_delivery
+        )
         mock_db = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
         webhook_service._db = mock_db
 
@@ -540,6 +579,7 @@ class TestWebhookDelivery:
 # ============================================================================
 # Event Type Tests
 # ============================================================================
+
 
 class TestEventTypes:
     """Tests for valid event types."""
@@ -581,6 +621,7 @@ class TestEventTypes:
 # Audit Logging Tests
 # ============================================================================
 
+
 class TestAuditLogging:
     """Tests for delivery attempt audit logging."""
 
@@ -593,7 +634,9 @@ class TestAuditLogging:
 
         mock_session = MagicMock()
         mock_db = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
         webhook_service._db = mock_db
 
@@ -616,6 +659,8 @@ class TestAuditLogging:
         with patch("omoi_os.services.webhook_service.logger") as mock_logger:
             webhook_service._sign_payload(secret, b"payload", "1234567890")
             # Check no log call contains the secret
-            for call in mock_logger.info.call_args_list + mock_logger.debug.call_args_list:
+            for call in (
+                mock_logger.info.call_args_list + mock_logger.debug.call_args_list
+            ):
                 if call.args:
                     assert secret not in str(call.args)

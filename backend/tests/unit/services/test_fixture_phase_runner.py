@@ -21,7 +21,6 @@ def fixture_dir(tmp_path):
     }
     (tmp_path / "explore_output.json").write_text(json.dumps(explore))
 
-
     # Requirements fixture
     requirements = {
         "requirements": [

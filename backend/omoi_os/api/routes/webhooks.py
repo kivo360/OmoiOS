@@ -34,12 +34,17 @@ router = APIRouter()
 # Request/Response Models
 # ============================================================================
 
+
 class WebhookSubscriptionCreate(BaseModel):
     """Request model for creating a webhook subscription."""
 
-    url: str = Field(..., min_length=1, max_length=2048, description="Webhook delivery URL")
+    url: str = Field(
+        ..., min_length=1, max_length=2048, description="Webhook delivery URL"
+    )
     events: list[str] = Field(..., description="Event types to subscribe to")
-    secret: str = Field(..., min_length=16, max_length=256, description="HMAC-SHA256 signing secret")
+    secret: str = Field(
+        ..., min_length=16, max_length=256, description="HMAC-SHA256 signing secret"
+    )
     active: bool = Field(default=True, description="Whether subscription is active")
 
     @field_validator("events")
@@ -48,7 +53,9 @@ class WebhookSubscriptionCreate(BaseModel):
         """Validate that all event types are supported."""
         invalid = [e for e in events if e not in VALID_EVENT_TYPES]
         if invalid:
-            raise ValueError(f"Invalid event types: {invalid}. Valid: {list(VALID_EVENT_TYPES)}")
+            raise ValueError(
+                f"Invalid event types: {invalid}. Valid: {list(VALID_EVENT_TYPES)}"
+            )
         return events
 
 
@@ -68,7 +75,9 @@ class WebhookSubscriptionUpdate(BaseModel):
             return events
         invalid = [e for e in events if e not in VALID_EVENT_TYPES]
         if invalid:
-            raise ValueError(f"Invalid event types: {invalid}. Valid: {list(VALID_EVENT_TYPES)}")
+            raise ValueError(
+                f"Invalid event types: {invalid}. Valid: {list(VALID_EVENT_TYPES)}"
+            )
         return events
 
 
@@ -110,13 +119,16 @@ class WebhookTestRequest(BaseModel):
     def validate_event(cls, event: str) -> str:
         """Validate that event type is supported."""
         if event not in VALID_EVENT_TYPES:
-            raise ValueError(f"Invalid event type: {event}. Valid: {list(VALID_EVENT_TYPES)}")
+            raise ValueError(
+                f"Invalid event type: {event}. Valid: {list(VALID_EVENT_TYPES)}"
+            )
         return event
 
 
 # ============================================================================
 # Helpers
 # ============================================================================
+
 
 def check_feature_flag() -> None:
     """Check if webhooks feature is enabled.
@@ -157,9 +169,13 @@ def _delivery_to_dict(delivery) -> dict:
         "event": delivery.event,
         "status": delivery.status,
         "attempts": delivery.attempts,
-        "next_retry_at": delivery.next_retry_at.isoformat() if delivery.next_retry_at else None,
+        "next_retry_at": delivery.next_retry_at.isoformat()
+        if delivery.next_retry_at
+        else None,
         "response_status": delivery.response_status,
-        "delivered_at": delivery.delivered_at.isoformat() if delivery.delivered_at else None,
+        "delivered_at": delivery.delivered_at.isoformat()
+        if delivery.delivered_at
+        else None,
         "created_at": delivery.created_at.isoformat() if delivery.created_at else None,
         "updated_at": delivery.updated_at.isoformat() if delivery.updated_at else None,
     }
@@ -168,6 +184,7 @@ def _delivery_to_dict(delivery) -> dict:
 # ============================================================================
 # API Endpoints
 # ============================================================================
+
 
 @router.post("/subscriptions", status_code=status.HTTP_201_CREATED)
 async def create_subscription(
@@ -210,7 +227,9 @@ async def create_subscription(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to create webhook subscription", error=str(e), exc_info=True)
+        logger.error(
+            "Failed to create webhook subscription", error=str(e), exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to create subscription: {str(e)}",
@@ -251,7 +270,9 @@ async def list_subscriptions(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to list webhook subscriptions", error=str(e), exc_info=True)
+        logger.error(
+            "Failed to list webhook subscriptions", error=str(e), exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to list subscriptions: {str(e)}",
@@ -349,14 +370,18 @@ async def update_subscription(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to update webhook subscription", error=str(e), exc_info=True)
+        logger.error(
+            "Failed to update webhook subscription", error=str(e), exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to update subscription: {str(e)}",
         )
 
 
-@router.delete("/subscriptions/{subscription_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/subscriptions/{subscription_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_subscription(
     subscription_id: UUID,
 ) -> None:
@@ -388,7 +413,9 @@ async def delete_subscription(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to delete webhook subscription", error=str(e), exc_info=True)
+        logger.error(
+            "Failed to delete webhook subscription", error=str(e), exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to delete subscription: {str(e)}",

@@ -17,7 +17,9 @@ class TestCheckFeatureFlag:
 
     def test_raises_404_when_feature_disabled(self):
         """Should raise 404 when sessions_api_v1 feature is disabled."""
-        with patch("omoi_os.api.routes.sessions.is_feature_enabled", return_value=False):
+        with patch(
+            "omoi_os.api.routes.sessions.is_feature_enabled", return_value=False
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 sessions.check_feature_flag()
 

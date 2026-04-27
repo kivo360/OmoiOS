@@ -126,6 +126,7 @@ class TestFactoryServiceCreation:
         service = create_llm_service(settings)
 
         assert service is mock_instance  # Since we mocked LLMService
+
     @patch("omoi_os.services.llm_service.LLMService")
     def test_factory_default_mode(self, mock_llm_service_class):
         """Factory uses mode from settings correctly."""
@@ -276,6 +277,7 @@ class TestReplayLLMService:
         # In strict=False mode with cache miss, returns placeholder
         assert isinstance(result, SimpleOutput)
         # The test verifies the code path works without errors
+
     async def test_replay_cache_miss_lenient(self, tmp_path):
         """Replay returns placeholder on miss when strict=False."""
         recording_dir = str(tmp_path / "empty")
