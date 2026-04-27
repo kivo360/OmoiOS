@@ -162,3 +162,68 @@ def test_emit_requires_session_id(db_service: DatabaseService):
             envelope.emit(session_id="", event_type="x", actor=ACTOR_AGENT)
         with pytest.raises(ValueError, match="event_type"):
             envelope.emit(session_id="some-id", event_type="", actor=ACTOR_AGENT)
+
+
+def test_emit_skips_persist_for_delta_events(
+    db_service: DatabaseService, sample_ticket
+):
+    """`*.delta` events publish but do NOT consume a seq or DB row.
+
+    The next non-delta emit picks up at seq=1 because the delta in between
+    didn't allocate a seq. SSE replay therefore has zero gaps.
+    """
+    task_id = _new_task(db_service, sample_ticket)
+    bus = _RecordingBus()
+
+    with db_service.get_session() as session:
+        envelope = SessionEventEnvelope(session, bus)
+        delta = envelope.emit(
+            session_id=task_id,
+            event_type="session.message.part.delta",
+            actor=ACTOR_AGENT,
+            data={"delta": "hel"},
+        )
+        snapshot = envelope.emit(
+            session_id=task_id,
+            event_type="session.message.part.updated",
+            actor=ACTOR_AGENT,
+            data={"part": {"text": "hello"}},
+        )
+        session.commit()
+
+    assert delta["seq"] is None
+    assert delta.get("transient") is True
+    assert snapshot["seq"] == 1  # delta did not advance the sequence
+
+    # Only the snapshot landed in the events table.
+    with db_service.get_session() as session:
+        rows = session.query(Event).filter(Event.entity_id == task_id).all()
+        assert len(rows) == 1
+        assert rows[0].event_type == "session.message.part.updated"
+
+    # Both events were broadcast — live subscribers see deltas in real time.
+    assert len(bus.published) == 2
+
+
+def test_emit_can_force_persist_with_transient_false(
+    db_service: DatabaseService, sample_ticket
+):
+    """Caller-controlled override beats the .delta auto-detection."""
+    task_id = _new_task(db_service, sample_ticket)
+    bus = _RecordingBus()
+
+    with db_service.get_session() as session:
+        envelope = SessionEventEnvelope(session, bus)
+        forced = envelope.emit(
+            session_id=task_id,
+            event_type="session.audit.delta",  # ends with .delta
+            actor=ACTOR_AGENT,
+            data={"x": 1},
+            transient=False,  # explicit override → persist
+        )
+        session.commit()
+
+    assert forced["seq"] == 1
+    with db_service.get_session() as session:
+        rows = session.query(Event).filter(Event.entity_id == task_id).all()
+        assert len(rows) == 1

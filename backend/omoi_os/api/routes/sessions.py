@@ -1100,8 +1100,13 @@ async def session_events(
         def encode(envelope: dict[str, Any]) -> bytes:
             # The `id:` line doubles as the Last-Event-ID the browser sends on
             # reconnect, so clients don't have to track seq separately.
+            # Transient envelopes (seq=None) skip the `id:` line — they're
+            # not persisted, so resuming through them isn't possible; the
+            # last persisted seq stays the resume cursor.
             buf = StringIO()
-            buf.write(f"id: {envelope['seq']}\n")
+            seq = envelope.get("seq")
+            if seq is not None:
+                buf.write(f"id: {seq}\n")
             buf.write(f"event: {envelope['type']}\n")
             buf.write(f"data: {json.dumps(envelope, separators=(',', ':'))}\n\n")
             return buf.getvalue().encode()
@@ -1174,9 +1179,14 @@ async def session_events(
                 envelope = (data.get("payload") or {}).get("envelope")
                 if not envelope:
                     continue
-                if envelope.get("seq", 0) <= last_seen_seq:
-                    continue
-                last_seen_seq = envelope["seq"]
+                seq = envelope.get("seq")
+                if seq is not None:
+                    if seq <= last_seen_seq:
+                        continue
+                    last_seen_seq = seq
+                # Transient envelopes (seq=None) bypass the dedupe check —
+                # they're never persisted, so they can't be replayed and
+                # don't risk duplicate delivery on reconnect.
 
                 yield encode(envelope)
                 last_beat = now

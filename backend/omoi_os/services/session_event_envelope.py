@@ -75,6 +75,7 @@ class SessionEventEnvelope:
         actor: str,
         data: Optional[dict[str, Any]] = None,
         timestamp: Optional[Any] = None,
+        transient: Optional[bool] = None,
     ) -> dict[str, Any]:
         """Append + publish one envelope. Returns the full envelope dict.
 
@@ -84,6 +85,14 @@ class SessionEventEnvelope:
             actor: `ACTOR_AGENT`, `ACTOR_SYSTEM`, or `actor_user(uuid)`.
             data: Domain-specific payload. Goes into the `data` field.
             timestamp: Override for the event timestamp; defaults to utc_now().
+            transient: When True, skip the DB insert and seq allocation —
+                the envelope is published live via Redis pubsub but does
+                NOT show up on SSE replay. By default any ``.delta`` event
+                type auto-promotes to transient because token-level deltas
+                produce ~50× more rows per turn than `*.updated` snapshots
+                without adding any information that isn't already in the
+                snapshot. Pass ``transient=False`` to force-persist a
+                ``.delta`` event (rare).
 
         Raises:
             ValueError: if session_id is empty, event_type is empty, or the
@@ -94,49 +103,68 @@ class SessionEventEnvelope:
         if not event_type:
             raise ValueError("event_type is required")
 
-        # Serialize concurrent emits for this session. Postgres disallows
-        # FOR UPDATE on aggregate queries, so we use a transaction-scoped
-        # advisory lock keyed on a stable hash of the session_id. The lock
-        # releases on commit or rollback — no cleanup needed.
-        self._db.execute(
-            text("SELECT pg_advisory_xact_lock(hashtextextended(:sid, 0))"),
-            {"sid": session_id},
-        )
-        row = self._db.execute(
-            text(
-                "SELECT COALESCE(MAX(seq), 0) AS max_seq "
-                "FROM events WHERE entity_id = :sid"
-            ),
-            {"sid": session_id},
-        ).first()
-        next_seq = (row.max_seq if row else 0) + 1
+        if transient is None:
+            transient = event_type.endswith(".delta")
 
-        event_id = str(uuid4())
         ts = timestamp or utc_now()
         payload = data or {}
+        event_id = str(uuid4())
 
-        event = Event(
-            id=event_id,
-            event_type=event_type,
-            entity_type="session",
-            entity_id=session_id,
-            payload=payload,
-            seq=next_seq,
-            actor=actor,
-            timestamp=ts,
-        )
-        self._db.add(event)
-        self._db.flush()  # surface FK / constraint errors before we broadcast
+        if transient:
+            # Skip the DB row + seq allocation. The envelope rides the
+            # Redis pubsub channel so live SSE/WS subscribers see it,
+            # but resume-from-Last-Event-ID won't replay it. Snapshot
+            # events (``*.updated``) are the source of truth for replay.
+            envelope: dict[str, Any] = {
+                "id": event_id,
+                "seq": None,
+                "type": event_type,
+                "session_id": session_id,
+                "actor": actor,
+                "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+                "data": payload,
+                "transient": True,
+            }
+        else:
+            # Serialize concurrent emits for this session. Postgres disallows
+            # FOR UPDATE on aggregate queries, so we use a transaction-scoped
+            # advisory lock keyed on a stable hash of the session_id. The lock
+            # releases on commit or rollback — no cleanup needed.
+            self._db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:sid, 0))"),
+                {"sid": session_id},
+            )
+            row = self._db.execute(
+                text(
+                    "SELECT COALESCE(MAX(seq), 0) AS max_seq "
+                    "FROM events WHERE entity_id = :sid"
+                ),
+                {"sid": session_id},
+            ).first()
+            next_seq = (row.max_seq if row else 0) + 1
 
-        envelope = {
-            "id": event_id,
-            "seq": next_seq,
-            "type": event_type,
-            "session_id": session_id,
-            "actor": actor,
-            "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
-            "data": payload,
-        }
+            event = Event(
+                id=event_id,
+                event_type=event_type,
+                entity_type="session",
+                entity_id=session_id,
+                payload=payload,
+                seq=next_seq,
+                actor=actor,
+                timestamp=ts,
+            )
+            self._db.add(event)
+            self._db.flush()  # surface FK / constraint errors before we broadcast
+
+            envelope = {
+                "id": event_id,
+                "seq": next_seq,
+                "type": event_type,
+                "session_id": session_id,
+                "actor": actor,
+                "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+                "data": payload,
+            }
 
         # Broadcast. We fire the systemevent with the full envelope nested under
         # `payload.envelope` so downstream consumers (per-session WS, SSE live
@@ -155,7 +183,7 @@ class SessionEventEnvelope:
                 "envelope publish failed (event persisted)",
                 session_id=session_id,
                 event_type=event_type,
-                seq=next_seq,
+                seq=envelope.get("seq"),
             )
 
         # Also publish to the per-session channel so SessionChannelManager
@@ -172,18 +200,20 @@ class SessionEventEnvelope:
                 "type": event_type,
                 "data": payload,
                 "id": event_id,
-                "seq": next_seq,
+                "seq": envelope.get("seq"),
                 "actor": actor,
                 "timestamp": envelope["timestamp"],
                 "session_id": session_id,
             }
+            if envelope.get("transient"):
+                ws_frame["transient"] = True
             self._bus.publish_to_session(session_id, ws_frame)
         except Exception:  # noqa: BLE001 — best-effort
             logger.warning(
                 "per-session envelope publish failed (event persisted)",
                 session_id=session_id,
                 event_type=event_type,
-                seq=next_seq,
+                seq=envelope.get("seq"),
             )
 
         return envelope

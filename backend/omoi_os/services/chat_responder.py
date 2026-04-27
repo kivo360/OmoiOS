@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any
+from typing import Any, Awaitable, Callable, Optional
 
 import httpx
 from sqlalchemy import select
@@ -90,6 +90,59 @@ def _history_to_messages(
         elif actor == ACTOR_AGENT:
             messages.append({"role": "assistant", "content": text})
     return messages
+
+
+def _envelope_event_type(opencode_event_type: str) -> str:
+    """Namespace opencode event types under the ``session.`` envelope tree.
+
+    opencode emits events like ``message.part.delta`` and ``session.idle``.
+    We rebroadcast through ``SessionEventEnvelope`` which expects a single
+    ``session.``-prefixed namespace so SSE clients can filter cleanly.
+    Already-prefixed types (``session.idle``, ``session.error``) pass
+    through; everything else gets ``session.`` prepended.
+    """
+    if opencode_event_type.startswith("session."):
+        return opencode_event_type
+    return f"session.{opencode_event_type}"
+
+
+def _make_on_part(
+    *,
+    session_id: str,
+    db: DatabaseService,
+) -> Callable[[str, dict], Awaitable[None]]:
+    """Build the streaming callback handed to ``agent.prompt(on_part=…)``.
+
+    Each invocation opens a short-lived sync DB session, emits one envelope
+    via ``SessionEventEnvelope``, and commits. Concurrent emits for the
+    same OmoiOS session serialize on the envelope's advisory lock, so
+    ordering is preserved even when the runtime fires deltas back-to-back.
+
+    Failures are logged and swallowed — a streaming hiccup must never
+    abort the underlying chat turn.
+    """
+    bus = get_event_bus()
+
+    async def on_part(opencode_event_type: str, properties: dict) -> None:
+        outbound_type = _envelope_event_type(opencode_event_type)
+        try:
+            with db.get_session() as sess:
+                SessionEventEnvelope(sess, bus).emit(
+                    session_id=session_id,
+                    event_type=outbound_type,
+                    actor=ACTOR_AGENT,
+                    data=properties or {},
+                )
+                sess.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "chat responder: on_part emit failed",
+                session_id=session_id,
+                event_type=outbound_type,
+                error=str(exc),
+            )
+
+    return on_part
 
 
 async def respond_to_session(
@@ -155,15 +208,21 @@ async def respond_to_session(
         #    feature flag on, we dispatch the turn to opencode running
         #    inside a sandbox bound to this OmoiOS session. The provider
         #    (Modal vs Daytona) is selected by `sandbox.provider` config:
-        #      - "modal"   → modal_sandboxed_agent (single-shot exec)
+        #      - "modal"   → modal_sandboxed_agent (streams via tunnel)
         #      - "daytona" → sandboxed_agent (long-lived opencode serve)
         #      - else      → direct LLM fallback below.
         #    Direct chat completion is kept as the fallback for when the
         #    flag is off or the sandboxed path fails to come up.
+        #
+        #    `on_part` forwards every opencode event scoped to this session
+        #    as a `session.message.part.*` envelope so SSE / WebSocket
+        #    subscribers see token-level streaming. The final assembled
+        #    `session.message` is still emitted below for old clients.
+        on_part = _make_on_part(session_id=session_id, db=db)
         response_text: str = ""
         try:
             response_text = await _dispatch_to_sandboxed_agent(
-                session_id, last_user_turn
+                session_id, last_user_turn, on_part=on_part
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
@@ -265,7 +324,12 @@ def _render_history(messages: list[dict[str, str]]) -> dict[str, str]:
     }
 
 
-async def _dispatch_to_sandboxed_agent(session_id: str, user_text: str) -> str:
+async def _dispatch_to_sandboxed_agent(
+    session_id: str,
+    user_text: str,
+    *,
+    on_part: Optional[Callable[[str, dict], Awaitable[None]]] = None,
+) -> str:
     """Route to the active sandboxed-agent runtime, or return "" when none.
 
     Selection order (mirrors `services.sandbox_factory`):
@@ -275,6 +339,13 @@ async def _dispatch_to_sandboxed_agent(session_id: str, user_text: str) -> str:
 
     A returned empty string is the signal for "no sandboxed reply" — the
     chat responder treats it as a fall-through, NOT as a failure.
+
+    ``on_part`` is forwarded to the runtime's ``prompt(text, on_part=…)``
+    when the runtime supports streaming. Modal supports it as of the
+    streaming-tunnel transplant; Daytona's sandboxed_agent will gain the
+    same surface in a follow-up. When the runtime doesn't accept the
+    kwarg, we fall back to the legacy single-shot call so older runtimes
+    keep working.
     """
     try:
         from omoi_os.config import get_app_settings
@@ -290,13 +361,34 @@ async def _dispatch_to_sandboxed_agent(session_id: str, user_text: str) -> str:
         from omoi_os.services import modal_sandboxed_agent as _modal
 
         agent = await _modal.get_or_spawn(session_id)
-        return await agent.prompt(user_text)
+        return await _call_prompt(agent, user_text, on_part=on_part)
     if provider == "daytona":
         from omoi_os.services import sandboxed_agent as _daytona
 
         agent = await _daytona.get_or_spawn(session_id)
-        return await agent.prompt(user_text)
+        return await _call_prompt(agent, user_text, on_part=on_part)
     return ""
+
+
+async def _call_prompt(
+    agent: Any,
+    text: str,
+    *,
+    on_part: Optional[Callable[[str, dict], Awaitable[None]]] = None,
+) -> str:
+    """Call ``agent.prompt(text, on_part=…)`` if the runtime supports it,
+    falling back to ``agent.prompt(text)`` for legacy runtimes."""
+    if on_part is None:
+        return await agent.prompt(text)
+    try:
+        return await agent.prompt(text, on_part=on_part)
+    except TypeError as exc:
+        # Older runtimes (current Daytona path) don't accept on_part —
+        # fall back to single-shot. Streaming events will be lost for
+        # that turn, but the final assembled reply still flows.
+        if "on_part" in str(exc):
+            return await agent.prompt(text)
+        raise
 
 
 async def _call_chat_completion(
@@ -348,17 +440,43 @@ async def _call_chat_completion(
 
 
 def schedule_response(session_id: str, db: DatabaseService) -> asyncio.Task[Any]:
-    """Fire-and-forget helper for route handlers.
+    """Schedule a chat-responder turn for a session.
 
-    Creates an asyncio task bound to the current event loop. Uses
-    `fire_and_forget` so the task isn't garbage-collected before it runs
-    — bare `asyncio.create_task` here lost initial-prompt agent replies
-    in production until 2026-04-26. The task is returned so tests can
-    await it; production callers ignore the handle.
+    Two-tier strategy:
+      1. Try to enqueue on the Taskiq broker so any worker replica can
+         pick up the job. Production needs this for correctness with
+         N>1 API replicas — without it, only the replica that took the
+         POST runs the responder, and a load balancer routing the
+         next turn elsewhere strands the conversation.
+      2. On broker unreachable / enqueue failure (dev without a worker,
+         tests, broken Redis), fall through to the in-process
+         ``fire_and_forget`` path so the chat UX still works locally.
+
+    Returns an asyncio.Task in both modes — Taskiq enqueue is wrapped
+    in a tiny coroutine so the return type stays consistent for callers
+    and tests that ``await`` the handle.
     """
     from omoi_os.utils.asyncio_tasks import fire_and_forget
 
+    async def _enqueue_or_run() -> None:
+        try:
+            from omoi_os.tasks.chat_tasks import enqueue_response
+
+            handle = await enqueue_response(session_id)
+            if handle is not None:
+                # Successfully enqueued — Taskiq worker will run it.
+                return
+        except Exception as exc:  # noqa: BLE001 — broker import or call failed
+            logger.warning(
+                "chat responder: broker path unavailable, falling back in-process",
+                session_id=session_id,
+                error=str(exc),
+            )
+        # Fallback: run in this process. Same shape as the pre-Taskiq
+        # behavior, so dev environments without a worker still chat fine.
+        await respond_to_session(session_id, db=db)
+
     return fire_and_forget(
-        respond_to_session(session_id, db=db),
+        _enqueue_or_run(),
         name=f"chat_responder:{session_id[:8]}",
     )
