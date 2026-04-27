@@ -440,17 +440,43 @@ async def _call_chat_completion(
 
 
 def schedule_response(session_id: str, db: DatabaseService) -> asyncio.Task[Any]:
-    """Fire-and-forget helper for route handlers.
+    """Schedule a chat-responder turn for a session.
 
-    Creates an asyncio task bound to the current event loop. Uses
-    `fire_and_forget` so the task isn't garbage-collected before it runs
-    — bare `asyncio.create_task` here lost initial-prompt agent replies
-    in production until 2026-04-26. The task is returned so tests can
-    await it; production callers ignore the handle.
+    Two-tier strategy:
+      1. Try to enqueue on the Taskiq broker so any worker replica can
+         pick up the job. Production needs this for correctness with
+         N>1 API replicas — without it, only the replica that took the
+         POST runs the responder, and a load balancer routing the
+         next turn elsewhere strands the conversation.
+      2. On broker unreachable / enqueue failure (dev without a worker,
+         tests, broken Redis), fall through to the in-process
+         ``fire_and_forget`` path so the chat UX still works locally.
+
+    Returns an asyncio.Task in both modes — Taskiq enqueue is wrapped
+    in a tiny coroutine so the return type stays consistent for callers
+    and tests that ``await`` the handle.
     """
     from omoi_os.utils.asyncio_tasks import fire_and_forget
 
+    async def _enqueue_or_run() -> None:
+        try:
+            from omoi_os.tasks.chat_tasks import enqueue_response
+
+            handle = await enqueue_response(session_id)
+            if handle is not None:
+                # Successfully enqueued — Taskiq worker will run it.
+                return
+        except Exception as exc:  # noqa: BLE001 — broker import or call failed
+            logger.warning(
+                "chat responder: broker path unavailable, falling back in-process",
+                session_id=session_id,
+                error=str(exc),
+            )
+        # Fallback: run in this process. Same shape as the pre-Taskiq
+        # behavior, so dev environments without a worker still chat fine.
+        await respond_to_session(session_id, db=db)
+
     return fire_and_forget(
-        respond_to_session(session_id, db=db),
+        _enqueue_or_run(),
         name=f"chat_responder:{session_id[:8]}",
     )

@@ -14,6 +14,10 @@ from omoi_os.tasks.billing_tasks import (
     generate_scheduled_invoices,
     send_payment_reminder,
 )
+from omoi_os.tasks.chat_tasks import (
+    enqueue_response,
+    respond_to_session_task,
+)
 from omoi_os.tasks.scaffolding import (
     trigger_scaffolding,
     trigger_scaffolding_for_ticket,
@@ -25,6 +29,8 @@ __all__ = [
     "process_failed_payments",
     "generate_scheduled_invoices",
     "send_payment_reminder",
+    "enqueue_response",
+    "respond_to_session_task",
     "trigger_scaffolding",
     "trigger_scaffolding_for_ticket",
 ]
