@@ -55,7 +55,7 @@ def show_cmd(
         raise CliError(f"config at {path} is not valid JSON: {exc}") from exc
 
     if not reveal:
-        for secret_key in ("api_key", "github_token"):
+        for secret_key in ("api_key", "user_jwt", "github_token"):
             if val := data.get(secret_key):
                 data[secret_key] = (
                     f"{val[:14]}…(redacted, --reveal to show)"

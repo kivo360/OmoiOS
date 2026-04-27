@@ -63,10 +63,14 @@ dependencies = [
     "slowapi>=0.1.9",
     "spec-sandbox",
     "httpx-ws>=0.9.0",
+    "sandbox-agent-sdk>=0.2.0",
 ]
 
 [tool.uv.sources]
 spec-sandbox = { workspace = true }
+# TEMPORARY: editable install of local SDK until 0.2.0 publishes to PyPI.
+# Switch to plain PyPI version constraint after publish.
+sandbox-agent-sdk = { path = "/Users/kevinhill/Coding/Projects/sandbox-agent-python", editable = true }
 
 [build-system]
 requires = ["uv_build>=0.9.2,<0.10.0"]

@@ -1,0 +1,10 @@
+{
+  "session_id": "66b1c477-e7c3-4fe1-afdd-44dc021ff169",
+  "terminal_event": "session.succeeded",
+  "event_types": [
+    "session.created",
+    "session.message",
+    "session.succeeded"
+  ],
+  "agent_msg_count": 1
+}

@@ -8,8 +8,12 @@ Precedence (highest first):
      `~/.config/omoios/config.json` — written by `omoios signup`.
 
 The config file is JSON: `{"api_base_url": "...", "api_key": "...",
-"workspace_id": "...", "user_id": "...", "github_token": "..."}`.
-Optional keys are tolerated.
+"workspace_id": "...", "user_id": "...", "user_jwt": "...",
+"github_token": "..."}`. Optional keys are tolerated.
+
+`user_jwt` is the user-bearer JWT minted at signup/login; required for
+WebSocket-authenticated routes (e.g. `sessions connect`) since the
+session_channel handler accepts JWT only — platform keys are HTTP-only.
 """
 
 from __future__ import annotations
@@ -43,6 +47,7 @@ class CliConfig:
     api_key: str
     workspace_id: Optional[str] = None
     user_id: Optional[str] = None
+    user_jwt: Optional[str] = None
     github_token: Optional[str] = None
 
 
@@ -110,6 +115,7 @@ def resolve_config(
         api_key=key,
         workspace_id=file_data.get("workspace_id"),
         user_id=file_data.get("user_id"),
+        user_jwt=os.environ.get("OMOIOS_USER_JWT") or file_data.get("user_jwt"),
         github_token=file_data.get("github_token"),
     )
 
@@ -144,6 +150,8 @@ def write_config(cfg: CliConfig) -> Path:
         payload["workspace_id"] = cfg.workspace_id
     if cfg.user_id:
         payload["user_id"] = cfg.user_id
+    if cfg.user_jwt:
+        payload["user_jwt"] = cfg.user_jwt
     if cfg.github_token:
         payload["github_token"] = cfg.github_token
     path.write_text(json.dumps(payload, indent=2))

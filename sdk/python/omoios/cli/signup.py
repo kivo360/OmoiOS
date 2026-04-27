@@ -99,9 +99,14 @@ def signup(
         api_base_url=api,
         api_key=api_key,
         user_id=user_id,
+        user_jwt=jwt,
     )
     path = write_config(cfg)
     ok(f"config written to [dim]{path}[/dim]")
+    info(
+        "stored user JWT for WebSocket routes (e.g. `omoios sessions connect`); "
+        "rerun signup or `omoios auth refresh` if it expires."
+    )
 
     if connect_github:
         # Local import dodges a circular import at module load.
