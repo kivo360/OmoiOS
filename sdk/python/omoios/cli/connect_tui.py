@@ -140,6 +140,16 @@ class ConnectApp(App):
         self._typing_task: Optional[asyncio.Task] = None
         self._participants: Dict[str, dict] = {}
         self._event_log: list[str] = []
+        # Live-streaming state. Each opencode message-part is rendered as
+        # one ChatBubble identified by `part_id`; `_part_text` holds the
+        # cumulative text so deltas can append in O(1). `_live_message_ids`
+        # tracks which opencode messages have already rendered as live
+        # bubbles so the trailing `session.message` envelope (emitted by
+        # chat_responder for old clients) doesn't double-render the reply.
+        self._part_bubbles: Dict[str, ChatBubble] = {}
+        self._part_text: Dict[str, str] = {}
+        self._part_type: Dict[str, str] = {}
+        self._live_message_ids: set[str] = set()
 
     # ── compose ────────────────────────────────────────────────────────────
 
@@ -223,16 +233,114 @@ class ConnectApp(App):
         etype = getattr(evt, "type", None) or evt.event_type
         actor = getattr(evt, "actor", None) or "system"
         data = evt.data or {}
+
+        if etype == "session.message.part.updated":
+            self._render_part_updated(actor, data)
+            return
+        if etype == "session.message.part.delta":
+            self._render_part_delta(actor, data)
+            return
         if etype == "session.message":
             text = data.get("text", "")
+            # If chat_responder already streamed this assistant message via
+            # part.* events, skip the trailing assembled envelope so we
+            # don't double-render the same reply.
+            if actor == "agent" and self._live_message_ids:
+                self._live_message_ids.clear()
+                return
             you = actor.startswith("user:") and (
                 self.my_user_id and self.my_user_id in actor
             )
             chat = self.query_one("#chat", VerticalScroll)
             chat.mount(ChatBubble(actor=actor, text=text, you=you))
             chat.scroll_end(animate=False)
+            return
+        if etype == "session.idle":
+            # Turn boundary — ready for the next prompt. Live bubbles stay
+            # but their per-turn keys clear so the next assistant message
+            # gets fresh part ids without colliding.
+            return
+        self._log_event(f"{etype} · {actor}")
+
+    # ── live streaming helpers ─────────────────────────────────────────────
+
+    def _render_part_updated(self, actor: str, data: Dict[str, Any]) -> None:
+        """Cumulative snapshot — opencode's authoritative part state."""
+        part = data.get("part") or {}
+        if not isinstance(part, dict):
+            return
+        part_id = part.get("id")
+        ptype = part.get("type")
+        if not isinstance(part_id, str) or ptype not in ("text", "reasoning", "tool"):
+            return
+        message_id = part.get("messageID")
+        if isinstance(message_id, str):
+            self._live_message_ids.add(message_id)
+
+        if ptype == "tool":
+            self._render_tool_part(part)
+            return
+
+        text = part.get("text", "") or ""
+        self._part_text[part_id] = text
+        self._part_type[part_id] = ptype
+        self._upsert_bubble(part_id, ptype, actor, text)
+
+    def _render_part_delta(self, actor: str, data: Dict[str, Any]) -> None:
+        """Token-level delta — append to the running cumulative text."""
+        if data.get("field") != "text":
+            return
+        part_id = data.get("partID")
+        delta = data.get("delta", "")
+        if not isinstance(part_id, str) or not isinstance(delta, str):
+            return
+        message_id = data.get("messageID")
+        if isinstance(message_id, str):
+            self._live_message_ids.add(message_id)
+        # Default the part type to "text" until a part.updated tells us
+        # otherwise — opencode emits delta first for fresh parts.
+        ptype = self._part_type.get(part_id, "text")
+        new_text = (self._part_text.get(part_id, "") or "") + delta
+        self._part_text[part_id] = new_text
+        self._upsert_bubble(part_id, ptype, actor, new_text)
+
+    def _render_tool_part(self, part: Dict[str, Any]) -> None:
+        """Tool calls render compact in the events log, not as bubbles."""
+        tool = part.get("tool", "?")
+        state = part.get("state") or {}
+        status = state.get("status") if isinstance(state, dict) else None
+        self._log_event(f"tool · {tool} · {status or 'pending'}")
+
+    def _upsert_bubble(
+        self, part_id: str, ptype: str, actor: str, text: str
+    ) -> None:
+        """Mount a bubble for this part on first sight; update in place after."""
+        chat = self.query_one("#chat", VerticalScroll)
+        bubble = self._part_bubbles.get(part_id)
+        if bubble is None:
+            bubble = ChatBubble(actor=actor, text=text, you=False)
+            # Reasoning bubbles render dimmed so the user can ignore the
+            # internal monologue and focus on the actual reply.
+            if ptype == "reasoning":
+                bubble.classes += " reasoning"
+            self._part_bubbles[part_id] = bubble
+            chat.mount(bubble)
         else:
-            self._log_event(f"{etype} · {actor}")
+            from rich.panel import Panel
+            from rich.text import Text
+
+            border = "yellow" if ptype == "reasoning" else "green"
+            title = "reasoning" if ptype == "reasoning" else "agent"
+            bubble.update(
+                Panel(
+                    Text(text, justify="left"),
+                    title=title,
+                    border_style=border,
+                    title_align="left",
+                    padding=(0, 1),
+                )
+            )
+        chat.scroll_end(animate=False)
 
     # ── WebSocket inbound ─────────────────────────────────────────────────
 
