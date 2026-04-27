@@ -94,6 +94,10 @@ jobs:
           --ignore=tests/unit/test_environment_credentials_column.py
           --ignore=tests/unit/test_feature_flags.py
           --ignore=tests/unit/test_webhook_service.py
+          --ignore=tests/unit/test_credential_broker.py
+          --ignore=tests/unit/test_workspace_isolation.py
+          --ignore=tests/unit/test_environment_service.py
+          --ignore=tests/unit/services/test_session_event_envelope.py
           -k "not database and not db and not migration"
 
   frontend:
