@@ -211,9 +211,17 @@ class ModalSpawnerService:
         execution_mode: str = "implementation",
         env_version: Optional[EnvironmentVersion] = None,
         sandbox_session_token: Optional[str] = None,
+        exposed_ports: Optional[list[int]] = None,
         **_ignored: Any,
     ) -> str:
-        """Spawn a Modal sandbox for a task. Returns the OmoiOS sandbox id."""
+        """Spawn a Modal sandbox for a task. Returns the OmoiOS sandbox id.
+
+        ``exposed_ports`` takes precedence over ``env_version.exposed_ports``
+        — chat-mode SDK-direct sessions don't carry an env_version but still
+        need port 4096 exposed for `opencode serve`. Either source produces
+        a Modal `encrypted_ports=[…]` declaration; both are merged when
+        both are present.
+        """
         from uuid import uuid4
 
         modal = self._ensure_modal()
@@ -293,9 +301,12 @@ class ModalSpawnerService:
             volumes["/workspace"] = await self._get_or_create_volume(vol_name)
 
         # Encrypted ports — declared at create time on Modal (see
-        # daytona_spawner.py:1664). `env_version.exposed_ports` is the
-        # source of truth.
-        exposed_ports = list(getattr(env_version, "exposed_ports", []) or [])
+        # daytona_spawner.py:1664). Merge any caller-supplied ports
+        # (chat-mode passes [4096] for `opencode serve`) with whatever
+        # the env_version declares; dedupe to keep Modal happy.
+        merged_ports = list(exposed_ports or [])
+        merged_ports.extend(getattr(env_version, "exposed_ports", []) or [])
+        exposed_ports = sorted({p for p in merged_ports if isinstance(p, int)})
 
         # Single Modal Secret carrying every env var. Easier than juggling
         # named secrets per category.

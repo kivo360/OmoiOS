@@ -1,44 +1,40 @@
 """Modal-backed sandboxed agent — peer of `services.sandboxed_agent`.
 
-The Daytona path runs `opencode serve` (a long-lived HTTP server) inside the
-sandbox and routes prompts via the AsyncOpencode client through a preview
-tunnel. Modal sandboxes don't ship the same preview-URL primitive (Modal's
-`tunnels()` requires `encrypted_ports` declared at create time and is meant
-for HTTP services, not low-latency RPC), so this module instead drives
-opencode in single-shot mode via `sandbox.exec`:
+Each OmoiOS session gets a dedicated Modal sandbox running a long-lived
+``opencode serve`` process. We talk to it over Modal's encrypted-port
+tunnel (port 4096) using the same HTTP shape as the Daytona path:
 
-    bash -lc 'cd /tmp && timeout 60 /root/.opencode/bin/opencode run \\
-        --print-logs --log-level ERROR --dangerously-skip-permissions \\
-        <prompt> < /dev/null'
+    POST   /session                          → create opencode session
+    POST   /session/{id}/message             → send a turn (returns final body)
+    GET    /event                            → SSE stream of every part-delta
 
-The pattern is the one we proved in `scripts/modal_sandbox_smoke.py` (mode=
-llm) — opencode is baked into the image at build time, stdin is closed with
-`< /dev/null` so opencode doesn't hang waiting for input, and a hard
-`timeout 60` guards against runaway calls.
+This module's `prompt()` accepts an optional `on_part(event_type, payload)`
+callback. When supplied, every opencode event scoped to our session is
+awaited through it — `chat_responder` plumbs that into
+`SessionEventEnvelope.emit("session.message.part.{type}", …)` so live SSE
+clients see token-level streaming. With no callback, behavior is
+backwards-compatible: returns the assembled assistant text as a string.
 
-Each OmoiOS session gets a dedicated Modal sandbox; the sandbox is kept
-alive across turns (sleep infinity) and torn down on session close.
-Continuity across turns is *not* preserved at the opencode-session layer —
-each turn is a fresh `opencode run`. The chat_responder bakes the prior
-conversation into the prompt itself, so the LLM sees the history regardless.
-
-Public surface mirrors `services.sandboxed_agent` so chat_responder can
-dispatch through either runtime via a single protocol:
+Public surface mirrors `services.sandboxed_agent`:
 
     agent = await get_or_spawn(omoios_session_id)
     reply = await agent.prompt("hello")
+    reply = await agent.prompt("hello", on_part=cb)
     await close(omoios_session_id)
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
-import shlex
 import time
-from dataclasses import dataclass
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable, Optional
+
+import httpx
+from httpx_sse import aconnect_sse
 
 from omoi_os.logging import get_logger
 
@@ -48,69 +44,203 @@ logger = get_logger(__name__)
 
 _DEFAULT_OPENCODE_MODEL = os.environ.get(
     "OPENCODE_MODAL_MODEL",
-    "fireworks-ai/accounts/fireworks/routers/kimi-k2p5-turbo",
+    "accounts/fireworks/routers/kimi-k2p5-turbo",
 )
+_DEFAULT_OPENCODE_PROVIDER = os.environ.get("OPENCODE_MODAL_PROVIDER", "fireworks-ai")
+_OPENCODE_PORT = int(os.environ.get("OPENCODE_MODAL_PORT", "4096"))
 _OPENCODE_BIN = "/root/.opencode/bin/opencode"
-_OPENCODE_RUN_TIMEOUT_SECONDS = int(os.environ.get("OPENCODE_MODAL_RUN_TIMEOUT", "60"))
+_OPENCODE_TURN_TIMEOUT_SECONDS = int(
+    os.environ.get("OPENCODE_MODAL_TURN_TIMEOUT", "600")
+)
+_OPENCODE_HEALTH_TIMEOUT_SECONDS = int(
+    os.environ.get("OPENCODE_MODAL_HEALTH_TIMEOUT", "90")
+)
+
+
+# Callback signature: (event_type, payload) where payload is a dict from
+# opencode's `properties` field. Async so callers can await DB writes /
+# Redis publishes inside the callback without spawning extra tasks.
+PartCallback = Callable[[str, dict], Awaitable[None]]
 
 
 @dataclass
 class ModalSandboxedAgent:
-    """One OmoiOS session ⇆ one Modal sandbox ⇆ single-shot opencode runs."""
+    """One OmoiOS session ⇆ one Modal sandbox ⇆ one opencode serve process."""
 
     omoios_session_id: str
     sandbox_id: str
-    spawner: Any  # ModalSpawnerService — typed as Any to keep import cheap
+    spawner: Any  # ModalSpawnerService — Any keeps the import surface small
+    tunnel_url: str
+    opencode_session_id: str
     provider: str
     model: str
     spawned_at: float
     modal_object_id: Optional[str] = None
     runtime: str = "opencode-modal"
+    _http: Optional[httpx.AsyncClient] = field(default=None, repr=False)
 
-    async def prompt(self, text: str) -> str:
-        """Run one opencode turn against the user's text. Returns the reply."""
-        # Quote the prompt for `bash -lc` so shell metacharacters don't
-        # detonate the command. shlex handles single-quoting + escaping
-        # the way bash expects.
-        quoted_prompt = shlex.quote(text)
-        cmd = (
-            f"cd /tmp && timeout {_OPENCODE_RUN_TIMEOUT_SECONDS} {_OPENCODE_BIN} run "
-            "--print-logs --log-level ERROR --dangerously-skip-permissions "
-            f"{quoted_prompt} < /dev/null"
-        )
-        started = time.perf_counter()
-        result = await self.spawner.exec(self.sandbox_id, "bash", "-lc", cmd)
-        duration_ms = (time.perf_counter() - started) * 1000
-
-        stdout = _to_text(result.get("stdout"))
-        stderr = _to_text(result.get("stderr"))
-        rc = result.get("exit_code", -1)
-
-        if rc != 0:
-            logger.warning(
-                "modal sandboxed agent: opencode run failed",
-                omoios_session_id=self.omoios_session_id,
-                sandbox_id=self.sandbox_id,
-                exit_code=rc,
-                stderr_preview=stderr[:200],
-                duration_ms=int(duration_ms),
+    def _client(self) -> httpx.AsyncClient:
+        if self._http is None:
+            self._http = httpx.AsyncClient(
+                base_url=self.tunnel_url, timeout=_OPENCODE_TURN_TIMEOUT_SECONDS
             )
-            # Surface a non-empty string so the caller can decide whether
-            # to fall back to direct LLM. An empty reply is interpreted
-            # by chat_responder as "no agent message" and triggers fallback.
-            return ""
+        return self._http
 
-        reply = _extract_opencode_reply(stdout)
-        logger.info(
-            "modal sandboxed agent: reply",
-            omoios_session_id=self.omoios_session_id,
-            sandbox_id=self.sandbox_id,
-            chars=len(reply),
-            duration_ms=int(duration_ms),
+    async def prompt(
+        self,
+        text: str,
+        *,
+        on_part: Optional[PartCallback] = None,
+    ) -> str:
+        """Run one chat turn. Returns the assembled assistant text.
+
+        If ``on_part`` is supplied, it's awaited for each opencode event
+        scoped to this session — `message.part.delta`, `message.part.updated`,
+        `message.updated`, `session.idle`, etc. The callback's first arg is
+        the event type, the second is the event's `properties` dict (so
+        consumers don't have to redundantly extract it).
+        """
+        client = self._client()
+        sid = self.opencode_session_id
+        parts_by_id: dict[str, dict] = {}
+        # Queue events from the SSE reader to the chat-runner so the runner
+        # can fan them out without blocking the SSE socket itself.
+        queue: asyncio.Queue[Optional[tuple[str, dict]]] = asyncio.Queue()
+
+        async def _read_events() -> None:
+            try:
+                async with aconnect_sse(client, "GET", "/event") as ev_source:
+                    async for sse_evt in ev_source.aiter_sse():
+                        try:
+                            evt = json.loads(sse_evt.data)
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+                        if not _event_matches_session(evt, sid):
+                            continue
+                        et = evt.get("type")
+                        props = evt.get("properties") or {}
+                        if not isinstance(et, str):
+                            continue
+                        # Snapshot accumulator — used to assemble the final
+                        # text if the chat POST body doesn't carry parts.
+                        if et == "message.part.updated":
+                            part = props.get("part")
+                            if isinstance(part, dict) and isinstance(
+                                part.get("id"), str
+                            ):
+                                parts_by_id[part["id"]] = part
+                        await queue.put((et, props))
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "modal sandboxed agent: event reader failed",
+                    omoios_session_id=self.omoios_session_id,
+                    error=str(exc),
+                )
+
+        async def _send_turn() -> dict:
+            r = await client.post(
+                f"/session/{sid}/message",
+                json={
+                    "providerID": self.provider,
+                    "modelID": self.model,
+                    "parts": [{"type": "text", "text": text}],
+                },
+                timeout=_OPENCODE_TURN_TIMEOUT_SECONDS,
+            )
+            r.raise_for_status()
+            return r.json()
+
+        reader_task = asyncio.create_task(_read_events())
+        # Tiny grace so the SSE handshake is up before the message POST —
+        # opencode emits the first delta within a few hundred ms of the POST
+        # completing, and we don't want to drop the leading reasoning bursts.
+        await asyncio.sleep(0.05)
+        chat_task = asyncio.create_task(_send_turn())
+
+        try:
+            while True:
+                getter = asyncio.create_task(queue.get())
+                done, _pending = await asyncio.wait(
+                    {getter, chat_task}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if getter in done:
+                    item = getter.result()
+                    if item is None:
+                        if chat_task.done():
+                            break
+                        continue
+                    et, props = item
+                    if on_part is not None:
+                        try:
+                            await on_part(et, props)
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning(
+                                "modal sandboxed agent: on_part raised",
+                                omoios_session_id=self.omoios_session_id,
+                                event_type=et,
+                                error=str(exc),
+                            )
+                    if chat_task.done():
+                        # Drain whatever's already in the queue, then exit.
+                        while not queue.empty():
+                            extra = queue.get_nowait()
+                            if extra is None:
+                                break
+                            et2, props2 = extra
+                            if on_part is not None:
+                                with contextlib.suppress(Exception):
+                                    await on_part(et2, props2)
+                        break
+                else:
+                    getter.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await getter
+                    # Give the reader a beat to flush any final
+                    # `session.idle` / `message.updated` for the turn.
+                    await asyncio.sleep(0.2)
+                    while not queue.empty():
+                        extra = queue.get_nowait()
+                        if extra is None:
+                            break
+                        et2, props2 = extra
+                        if on_part is not None:
+                            with contextlib.suppress(Exception):
+                                await on_part(et2, props2)
+                    break
+
+            try:
+                final = await chat_task
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "modal sandboxed agent: chat POST failed",
+                    omoios_session_id=self.omoios_session_id,
+                    error=str(exc),
+                )
+                return ""
+        finally:
+            reader_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await reader_task
+
+        # Authoritative parts come from the response body when the server
+        # returns them; fall back to the SSE-streamed accumulator if not.
+        assistant_message_id = (
+            (final.get("info") or {}).get("id") if isinstance(final, dict) else None
         )
-        return reply
+        final_parts = (final.get("parts") if isinstance(final, dict) else None) or [
+            p
+            for p in parts_by_id.values()
+            if p.get("messageID") == assistant_message_id
+        ]
+        return _assemble_text(final_parts)
 
     async def close(self) -> None:
+        if self._http is not None:
+            with contextlib.suppress(Exception):
+                await self._http.aclose()
+            self._http = None
         try:
             await self.spawner.terminate_sandbox(self.sandbox_id)
         except Exception as exc:  # noqa: BLE001 — terminate is best-effort
@@ -127,6 +257,8 @@ class ModalSandboxedAgent:
             "status": "live",
             "sandbox_id": self.sandbox_id,
             "modal_object_id": self.modal_object_id,
+            "tunnel_url": self.tunnel_url,
+            "opencode_session_id": self.opencode_session_id,
             "provider": self.provider,
             "model": self.model,
             "spawned_at": self.spawned_at,
@@ -145,14 +277,9 @@ async def get_or_spawn(omoios_session_id: str) -> ModalSandboxedAgent:
 
     Lookup order:
       1. in-process cache (fast path)
-      2. task.result.sandbox_agent → rehydrate via spawner.register_foreign_sandbox
+      2. ``task.result.sandbox_agent`` → reattach via Modal ``Sandbox.from_id``,
+         healthcheck the tunnel, verify the opencode session still exists
       3. fresh spawn → persist runtime state, return
-
-    Cross-replica rehydration uses Modal's `Sandbox.from_id(modal_object_id)`
-    primitive: replica B sees a chat turn for a session whose sandbox was
-    spawned by replica A, reads the `modal_object_id` from `task.result`,
-    and re-attaches via the spawner. If `from_id` fails (sandbox was
-    reaped), we fall through to a fresh spawn.
     """
     existing = _registry.get(omoios_session_id)
     if existing is not None:
@@ -183,8 +310,8 @@ async def close(omoios_session_id: str) -> None:
             {**agent.as_runtime_state(), "status": "closed"},
         )
         return
-    # Cache miss: still tear down any persisted sandbox so a foreign-
-    # replica spawn isn't left dangling.
+    # Cache miss: still tear down any persisted sandbox so a foreign-replica
+    # spawn isn't left dangling.
     state = await _load_runtime_state(omoios_session_id)
     if not state or state.get("runtime") != "opencode-modal":
         return
@@ -222,8 +349,8 @@ async def close_all() -> None:
 
 
 def is_enabled() -> bool:
-    """Return True iff the sandboxed-agent feature flag is on AND
-    provider is Modal."""
+    """Return True iff the sandboxed-agent feature flag is on AND the
+    configured sandbox provider is Modal."""
     try:
         from omoi_os.config import get_app_settings
 
@@ -259,48 +386,143 @@ async def _spawn_agent(omoios_session_id: str) -> ModalSandboxedAgent:
         phase_id="chat",
         execution_mode="chat",
         runtime="opencode",
+        exposed_ports=[_OPENCODE_PORT],
     )
 
-    # The spawner only writes opencode.json / auth.json when an
-    # `env_version` with credentials is supplied. Chat-mode SDK-direct
-    # sessions don't have one, so we render the configs inline here using
-    # the backend's own LLM_API_KEY. This mirrors `modal_sandbox_smoke.py`
-    # mode=llm (lines 210-228).
     await _write_opencode_configs(spawner, sandbox_id, api_key=api_key)
+    await _start_opencode_serve(spawner, sandbox_id)
 
     info = spawner.get_sandbox_info(sandbox_id)
     modal_object_id = (
         info.extra_data.get("modal_object_id") if info is not None else None
     )
+    tunnel_urls = (
+        info.extra_data.get("tunnel_urls") if info is not None else None
+    ) or {}
+    tunnel_url = tunnel_urls.get(str(_OPENCODE_PORT))
+    if not tunnel_url:
+        raise RuntimeError(
+            f"modal sandboxed agent: spawner did not surface tunnel for port "
+            f"{_OPENCODE_PORT}; check exposed_ports propagation"
+        )
+
+    await _wait_for_opencode_health(tunnel_url)
+    opencode_session_id = await _create_opencode_session(tunnel_url)
 
     return ModalSandboxedAgent(
         omoios_session_id=omoios_session_id,
         sandbox_id=sandbox_id,
         spawner=spawner,
-        provider="fireworks-ai",
+        tunnel_url=tunnel_url,
+        opencode_session_id=opencode_session_id,
+        provider=_DEFAULT_OPENCODE_PROVIDER,
         model=_DEFAULT_OPENCODE_MODEL,
         spawned_at=time.time(),
         modal_object_id=modal_object_id,
     )
 
 
+async def _start_opencode_serve(spawner: Any, sandbox_id: str) -> None:
+    """Boot ``opencode serve`` as a backgrounded process inside the sandbox."""
+    cmd = (
+        f"nohup {_OPENCODE_BIN} serve --port {_OPENCODE_PORT} --hostname 0.0.0.0 "
+        "> /tmp/opencode-serve.log 2>&1 &"
+    )
+    await spawner.exec(sandbox_id, "bash", "-lc", cmd)
+
+
+async def _wait_for_opencode_health(
+    tunnel_url: str, *, timeout_s: float = float(_OPENCODE_HEALTH_TIMEOUT_SECONDS)
+) -> None:
+    deadline = time.monotonic() + timeout_s
+    last: Optional[str] = None
+    async with httpx.AsyncClient(timeout=3.0) as c:
+        while time.monotonic() < deadline:
+            try:
+                r = await c.get(f"{tunnel_url}/global/health")
+                if r.status_code == 200:
+                    return
+                last = f"http {r.status_code}"
+            except Exception as exc:  # noqa: BLE001
+                last = type(exc).__name__
+            await asyncio.sleep(1.5)
+    raise RuntimeError(
+        f"modal sandboxed agent: opencode never became healthy at "
+        f"{tunnel_url} (last: {last})"
+    )
+
+
+async def _create_opencode_session(tunnel_url: str) -> str:
+    """Mint one opencode session for the lifetime of this Modal sandbox.
+
+    opencode 1.14.x rejects empty bodies on ``POST /session`` — the server
+    reads JSON before checking content; a missing body 400s with
+    ``Malformed JSON in request body``. Send ``{}``.
+    """
+    async with httpx.AsyncClient(timeout=15.0) as c:
+        r = await c.post(f"{tunnel_url}/session", json={})
+        r.raise_for_status()
+        return r.json()["id"]
+
+
+async def _write_opencode_configs(
+    spawner: Any, sandbox_id: str, *, api_key: str
+) -> None:
+    """Render opencode.json, oh-my-openagent.jsonc, and auth.json into the sandbox.
+
+    Reuses the project's canonical renderers (``opencode_config_renderer``)
+    so chat-mode SDK-direct sessions produce identical config bodies to
+    env_version-driven spawns. Aliases match opencode's catalog ids — for
+    the chat lane that's just ``fireworks-ai``.
+    """
+    from omoi_os.services.opencode_config_renderer import (
+        render_auth_json,
+        render_omo_config,
+        render_opencode_config,
+    )
+
+    aliases = [_DEFAULT_OPENCODE_PROVIDER]
+    opencode_body = render_opencode_config(
+        aliases, default_model=f"{_DEFAULT_OPENCODE_PROVIDER}/{_DEFAULT_OPENCODE_MODEL}"
+    ).encode("utf-8")
+    omo_body = render_omo_config(
+        aliases, default_model=f"{_DEFAULT_OPENCODE_PROVIDER}/{_DEFAULT_OPENCODE_MODEL}"
+    ).encode("utf-8")
+    auth_body = render_auth_json(
+        {_DEFAULT_OPENCODE_PROVIDER: {"kind": "bearer_secret", "value": api_key}}
+    ).encode("utf-8")
+
+    await spawner.exec(sandbox_id, "mkdir", "-p", "/root/.config/opencode")
+    await spawner.exec(sandbox_id, "mkdir", "-p", "/root/.local/share/opencode")
+    await spawner.upload_file(
+        sandbox_id, "/root/.config/opencode/opencode.json", opencode_body
+    )
+    await spawner.upload_file(
+        sandbox_id, "/root/.config/opencode/oh-my-openagent.jsonc", omo_body
+    )
+    await spawner.upload_file(
+        sandbox_id, "/root/.local/share/opencode/auth.json", auth_body
+    )
+
+
+def _resolve_llm_api_key() -> Optional[str]:
+    return os.environ.get("FIREWORKS_API_KEY") or os.environ.get("LLM_API_KEY")
+
+
 # ─── persistence + cross-replica rehydration ─────────────────────────────────
 
 
-# Mirrors `services.sandboxed_agent._MAX_AGENT_AGE_SECONDS`. Modal's default
-# sandbox timeout is 24h via `sandbox_timeout_seconds` on the spawner; we
+# Mirrors ``services.sandboxed_agent._MAX_AGENT_AGE_SECONDS``. Modal's default
+# sandbox timeout is 24h via ``sandbox_timeout_seconds`` on the spawner; we
 # treat anything older than 6h as "probably reaped" and fall through to a
 # fresh spawn rather than burn a round-trip on a doomed reattach.
 _MAX_AGENT_AGE_SECONDS = 60 * 60 * 6
 
 
 async def _persist_runtime_state(omoios_session_id: str, state: dict[str, Any]) -> None:
-    """Merge `state` into task.result.sandbox_agent for this session.
+    """Merge ``state`` into ``task.result.sandbox_agent`` for this session.
 
-    Best-effort — persistence failures should never block a chat turn.
-    Same shape as `services.sandboxed_agent._persist_runtime_state` so the
-    `agent_runtime` field on `GET /sessions/{id}` is uniform across the
-    Daytona and Modal paths.
+    Best-effort — persistence failures must never block a chat turn.
     """
     try:
         from omoi_os.api.dependencies import get_db_service
@@ -357,10 +579,10 @@ async def _rehydrate_agent(
 ) -> Optional[ModalSandboxedAgent]:
     """Try to reattach to a Modal sandbox spawned by another replica.
 
-    Reads `task.result['sandbox_agent']`. If it's a Modal entry, still
-    "live", and not too stale, calls `spawner.register_foreign_sandbox`
-    to wire the foreign Modal sandbox handle into the local spawner so
-    `spawner.exec(sandbox_id, ...)` drives the right sandbox. Returns
+    Reads ``task.result['sandbox_agent']``. If it's a Modal entry, still
+    "live", and not too stale, re-attaches via ``register_foreign_sandbox``,
+    then verifies the persisted ``tunnel_url`` is still healthy and the
+    persisted ``opencode_session_id`` is still listed by the server. Returns
     None on any failure — the caller falls through to a fresh spawn.
     """
     state = await _load_runtime_state(omoios_session_id)
@@ -373,7 +595,10 @@ async def _rehydrate_agent(
 
     sandbox_id = state.get("sandbox_id")
     modal_object_id = state.get("modal_object_id")
-    if not (sandbox_id and modal_object_id):
+    tunnel_url = state.get("tunnel_url")
+    persisted_session_id = state.get("opencode_session_id")
+    if not (sandbox_id and modal_object_id and tunnel_url and persisted_session_id):
+        # Old (exec-mode) state row — force fresh spawn so we get a tunnel.
         return None
 
     spawned_at = float(state.get("spawned_at") or 0)
@@ -394,9 +619,37 @@ async def _rehydrate_agent(
         task_id=omoios_session_id,
     )
     if not attached:
-        # Mark stale so the next spawn doesn't keep retrying the dead handle.
         await _persist_runtime_state(omoios_session_id, {**state, "status": "error"})
         return None
+
+    # Tunnel + session-existence probe — covers the case where the sandbox
+    # is alive but opencode-serve crashed / the session was reaped.
+    if not await _probe_tunnel_alive(tunnel_url):
+        logger.info(
+            "modal sandboxed agent: persisted tunnel unhealthy, skipping rehydration",
+            omoios_session_id=omoios_session_id,
+            tunnel_url=tunnel_url,
+        )
+        await _persist_runtime_state(omoios_session_id, {**state, "status": "error"})
+        return None
+
+    if not await _opencode_session_exists(tunnel_url, persisted_session_id):
+        logger.info(
+            "modal sandboxed agent: opencode session vanished — recreating",
+            omoios_session_id=omoios_session_id,
+        )
+        try:
+            persisted_session_id = await _create_opencode_session(tunnel_url)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "modal sandboxed agent: failed to recreate opencode session",
+                omoios_session_id=omoios_session_id,
+                error=str(exc),
+            )
+            await _persist_runtime_state(
+                omoios_session_id, {**state, "status": "error"}
+            )
+            return None
 
     logger.info(
         "modal sandboxed agent: rehydrated from persisted state",
@@ -408,83 +661,75 @@ async def _rehydrate_agent(
         omoios_session_id=omoios_session_id,
         sandbox_id=sandbox_id,
         spawner=spawner,
-        provider=state.get("provider") or "fireworks-ai",
+        tunnel_url=tunnel_url,
+        opencode_session_id=persisted_session_id,
+        provider=state.get("provider") or _DEFAULT_OPENCODE_PROVIDER,
         model=state.get("model") or _DEFAULT_OPENCODE_MODEL,
         spawned_at=spawned_at or time.time(),
         modal_object_id=modal_object_id,
     )
 
 
-async def _write_opencode_configs(
-    spawner: Any, sandbox_id: str, *, api_key: str
-) -> None:
-    """Render opencode.json + auth.json directly into the sandbox.
+async def _probe_tunnel_alive(tunnel_url: str, *, timeout_s: float = 4.0) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=timeout_s) as c:
+            r = await c.get(f"{tunnel_url}/global/health")
+        return r.status_code == 200
+    except Exception:  # noqa: BLE001
+        return False
 
-    Same shape as `scripts/modal_sandbox_smoke.py` lines 210-228.
+
+async def _opencode_session_exists(
+    tunnel_url: str, opencode_session_id: str, *, timeout_s: float = 4.0
+) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=timeout_s) as c:
+            r = await c.get(f"{tunnel_url}/session")
+        if r.status_code != 200:
+            return False
+        return any(s.get("id") == opencode_session_id for s in r.json())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# ─── helpers ─────────────────────────────────────────────────────────────────
+
+
+def _event_matches_session(evt: Any, opencode_session_id: str) -> bool:
+    """Check whether an opencode event is scoped to our session.
+
+    opencode emits a global ``/event`` feed; consumers filter by sessionID.
+    Different event types put the sid in different places — we check all
+    the spots.
     """
-    opencode_json = json.dumps(
-        {
-            "$schema": "https://opencode.ai/config.json",
-            "model": _DEFAULT_OPENCODE_MODEL,
-        }
-    ).encode("utf-8")
-    auth_json = json.dumps({"fireworks-ai": {"type": "api", "key": api_key}}).encode(
-        "utf-8"
-    )
-
-    await spawner.exec(sandbox_id, "mkdir", "-p", "/root/.config/opencode")
-    await spawner.exec(sandbox_id, "mkdir", "-p", "/root/.local/share/opencode")
-    await spawner.upload_file(
-        sandbox_id, "/root/.config/opencode/opencode.json", opencode_json
-    )
-    await spawner.upload_file(
-        sandbox_id, "/root/.local/share/opencode/auth.json", auth_json
-    )
-
-
-def _resolve_llm_api_key() -> Optional[str]:
-    """Return the API key for opencode's `fireworks-ai` provider.
-
-    Prefer FIREWORKS_API_KEY (matches the smoke pattern), fall back to
-    LLM_API_KEY (the platform-wide knob). The proof-of-life lane is
-    Fireworks-only, so both names point at the same key in practice.
-    """
-    return os.environ.get("FIREWORKS_API_KEY") or os.environ.get("LLM_API_KEY")
+    if not isinstance(evt, dict):
+        return False
+    props = evt.get("properties") or {}
+    if not isinstance(props, dict):
+        return False
+    if props.get("sessionID") == opencode_session_id:
+        return True
+    part = props.get("part") or {}
+    if isinstance(part, dict) and part.get("sessionID") == opencode_session_id:
+        return True
+    info = props.get("info") or {}
+    if isinstance(info, dict):
+        if info.get("sessionID") == opencode_session_id:
+            return True
+        if info.get("id") == opencode_session_id:
+            return True
+    return False
 
 
-# ─── stdout parsing ──────────────────────────────────────────────────────────
-
-
-def _to_text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    return str(value)
-
-
-def _extract_opencode_reply(stdout: str) -> str:
-    """Trim opencode's stdout to the actual reply body.
-
-    With `--log-level ERROR` opencode's stdout is the model's reply text
-    on success, occasionally prefixed with build/version banners. Strip
-    leading banner lines that look like `> opencode vX.Y.Z` or empty
-    framing lines, then collapse trailing whitespace. We do NOT try to
-    strip ANSI codes — opencode emits plain text with `--print-logs
-    --log-level ERROR`.
-    """
-    if not stdout:
-        return ""
-    lines = stdout.splitlines()
-    cleaned: list[str] = []
-    for line in lines:
-        stripped = line.rstrip()
-        # Drop obvious framing/banner lines but keep blank lines in the
-        # middle of a reply intact.
-        if not cleaned and not stripped:
+def _assemble_text(parts: list) -> str:
+    """Concatenate the text from any ``text``-type parts in order."""
+    chunks: list[str] = []
+    for p in parts or []:
+        if not isinstance(p, dict):
             continue
-        if not cleaned and stripped.startswith(">"):
-            # `> opencode vX.Y.Z` — opencode banner.
+        if p.get("type") != "text":
             continue
-        cleaned.append(stripped)
-    return "\n".join(cleaned).rstrip()
+        t = p.get("text")
+        if isinstance(t, str) and t:
+            chunks.append(t)
+    return "\n".join(chunks).strip()
