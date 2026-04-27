@@ -4,7 +4,6 @@ Provides in-memory GitHub operations for testing without API calls.
 """
 
 
-
 class MockGitHubService:
     """Mock GitHub service with in-memory state tracking.
 

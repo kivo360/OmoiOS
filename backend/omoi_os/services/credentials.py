@@ -177,23 +177,23 @@ class CredentialsService:
 
     def _get_decrypted_api_key(self, credential: UserCredential) -> str:
         """Get decrypted API key from credential.
-        
+
         Transparently handles encryption/decryption:
         - If encrypted_value exists, decrypt and return
         - If only api_key exists (legacy), return as-is and encrypt for future
-        
+
         Args:
             credential: UserCredential with encrypted_value or api_key
-            
+
         Returns:
             Decrypted API key
-            
+
         Security:
             - Never logs the decrypted value
             - Handles encryption errors gracefully
         """
         encryption_service = get_credential_encryption_service()
-        
+
         # Try encrypted value first (preferred)
         if credential.encrypted_value:
             if encryption_service.is_configured:
@@ -207,7 +207,7 @@ class CredentialsService:
                     f"Credential {credential.id} has encrypted_value but "
                     "encryption service not configured"
                 )
-        
+
         # Fall back to plaintext api_key (legacy or unencrypted)
         if credential.api_key:
             # If encryption is available, encrypt for future use
@@ -218,9 +218,9 @@ class CredentialsService:
                     logger.debug(f"Encrypted credential {credential.id} for future use")
                 except EncryptionError as e:
                     logger.warning(f"Could not encrypt credential {credential.id}: {e}")
-            
+
             return credential.api_key
-        
+
         return ""
 
     def get_user_credential(
@@ -295,7 +295,7 @@ class CredentialsService:
 
                 # User credentials may have OAuth token stored in config_data
                 oauth_token = config.get("oauth_token")
-                
+
                 # Get decrypted API key (handles transparent encryption)
                 decrypted_key = self._get_decrypted_api_key(user_cred)
 
@@ -562,7 +562,7 @@ class CredentialsService:
                     logger.debug(f"Encrypted API key for {provider}")
                 except EncryptionError as e:
                     logger.warning(f"Could not encrypt API key: {e}")
-            
+
             # Check for existing credential
             existing = self.get_user_credential(user_id, provider, sess)
 

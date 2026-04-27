@@ -392,12 +392,14 @@ class EmbeddingService:
     def _generate_openai_embedding(self, text: str) -> List[float]:
         """Generate embedding using OpenAI API with retry."""
         embedding = self._call_with_retry(
-            lambda: self.openai_client.embeddings.create(
-                model=self.model_name,
-                input=text,
-            )
-            .data[0]
-            .embedding,
+            lambda: (
+                self.openai_client.embeddings.create(
+                    model=self.model_name,
+                    input=text,
+                )
+                .data[0]
+                .embedding
+            ),
             "OpenAI embedding",
         )
         return self._validate_embedding(embedding)

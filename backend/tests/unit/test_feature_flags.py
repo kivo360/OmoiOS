@@ -1,6 +1,5 @@
 """Unit tests for feature flags configuration."""
 
-
 from omoi_os.config import (
     FeatureFlagsSettings,
     is_feature_enabled,

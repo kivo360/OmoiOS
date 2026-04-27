@@ -141,7 +141,7 @@ class LocalFilesystemBackend(StorageBackend):
         # Limit length
         if len(safe) > 255:
             name, ext = os.path.splitext(safe)
-            safe = name[:255 - len(ext)] + ext
+            safe = name[: 255 - len(ext)] + ext
         return safe
 
     def _get_storage_path(
@@ -394,7 +394,9 @@ class ArtifactService:
         """
         db = self._get_db()
         with db.get_session() as session:
-            artifact = session.query(Artifact).filter(Artifact.id == artifact_id).first()
+            artifact = (
+                session.query(Artifact).filter(Artifact.id == artifact_id).first()
+            )
             if artifact is not None:
                 session.expunge(artifact)
             return artifact
@@ -440,7 +442,9 @@ class ArtifactService:
         """
         db = self._get_db()
         with db.get_session() as session:
-            artifact = session.query(Artifact).filter(Artifact.id == artifact_id).first()
+            artifact = (
+                session.query(Artifact).filter(Artifact.id == artifact_id).first()
+            )
             if artifact is None:
                 raise FileNotFoundError(f"Artifact not found: {artifact_id}")
 
