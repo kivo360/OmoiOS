@@ -13,7 +13,10 @@
 </p>
 
 <p align="center">
-  <b>Open-source orchestration runtime that turns specs into PRs using parallel agent swarms in isolated sandboxes.</b>
+  <b>Describe the work. OmoiOS plans the dependency graph, runs a self-supervising swarm of coding agents in isolated sandboxes, and lands your PRs — so you stop being the orchestrator.</b>
+</p>
+<p align="center">
+  <sub>Apache-2.0 · self-hostable · model-agnostic (Claude / Gemini / Codex). Proven end-to-end: one session cloned <code>expressjs/express</code> and ran its full 1,249-test suite inside the spawned sandbox.</sub>
 </p>
 
 <p align="center">
